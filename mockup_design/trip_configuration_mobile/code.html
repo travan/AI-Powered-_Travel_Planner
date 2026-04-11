@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#672c00",
+                        "on-primary-container": "#f3f7ff",
+                        "inverse-surface": "#2e3132",
+                        "inverse-primary": "#94ccff",
+                        "on-tertiary-fixed": "#001f27",
+                        "surface-tint": "#006399",
+                        "primary-container": "#0077b6",
+                        "primary": "#005d90",
+                        "outline-variant": "#bfc7d1",
+                        "outline": "#707881",
+                        "primary-fixed": "#cde5ff",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f3f4f5",
+                        "on-secondary-fixed-variant": "#763300",
+                        "surface-variant": "#e1e3e4",
+                        "on-error": "#ffffff",
+                        "tertiary-container": "#007c95",
+                        "secondary-fixed": "#ffdbc9",
+                        "secondary-container": "#fc8a40",
+                        "background": "#f8f9fa",
+                        "secondary-fixed-dim": "#ffb68d",
+                        "tertiary-fixed-dim": "#4cd6fb",
+                        "surface-container-high": "#e7e8e9",
+                        "on-surface": "#191c1d",
+                        "surface-container-highest": "#e1e3e4",
+                        "surface": "#f8f9fa",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary-fixed": "#331200",
+                        "tertiary": "#006176",
+                        "secondary": "#9b4500",
+                        "on-tertiary-fixed-variant": "#004e5f",
+                        "on-background": "#191c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-container": "#ecf9ff",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed": "#001d32",
+                        "surface-dim": "#d9dadb",
+                        "surface-bright": "#f8f9fa",
+                        "surface-container": "#edeeef",
+                        "tertiary-fixed": "#b3ebff",
+                        "on-surface-variant": "#404850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body text-on-surface antialiased">
+<header class="fixed top-0 w-full z-50 bg-slate-50/80 backdrop-blur-xl shadow-sm shadow-sky-900/5 flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="close-up portrait of a traveler with a warm smile, outdoor natural lighting, cinematic soft focus background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAb5WfduNlyLaDnSZY_yRMCPBw7MUINi9ruMRV5CTLY7NEoYh49Wlp65X20W_N3jdN7WoElPBmKkNPMf4VLaJGGO3f5JnsRZYetgQZwSpGYbO0Ud_TGyGhq4Egboba7B9eBbYglwGI4Zrq3Kh7DkLov6Pp5I66WieZK45Ul3cEw-Q2bFex_IwgsTT6gvETCvM9YE9a_LOhoJ2Q_-mRWh65EGSirPRpSC2aANN_Tu2_FZl8Hl7o4bG2ZkR_zUATuXlDIPqQTslVGq0"/>
+</div>
+<span class="text-2xl font-bold tracking-tighter text-sky-900 font-['Plus_Jakarta_Sans']">Horizon</span>
+</div>
+<div class="text-sky-700 active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</div>
+</header>
+<main class="pt-20 pb-32">
+<section class="px-6 py-8">
+<div class="relative h-64 w-full rounded-xl overflow-hidden mb-8 group">
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent z-10"></div>
+<img alt="Where to next?" class="absolute inset-0 w-full h-full object-cover" data-alt="cinematic wide shot of a turquoise tropical lagoon with limestone cliffs and a wooden boat at sunset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZmCoSFFc-AHFvmHctZGBKOAnEJImyze_ceT8WjfECY4cad-TE7ifRIzo7r3jDiXqCskcofAEeigCQ-yrkGUMHBSl0Awj9udyIEDBRHce3oQ44g6xxC15CfUigqyrd0LIfI_iq0u2gEeQwvf1bVuGX4kMCs48M_edI341Fp8tl2o1Ylm_p9cZUU_x6N50eAf86hwUxGV1k6U3ZgIbEM3O4jKdsosxLKCJsDVArHQ8iChgL1nu_bAadFU8Rf5IGQ4shUihQH41hOdM"/>
+<div class="absolute bottom-6 left-6 z-20">
+<h1 class="text-4xl font-headline font-extrabold text-on-primary tracking-tight">Where to next?</h1>
+<p class="text-on-primary-container/80 font-medium">Define your escape.</p>
+</div>
+</div>
+<div class="space-y-8">
+<div class="space-y-4">
+<label class="block text-sm font-bold uppercase tracking-widest text-outline">Destinations</label>
+<div class="bg-surface-container-high rounded-xl p-4 min-h-[56px] flex flex-wrap gap-2 items-center">
+<div class="flex items-center gap-2 bg-primary-fixed text-on-primary-fixed px-3 py-1.5 rounded-full text-sm font-semibold">
+                            Tokyo <span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</div>
+<div class="flex items-center gap-2 bg-primary-fixed text-on-primary-fixed px-3 py-1.5 rounded-full text-sm font-semibold">
+                            Kyoto <span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</div>
+<button class="flex items-center gap-1 text-primary font-bold text-sm px-2">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span> Add city
+                        </button>
+</div>
+</div>
+<div class="grid grid-cols-1 gap-6">
+<div class="space-y-4">
+<label class="block text-sm font-bold uppercase tracking-widest text-outline">When</label>
+<div class="bg-surface-container-high rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="calendar_month">calendar_month</span>
+<span class="font-bold text-on-surface">Oct 12 — Oct 26</span>
+</div>
+<span class="text-xs font-bold text-primary uppercase tracking-tighter">14 Days</span>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex justify-between items-end">
+<label class="block text-sm font-bold uppercase tracking-widest text-outline">Budget Range</label>
+<span class="text-xl font-headline font-extrabold text-primary">$3,500</span>
+</div>
+<div class="relative w-full h-2 bg-primary-fixed rounded-full">
+<div class="absolute left-0 top-0 h-full w-[65%] bg-gradient-to-r from-primary to-primary-container rounded-full"></div>
+<div class="absolute left-[65%] top-1/2 -translate-y-1/2 w-6 h-6 bg-white border-4 border-primary rounded-full shadow-lg"></div>
+</div>
+<div class="flex justify-between text-[10px] font-bold text-outline uppercase tracking-widest">
+<span>$500</span>
+<span>$10,000+</span>
+</div>
+</div>
+</div>
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-5 rounded-full font-headline font-extrabold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                    Generate Magic Itinerary
+                </button>
+</div>
+</section>
+<section class="mt-4 bg-surface-container-low py-10 px-6">
+<h2 class="text-2xl font-headline font-bold text-on-surface mb-6">Smart Tips</h2>
+<div class="flex overflow-x-auto gap-4 no-scrollbar pb-4 -mx-6 px-6">
+<div class="flex-none w-72 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-secondary-fixed rounded-lg flex items-center justify-center mb-4 text-on-secondary-fixed">
+<span class="material-symbols-outlined" data-icon="lightbulb">lightbulb</span>
+</div>
+<h3 class="font-bold text-lg mb-2">Best Time to Visit</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed">October offers perfect temperatures for walking through Tokyo’s parks.</p>
+</div>
+<div class="flex-none w-72 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-tertiary-fixed rounded-lg flex items-center justify-center mb-4 text-on-tertiary-fixed">
+<span class="material-symbols-outlined" data-icon="savings">savings</span>
+</div>
+<h3 class="font-bold text-lg mb-2">Budget Insight</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed">Book JR Rail Pass 30 days in advance to save up to 15% on transport.</p>
+</div>
+</div>
+</section>
+<section class="px-6 py-10">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-2xl font-headline font-bold text-on-surface">Trending Escapes</h2>
+<button class="text-primary font-bold text-sm uppercase tracking-widest">See all</button>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="relative h-48 rounded-xl overflow-hidden group">
+<img alt="Bali" class="w-full h-full object-cover" data-alt="close up of lush green rice terraces in Bali during sunrise with mystical fog and palm trees" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA07mU4h77gojgo1lJkYP2aaGbcnyAA4dQqYbOK4Gu1a-G5uitlRquiYi4zy-hLlCBHacCze9eImUrJOZvljfu68EmWQAsNRvm44aIMSrttmur86oMy-9LJHWgchZ774p0pz15j69WS5UUcOba4u9jT09kqmLtVS5m7nI_2p8Xm4uhY84OkojTxN9wSbqEq8BkLHgPEo2DAFOClBV573WttCsDo3lSUzP3py6sv7kmO8b3CB2-O_V69bU8lbgmcn2R4Ayaq-kuQQgo"/>
+<div class="absolute inset-0 bg-black/30 group-active:bg-black/40 transition-colors"></div>
+<div class="absolute bottom-3 left-3">
+<p class="text-white font-bold text-sm">Bali, ID</p>
+<p class="text-white/80 text-[10px] font-bold uppercase tracking-wider">From $1.2k</p>
+</div>
+</div>
+<div class="relative h-48 rounded-xl overflow-hidden group">
+<img alt="Paris" class="w-full h-full object-cover" data-alt="low angle view of the Eiffel Tower at night with golden lights and a clear starry sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDLl9r0Cw3LRe5YUeossJ66tLF9oR-nrbEtfHBPg4lWvFJ5jKx2gJbWCuna22dlgh8QC4p-owUdQjGImzmxr9NdDvpoO9S7N3QLbL12B3rHsYvAQNlKzVeuJ1JN8jvROsf2BAkKKl-V-XZcZ9PNSLKTcRj183NBC3UV50VpfaWc6UmJj90rJTMcqOnBDFV3-NQ94d1i5k9iBxAuQRJFdT7XblXbrbfaRi5YSpqsHXC28856CSQw1cVBPJoEYEjLGcg9_ALWP-VbDg"/>
+<div class="absolute inset-0 bg-black/30 group-active:bg-black/40 transition-colors"></div>
+<div class="absolute bottom-3 left-3">
+<p class="text-white font-bold text-sm">Paris, FR</p>
+<p class="text-white/80 text-[10px] font-bold uppercase tracking-wider">From $2.5k</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-8 pt-4 bg-white/90 backdrop-blur-2xl shadow-[0_-4px_24px_rgba(0,93,144,0.06)] rounded-t-[2.5rem] z-50">
+<div class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined" data-icon="explore">explore</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-sky-100 text-sky-900 rounded-2xl px-5 py-2 active:scale-90 transition-all duration-300">
+<span class="material-symbols-outlined" data-icon="flight_takeoff" style="font-variation-settings: 'FILL' 1;">flight_takeoff</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Trips</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Budget</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Profile</span>
+</div>
+</nav>
+</body></html>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Horizon - Compare Itineraries</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#672c00",
+                        "on-primary-container": "#f3f7ff",
+                        "inverse-surface": "#2e3132",
+                        "inverse-primary": "#94ccff",
+                        "on-tertiary-fixed": "#001f27",
+                        "surface-tint": "#006399",
+                        "primary-container": "#0077b6",
+                        "primary": "#005d90",
+                        "outline-variant": "#bfc7d1",
+                        "outline": "#707881",
+                        "primary-fixed": "#cde5ff",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f3f4f5",
+                        "on-secondary-fixed-variant": "#763300",
+                        "surface-variant": "#e1e3e4",
+                        "on-error": "#ffffff",
+                        "tertiary-container": "#007c95",
+                        "secondary-fixed": "#ffdbc9",
+                        "secondary-container": "#fc8a40",
+                        "background": "#f8f9fa",
+                        "secondary-fixed-dim": "#ffb68d",
+                        "tertiary-fixed-dim": "#4cd6fb",
+                        "surface-container-high": "#e7e8e9",
+                        "on-surface": "#191c1d",
+                        "surface-container-highest": "#e1e3e4",
+                        "surface": "#f8f9fa",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary-fixed": "#331200",
+                        "tertiary": "#006176",
+                        "secondary": "#9b4500",
+                        "on-tertiary-fixed-variant": "#004e5f",
+                        "on-background": "#191c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-container": "#ecf9ff",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed": "#001d32",
+                        "surface-dim": "#d9dadb",
+                        "surface-bright": "#f8f9fa",
+                        "surface-container": "#edeeef",
+                        "tertiary-fixed": "#b3ebff",
+                        "on-surface-variant": "#404850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tonal-surface-shift {
+            background: linear-gradient(180deg, rgba(248, 249, 250, 0) 0%, rgba(248, 249, 250, 1) 100%);
+        }
+        .glass-pill {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+        }
+        .editorial-shadow {
+            box-shadow: 0 32px 64px -12px rgba(0, 93, 144, 0.08);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface font-body text-on-surface leading-relaxed">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm shadow-sky-900/5 flex justify-between items-center px-6 py-4">
+<div class="flex items-center gap-3 active:scale-95 transition-transform duration-200">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden">
+<img alt="User profile photo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEQlE48GVItwzdAuiasKNBJI_eBIS-RsTOxg_qEjAZaV7s4ilMhnJmKTez3jincNDOokAnul5AjiSpMnY_Sn0pod_dZX7z58-2C0Uz5VxrTzKgdxq2n9KZX55asPJ8w83eJcnm2xAeEFYckEpFrRBoukvVPGrH0Fmt72H_l5VP4GnuqTeeuAoTf3h6r4gyKhHF4dNK0raciNdpKB0hblqsU57NbLsi-Qonn0lOxU2xZKGHmfJorZmnhOfknvpfCqin2DPjZf5EKh0"/>
+</div>
+</div>
+<h1 class="text-2xl font-bold tracking-tighter text-sky-900 dark:text-sky-50 font-['Plus_Jakarta_Sans']">Horizon</h1>
+<button class="text-sky-700 dark:text-sky-400 hover:opacity-80 transition-opacity active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</header>
+<main class="pt-24 pb-40 px-6 max-w-md mx-auto">
+<!-- Editorial Header -->
+<div class="mb-10">
+<span class="text-primary font-bold tracking-widest uppercase text-[10px] block mb-2 font-label">Tailored Experiences</span>
+<h2 class="text-4xl font-headline font-extrabold text-on-surface tracking-tight leading-none mb-4">Choose Your <br/>Journey.</h2>
+<p class="text-on-surface-variant font-medium text-sm leading-relaxed max-w-[280px]">Our AI has curated three distinct paths for your adventure in Kyoto.</p>
+</div>
+<div class="space-y-12">
+<!-- Luxury Option -->
+<section class="relative">
+<div class="relative group">
+<div class="aspect-[4/5] w-full rounded-xl overflow-hidden editorial-shadow bg-surface-container-highest">
+<img class="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-700" data-alt="Stunning aerial view of a traditional Zen temple in Kyoto surrounded by vibrant autumn maples and morning mist" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBu_oVbRqS25CeOOLHpRKTdlGBEgmdS-PdcU5wXTVKJVH_6yl6z79CHd_W5N_CB5bYRhz_YZXTJnX0GWlk3E3-HrF58Is4C_4rqVdY4IhltG3bshWcHhf05gke2nywKF6Ax2rY3VTHF5XYP_4j5v2NdgP67Mb_-i-7idkOHwVNy5GLNFQ9aBspf948SoWQpfz5GbB4_hyc_IlqW_I-4UL3M6yHIUizaunz9-x7wKegP6fH-rm0yKP76arRZGZOMj2Pt1L2elLqYDt8"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+</div>
+<!-- Content Overlay/Bleed -->
+<div class="absolute -bottom-8 left-4 right-4 bg-surface-container-lowest p-6 rounded-xl editorial-shadow border-t border-white/20">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-2xl font-headline font-bold text-on-surface">The Zen Master</h3>
+<span class="text-primary font-bold text-xs">Luxury Experience</span>
+</div>
+<div class="glass-pill px-3 py-1 rounded-full border border-primary/10">
+<span class="text-primary font-bold text-sm">$4,200+</span>
+</div>
+</div>
+<div class="flex gap-4 mb-6 text-on-surface-variant text-[11px] font-bold uppercase tracking-wider">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+                                5 Days
+                            </div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="hotel">hotel</span>
+                                Ryokan Stay
+                            </div>
+</div>
+<ul class="space-y-3 mb-8">
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Private Geisha Tea Ceremony
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Michelin Star Kaiseki Dining
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                VIP Access to Hidden Temples
+                            </li>
+</ul>
+<button class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-full font-bold text-sm tracking-wide active:scale-95 transition-transform">
+                            Select Itinerary
+                        </button>
+</div>
+</div>
+</section>
+<!-- Budget/Modern Option -->
+<section class="relative pt-8">
+<div class="relative group">
+<div class="aspect-[4/5] w-full rounded-xl overflow-hidden editorial-shadow bg-surface-container-highest">
+<img class="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-700" data-alt="Close up of steaming bowl of authentic ramen in a vibrant neon-lit street stall in Kyoto at night" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAf8TB1IGbk_0HGCaB4heTgSGToJkO_bE1W3Z7IcvtukSCGzl4kpoarnZsEGSwgfdMyxd9fcuzcgI0UEDX0xmL5rjnT628s6GSCdnLf14_axOvbxqFU6XoauKFnXc7JBiwqZbeEupzlWiQVJSQCesTc3D2o8rngnHFMtoLUTUJGixXmObazn9dj7661tmZSRy6n43A_P_IkUosPbqSfCQYascHr1JrQwBpotf3mjBggK_9oyU55Qf-gti--Wi7jSCBrBu5HxbhqBzM"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+</div>
+<div class="absolute -bottom-8 left-4 right-4 bg-surface-container-lowest p-6 rounded-xl editorial-shadow border-t border-white/20">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-2xl font-headline font-bold text-on-surface">Urban Nomad</h3>
+<span class="text-secondary font-bold text-xs uppercase tracking-tight">Smart Budget</span>
+</div>
+<div class="bg-secondary-fixed px-3 py-1 rounded-full">
+<span class="text-on-secondary-fixed font-bold text-sm">$850</span>
+</div>
+</div>
+<div class="flex gap-4 mb-6 text-on-surface-variant text-[11px] font-bold uppercase tracking-wider">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+                                7 Days
+                            </div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="train">train</span>
+                                JR Pass Incl.
+                            </div>
+</div>
+<ul class="space-y-3 mb-8">
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Street Food Tour Gion District
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Bike Rentals for Arashiyama
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Boutique Hostel Stay
+                            </li>
+</ul>
+<button class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-full font-bold text-sm tracking-wide active:scale-95 transition-transform">
+                            Select Itinerary
+                        </button>
+</div>
+</div>
+</section>
+<!-- Cultural Option -->
+<section class="relative pt-8">
+<div class="relative group">
+<div class="aspect-[4/5] w-full rounded-xl overflow-hidden editorial-shadow bg-surface-container-highest">
+<img class="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-700" data-alt="An artisan craftsman delicately painting traditional Japanese ceramics in a sunlit wooden workshop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2r6XxahdzU2dufMVvccklZHc-Q1RT27ER5X0alTUzpcIFklXbOVabRr82_WgcGgTUTVX89detviHH2yFuE6nnB3bXpdu7aDVm7scYgjw_zghDo_GVmq3zl3Dwb_vNevDFbTd-XqnrCM5CCpz8CsGcs2Kznj17Sogy9Kp63devn-xgnNQhavvEEhS6sSP5kPJvi1Jc3y7x8dMT7VpIMUnukgR3rVqPJcK4_KNvggxb51vc2jRWNLIWXP15uM_OICidBGxs4g8CMbM"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+</div>
+<div class="absolute -bottom-8 left-4 right-4 bg-surface-container-lowest p-6 rounded-xl editorial-shadow border-t border-white/20">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-2xl font-headline font-bold text-on-surface">The Curator</h3>
+<span class="text-tertiary font-bold text-xs uppercase tracking-tight">Cultural Deep-Dive</span>
+</div>
+<div class="bg-tertiary-fixed px-3 py-1 rounded-full">
+<span class="text-on-tertiary-fixed font-bold text-sm">$1,850</span>
+</div>
+</div>
+<div class="flex gap-4 mb-6 text-on-surface-variant text-[11px] font-bold uppercase tracking-wider">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+                                6 Days
+                            </div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="brush">brush</span>
+                                Workshop Incl.
+                            </div>
+</div>
+<ul class="space-y-3 mb-8">
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Pottery Class with Master Artisan
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Zen Meditation Session
+                            </li>
+<li class="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Sake Brewery Tasting Tour
+                            </li>
+</ul>
+<button class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-full font-bold text-sm tracking-wide active:scale-95 transition-transform">
+                            Select Itinerary
+                        </button>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Action Bar (Floating FAB/Section) -->
+<div class="fixed bottom-24 left-6 right-6 z-40">
+<div class="bg-white/90 backdrop-blur-2xl rounded-full editorial-shadow p-2 flex items-center justify-between border border-primary/5">
+<div class="flex items-center gap-3 pl-4">
+<span class="material-symbols-outlined text-primary" data-icon="auto_awesome" data-weight="fill" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-tighter">AI Assistant</span>
+</div>
+<button class="bg-primary text-white px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-lg shadow-primary/20 active:scale-90 transition-all duration-300">
+                Refine with AI
+                <span class="material-symbols-outlined text-[18px]" data-icon="tune">tune</span>
+</button>
+</div>
+</div>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-t-[2rem] shadow-[0_-4px_24px_rgba(0,93,144,0.06)] z-50">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-sky-600 dark:hover:text-sky-300 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="explore">explore</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-sky-100 dark:bg-sky-900/40 text-sky-900 dark:text-sky-100 rounded-2xl px-5 py-2 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="flight_takeoff" data-weight="fill" style="font-variation-settings: 'FILL' 1;">flight_takeoff</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Trips</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-sky-600 dark:hover:text-sky-300 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Budget</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-sky-600 dark:hover:text-sky-300 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

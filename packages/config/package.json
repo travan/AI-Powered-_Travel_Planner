@@ -1,0 +1,22 @@
+{
+  "name": "@travel/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js",
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/nextjs": "./tsconfig/nextjs.json",
+    "./tsconfig/react-native": "./tsconfig/react-native.json",
+    "./tailwind": "./tailwind/base.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.3.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.2"
+  }
+}

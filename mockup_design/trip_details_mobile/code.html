@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Horizon - Trip Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#672c00",
+                        "on-primary-container": "#f3f7ff",
+                        "inverse-surface": "#2e3132",
+                        "inverse-primary": "#94ccff",
+                        "on-tertiary-fixed": "#001f27",
+                        "surface-tint": "#006399",
+                        "primary-container": "#0077b6",
+                        "primary": "#005d90",
+                        "outline-variant": "#bfc7d1",
+                        "outline": "#707881",
+                        "primary-fixed": "#cde5ff",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f3f4f5",
+                        "on-secondary-fixed-variant": "#763300",
+                        "surface-variant": "#e1e3e4",
+                        "on-error": "#ffffff",
+                        "tertiary-container": "#007c95",
+                        "secondary-fixed": "#ffdbc9",
+                        "secondary-container": "#fc8a40",
+                        "background": "#f8f9fa",
+                        "secondary-fixed-dim": "#ffb68d",
+                        "tertiary-fixed-dim": "#4cd6fb",
+                        "surface-container-high": "#e7e8e9",
+                        "on-surface": "#191c1d",
+                        "surface-container-highest": "#e1e3e4",
+                        "surface": "#f8f9fa",
+                        "primary-fixed-dim": "#94ccff",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary-fixed": "#331200",
+                        "tertiary": "#006176",
+                        "secondary": "#9b4500",
+                        "on-tertiary-fixed-variant": "#004e5f",
+                        "on-background": "#191c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-container": "#ecf9ff",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed": "#001d32",
+                        "surface-dim": "#d9dadb",
+                        "surface-bright": "#f8f9fa",
+                        "surface-container": "#edeeef",
+                        "tertiary-fixed": "#b3ebff",
+                        "on-surface-variant": "#404850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body text-on-surface min-h-screen pb-32">
+<!-- TopAppBar Section -->
+<header class="fixed top-0 w-full z-50 bg-slate-50/80 backdrop-blur-xl shadow-sm shadow-sky-900/5 flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden">
+<img alt="User" class="w-full h-full object-cover" data-alt="close-up portrait of a smiling young traveler with a modern aesthetic, soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcIWiD7NAyoOvH4MCxRz3Gds9AQmhqQP3f0WfanU1Ls0ZD9BP1B92IC_bzi_1mbhZM8smr5KAo7UFnGGnXaaA1iCvRfhiMNEy3Gk_p72tnwj1C8G30jPVX3rVYKW0FBpZpZEJhdc7201N8dj4u5D-gx1n6EgaxxzjwBCAmXLHVNwvXnSIMyWj8v41WROGOuDuC62Ys_4qIn6CvKjWLc4SjFPlir9uLjrHYHnGNZ0IInDETYClQ3i0nLKKTbO4x6FGxR1Fii1NQ-zk"/>
+</div>
+<span class="text-2xl font-bold tracking-tighter text-sky-900 font-headline">Horizon</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:opacity-80 transition-opacity active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-24 px-6">
+<!-- Hero & Budget Card -->
+<section class="mb-8">
+<div class="relative h-48 w-full rounded-xl overflow-hidden mb-6">
+<img class="w-full h-full object-cover" data-alt="scenic aerial view of turquoise ocean waves crashing against a white sandy beach with tropical palms at sunset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqSVQFRSZ2d4LsS9gVGLTDL-YDI6xG-l2GlQYC70ET76zQm3vUfBz6vvkktSCDcsbEbmS2UONTrdNRrwMZSJN837oZyvcCv9LxoTnAJor2vuH_FcSSaekCtieCDcvfqlZyBN_GOoixiwpRr4mEs7X14ooIUZ96OFZHIoGt76fsdV1Sm8MlYi0cuWMQMoXUE_ZGtYFBUhkN6RmYMjibkkgSHY_PVZBCe7ySbF73vQcYHAPNZB71kzPB5fQribcEp377IsKf1Of_03w"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="absolute bottom-4 left-6">
+<h1 class="text-white text-3xl font-extrabold font-headline tracking-tight">Amalfi Coast Escape</h1>
+<p class="text-white/80 font-medium">Aug 12 - Aug 19</p>
+</div>
+</div>
+<!-- Budget Lens Overlay -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_24px_rgba(0,93,144,0.04)]">
+<div class="flex justify-between items-end mb-4">
+<div>
+<p class="text-sm font-semibold text-outline tracking-wider uppercase font-label mb-1">Trip Budget</p>
+<h2 class="text-2xl font-bold text-primary font-headline">$3,420 <span class="text-sm font-medium text-outline">/ $4,500</span></h2>
+</div>
+<div class="text-right">
+<span class="text-xs font-bold bg-secondary-fixed text-on-secondary-fixed px-3 py-1 rounded-full uppercase tracking-widest">76% Spent</span>
+</div>
+</div>
+<div class="h-3 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-container" style="width: 76%"></div>
+</div>
+<div class="flex justify-between mt-3">
+<span class="text-xs font-semibold text-outline">Daily Avg: $427</span>
+<span class="text-xs font-semibold text-primary">$1,080 Remaining</span>
+</div>
+</div>
+</section>
+<!-- Map Toggle / Mini Map -->
+<section class="mb-10">
+<div class="relative group rounded-xl overflow-hidden h-40 bg-surface-container-low cursor-pointer">
+<div class="absolute inset-0 flex items-center justify-center z-10">
+<div class="bg-white/90 backdrop-blur-md px-6 py-2 rounded-full shadow-lg border border-white/20 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="map">map</span>
+<span class="font-bold text-primary font-label text-sm uppercase tracking-wider">Explore Map</span>
+</div>
+</div>
+<img class="w-full h-full object-cover opacity-60 grayscale-[20%]" data-alt="stylized minimalist map of a coastal mediterranean town with clear blue water and winding roads" data-location="Positano, Italy" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6VLYw_CME8SGHjECHWxPrxbwbW1IlurGnE75IFVkSY9g4E_y9UWq7TuzrCzY5lUGRElDgJcYwr1zkLcqHjn7UWKdj1WSVDg5VqQou_QL7eujklWXyV-Svz6jd__II4Vk2dD_BF5cCzhGn_t_U1piBbhqOKfeAq0Jh_SAWbOGnhaixidyO5j7v77ry0k3bBA79jtdZp8cLcYfLcURVyjKE6WsOmEWOM1I672jBjU-alaKdR-QCpJxqUSyersDeKTyApsqcXWu2bkM"/>
+</div>
+</section>
+<!-- Timeline: Day 1 -->
+<section class="mb-10">
+<div class="flex items-center gap-4 mb-8">
+<h3 class="text-4xl font-extrabold font-headline text-on-surface">Day 1</h3>
+<div class="h-px flex-1 bg-surface-container-highest"></div>
+<span class="text-sm font-bold text-outline uppercase tracking-widest">Mon, Aug 12</span>
+</div>
+<div class="relative pl-8 border-l-2 border-primary-fixed-dim space-y-12">
+<!-- Activity 1 -->
+<div class="relative">
+<div class="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-primary ring-4 ring-background"></div>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<span class="text-xs font-black text-primary font-label uppercase tracking-widest">09:30 AM</span>
+<span class="text-[10px] font-bold bg-surface-container text-on-surface-variant px-2 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" data-icon="google_maps">google</span> Google Maps
+                            </span>
+</div>
+<h4 class="text-lg font-bold font-headline leading-tight">Arrival at Positano Port</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">Ferry arrival from Salerno. Meet the private shuttle at the main pier entrance.</p>
+</div>
+</div>
+<!-- Activity 2 -->
+<div class="relative">
+<div class="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-primary ring-4 ring-background"></div>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<span class="text-xs font-black text-primary font-label uppercase tracking-widest">02:00 PM</span>
+<span class="text-[10px] font-bold bg-secondary-fixed text-on-secondary-fixed-variant px-2 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" data-icon="home">home</span> Airbnb
+                            </span>
+</div>
+<h4 class="text-lg font-bold font-headline leading-tight">Check-in: Villa Margherita</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">Door code: 1288#. Host Maria will meet you for a brief tour of the terrace and amenities.</p>
+<div class="mt-2 rounded-lg overflow-hidden h-32">
+<img class="w-full h-full object-cover" data-alt="luxurious italian villa terrace with white linens, potted lemon trees, and a breathtaking view of the ocean" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDW1KxBW0W7k0TXEd9H_T9h5JFebofp_i_MS2CCwKDx_9CczQnA9JWvwjRHIiSRar4OWjVzlanC2bpWFrxGa9nZFAX2sqRKcbGVrrS_58tXNgkpGg16whh_0c_w4t1eyfgp3-8OblIYNMn4AtIgge9EuEYbXAvGu7qeOcmp0D6uASC-KeMPwlS5v6-bxxNw1JLDv-N0ZkRXS_eZA5Xqemgm-uBpmn3jPysgZaU6UT3FBgLsx1IVNtcNwBU2Z49VHmDEta3L2bfI2zw"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Suggested for Dinner Carousel -->
+<section class="mt-12 mb-8">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-xl font-extrabold font-headline">Suggested for Dinner</h3>
+<span class="text-xs font-bold text-primary uppercase tracking-widest">See All</span>
+</div>
+<div class="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
+<!-- Food Item 1 -->
+<div class="min-w-[200px] bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
+<div class="h-32 relative">
+<img class="w-full h-full object-cover" data-alt="plate of fresh linguine with clams and lemon zest, artistic top-down shot with warm lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDg2FquGkJeyqXpFuqW4ptK1ynz9YWD_KonrnB3txa41TiW5GwswpiGrj7bpnDFPHbY71qXOdshOn28KSvIL58bFZREJp2V95oy9x4GPvIV_UzD2IbUbCDu_QNEsKuELkOCM55_zcPr1ToBINj6TICfnGPw9LQBBGVpqn9u67l-C52RzEz8M5fMo_mCQ39F8YlKn1pagm_fa36t3k-23rcs5ntxMPP72idujmMMOx3PFahMLGWfD1XJ8nfEjtImKSiXt_nzKuSvnXw"/>
+<div class="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span> 4.9
+                        </div>
+</div>
+<div class="p-3">
+<h5 class="font-bold text-sm">Chez Black</h5>
+<p class="text-xs text-outline mb-2">Seafood • $$$</p>
+<button class="w-full py-2 bg-surface-container-high rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary-fixed transition-colors">Add to Trip</button>
+</div>
+</div>
+<!-- Food Item 2 -->
+<div class="min-w-[200px] bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
+<div class="h-32 relative">
+<img class="w-full h-full object-cover" data-alt="authentic italian margherita pizza with fresh basil on a rustic wooden table" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5FjL6k3ptMPCOk-S_lop1UZNJsMcNcmyY_ght7NFFn21LsJDS5Da9k7V1EMxufLKuoslengZ0DFwBqIuLQY7D6mW8vCspW-yTs1l2nZcIfZF_DACR90TglK9ynbhJttxcLMovDY1e1m5frYVwxvcqb4_WGx4W9wxn1DlpdeREY5TsYkdoJvDfVuTpJu5f2EUXdibBWz4vH1pRK91zqgrb3SKuxmUrmNEai8P8yWLoC2kDgii29XfAxy41FP7Rp9HH7Ww7UML8pnA"/>
+<div class="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span> 4.7
+                        </div>
+</div>
+<div class="p-3">
+<h5 class="font-bold text-sm">Da Vincenzo</h5>
+<p class="text-xs text-outline mb-2">Authentic • $$</p>
+<button class="w-full py-2 bg-surface-container-high rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary-fixed transition-colors">Add to Trip</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-32 right-6 w-14 h-14 bg-gradient-to-br from-primary to-primary-container text-white rounded-full shadow-lg shadow-primary/30 flex items-center justify-center active:scale-90 transition-transform z-50">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-white/90 backdrop-blur-2xl rounded-t-[2rem] shadow-[0_-4px_24px_rgba(0,93,144,0.06)] z-50">
+<a class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="explore">explore</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-sky-100 text-sky-900 rounded-2xl px-5 py-2 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="flight_takeoff" style="font-variation-settings: 'FILL' 1;">flight_takeoff</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest">Trips</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="payments">payments</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest">Budget</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 px-5 py-2 hover:text-sky-600 transition-colors active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span class="font-['Manrope'] text-[11px] font-semibold uppercase tracking-widest">Profile</span>
+</a>
+</nav>
+</body></html>

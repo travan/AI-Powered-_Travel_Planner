@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Horizon | Trip Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#e1e3e4",
+                    "tertiary-container": "#007c95",
+                    "on-primary-fixed-variant": "#004b74",
+                    "on-tertiary-fixed-variant": "#004e5f",
+                    "on-primary-container": "#f3f7ff",
+                    "on-secondary-fixed-variant": "#763300",
+                    "on-secondary-fixed": "#331200",
+                    "surface-container": "#edeeef",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-container": "#672c00",
+                    "on-surface-variant": "#404850",
+                    "tertiary-fixed": "#b3ebff",
+                    "error": "#ba1a1a",
+                    "tertiary": "#006176",
+                    "primary": "#005d90",
+                    "surface-container-high": "#e7e8e9",
+                    "surface-tint": "#006399",
+                    "on-background": "#191c1d",
+                    "primary-fixed-dim": "#94ccff",
+                    "surface-container-low": "#f3f4f5",
+                    "on-error": "#ffffff",
+                    "on-tertiary-container": "#ecf9ff",
+                    "tertiary-fixed-dim": "#4cd6fb",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f8f9fa",
+                    "surface-container-highest": "#e1e3e4",
+                    "on-error-container": "#93000a",
+                    "secondary-fixed-dim": "#ffb68d",
+                    "outline-variant": "#bfc7d1",
+                    "outline": "#707881",
+                    "surface-dim": "#d9dadb",
+                    "error-container": "#ffdad6",
+                    "background": "#f8f9fa",
+                    "primary-container": "#0077b6",
+                    "on-surface": "#191c1d",
+                    "primary-fixed": "#cde5ff",
+                    "secondary-fixed": "#ffdbc9",
+                    "inverse-surface": "#2e3132",
+                    "secondary-container": "#fc8a40",
+                    "on-primary": "#ffffff",
+                    "inverse-on-surface": "#f0f1f2",
+                    "secondary": "#9b4500",
+                    "surface-bright": "#f8f9fa",
+                    "on-secondary": "#ffffff",
+                    "inverse-primary": "#94ccff",
+                    "on-primary-fixed": "#001d32",
+                    "on-tertiary-fixed": "#001f27"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Manrope', sans-serif; }
+        h1, h2, h3 { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen pb-24 md:pb-0">
+<!-- Top Navigation Bar -->
+<header class="bg-surface/80 backdrop-blur-md sticky top-0 z-50 shadow-[0_8px_32px_rgba(0,93,144,0.04)] px-6 py-4 flex justify-between items-center">
+<div class="flex items-center gap-4">
+<span class="text-2xl font-black text-primary tracking-tight">Horizon</span>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<nav class="flex gap-6">
+<a class="text-outline-variant hover:text-primary transition-all font-semibold" href="#">Home</a>
+<a class="text-primary font-bold" href="#">Trips</a>
+<a class="text-outline-variant hover:text-primary transition-all font-semibold" href="#">Budget</a>
+<a class="text-outline-variant hover:text-primary transition-all font-semibold" href="#">Profile</a>
+</nav>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="notifications">notifications</span>
+<img alt="Profile" class="w-10 h-10 rounded-full object-cover border-2 border-primary-fixed" data-alt="portrait of a professional male traveler with a modern look in sun-drenched outdoor lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSJJF6wl1v-GNCTJ9A_xwe1Ahz8sNQ-hzaO0stf6N7J-KxmlJxeav9kpwSwS06wyXdRXIKYkcRWSSWkjf2H3Bm9yPdIcrG8iOnzFMGZQvhcC-v0pFXU_mKY3IjnNUjjnZbDE770096c0KxdmjkjB14WY-Bb7PiFu8KctRQszpa7Va2FhWEUHqNz7MCLoUOtulQuy0kUb-q0OUYUdVcCG1goenvW94SXSZGLKLIwE_8F2asq0-8iznmQOehZg6AEWXZatORgk7q5vU"/>
+</div>
+</div>
+<div class="md:hidden">
+<span class="material-symbols-outlined text-primary" data-icon="explore">explore</span>
+</div>
+</header>
+<main class="max-w-[1440px] mx-auto p-4 md:p-8">
+<!-- Budget Summary Bar -->
+<section class="mb-8 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-fixed/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+<div class="flex flex-col gap-1 z-10">
+<p class="text-outline text-sm font-semibold tracking-wider uppercase">Trip Budget: Amalfi Coast</p>
+<h1 class="text-3xl font-black text-on-surface">Daily Breakdown</h1>
+</div>
+<div class="flex flex-col md:flex-row gap-8 w-full md:w-auto z-10">
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end gap-12">
+<span class="text-sm font-bold text-outline">Spent: $1,240</span>
+<span class="text-sm font-bold text-primary">Budget: $2,500</span>
+</div>
+<div class="h-3 w-full md:w-64 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 50%;"></div>
+</div>
+</div>
+<div class="flex items-center gap-4 bg-secondary-fixed px-6 py-3 rounded-full">
+<span class="material-symbols-outlined text-on-secondary-fixed" data-icon="payments">payments</span>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase font-bold text-on-secondary-fixed-variant leading-none">Remaining</span>
+<span class="text-xl font-extrabold text-on-secondary-fixed">$1,260.00</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Layout: Sidebar & Map -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Left: Vertical Timeline -->
+<div class="lg:col-span-5 flex flex-col gap-8">
+<!-- Day 1 Segment -->
+<div class="relative pl-8">
+<!-- Progress Line -->
+<div class="absolute left-0 top-2 bottom-0 w-0.5 bg-primary-fixed-dim"></div>
+<div class="flex items-center gap-3 mb-6">
+<div class="absolute left-[-6px] top-2 w-3.5 h-3.5 bg-primary rounded-full ring-4 ring-primary-fixed"></div>
+<h2 class="text-2xl font-black text-on-surface">Day 1: Arrival &amp; Vibes</h2>
+<span class="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full text-xs font-bold">Today</span>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Activity Card -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-[0_4px_24px_rgba(0,93,144,0.02)] transition-all hover:translate-x-1 group">
+<div class="flex justify-between items-start mb-3">
+<span class="text-xs font-bold text-primary bg-primary-fixed/30 px-2 py-1 rounded">09:00 AM</span>
+<span class="text-sm font-extrabold text-on-surface-variant">$0.00</span>
+</div>
+<h3 class="text-lg font-bold group-hover:text-primary transition-colors">Check-in: Hotel Santa Caterina</h3>
+<p class="text-outline text-sm mt-1">Stunning cliffside views and direct beach access.</p>
+<div class="mt-4 flex gap-2">
+<a class="bg-surface-container-low text-primary text-xs font-bold px-4 py-2 rounded-full flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="hotel">hotel</span>
+                                    Airbnb / Booking
+                                </a>
+</div>
+</div>
+<!-- Activity Card -->
+<div class="bg-surface-container-low p-5 rounded-xl transition-all hover:translate-x-1 group border border-transparent hover:border-primary-fixed/50">
+<div class="flex justify-between items-start mb-3">
+<span class="text-xs font-bold text-outline">12:30 PM</span>
+<span class="text-sm font-extrabold text-on-surface-variant">$45.00</span>
+</div>
+<h3 class="text-lg font-bold">Lunch at Trattoria da Gemma</h3>
+<p class="text-outline text-sm mt-1">Famous lemon pasta and freshly caught calamari.</p>
+</div>
+</div>
+</div>
+<!-- Day 2 Segment -->
+<div class="relative pl-8">
+<div class="absolute left-0 top-0 bottom-[-32px] w-0.5 bg-surface-container-highest"></div>
+<div class="flex items-center gap-3 mb-6">
+<div class="absolute left-[-6px] top-2 w-3.5 h-3.5 bg-outline-variant rounded-full"></div>
+<h2 class="text-2xl font-black text-on-surface opacity-60">Day 2: Path of the Gods</h2>
+</div>
+<!-- Recommendation Section -->
+<div class="mt-4">
+<h4 class="text-sm font-bold text-outline-variant mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="recommend">recommend</span>
+                            SUGGESTED FOR DINNER
+                        </h4>
+<div class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+<div class="min-w-[160px] h-64 bg-surface-container-high rounded-xl relative overflow-hidden flex-shrink-0 group">
+<img alt="Food" class="w-full h-full object-cover transition-transform group-hover:scale-110" data-alt="cinematic vertical photo of a delicious pasta dish on a rustic table in Positano during sunset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAf_B0uWcTl3zIyBZyhEGQYtJLSf2b8pi9goBiPyG0GHcH2MK779rwbZe3DQ6VF68xL3_JyS1dfhIcZRpIFS3Y1ggTbwmu1LJbG3dWrh_y4hCjLiAWlV6bAuI63_3mhNHfyNk7XzepZpsqoMa74PLrXxRBspBdo5u-MbJIdHVA0f868yAmAMUivq-4kajAL0jHXboMvFiR0ZuR0BGKrxvx9jsWECJU5zLOM9zwK6eapb8jwa7Tm_Zv5D2Sz-nj9bAgS-BbE6yDZ7u8"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-3 right-3 text-white">
+<p class="text-xs font-bold">Chez Black</p>
+<div class="flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-[12px] text-primary-fixed" data-icon="star" data-weight="fill" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="text-[10px] font-bold">4.8 • Seafood</span>
+</div>
+</div>
+</div>
+<div class="min-w-[160px] h-64 bg-surface-container-high rounded-xl relative overflow-hidden flex-shrink-0 group">
+<img alt="Restaurant" class="w-full h-full object-cover transition-transform group-hover:scale-110" data-alt="atmospheric vertical shot of a restaurant interior with warm ambient lighting and soft bokeh effects" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXD-0yKtJd1azMaO2imNKBQB396KJs3PTGpD2CyORF9BsSvXDTZv9oSuatsXOPXSS0tVwiQTQBgjHmHs0q7wEw4Ra7Y6rMQ6q59FQsfmC8nYLACfNSSqXZ9mJx-JMmEY6GPWxa5mjN6kJ-z-1cxWsbQBJnNtQNliPq70txKIeAr3oC0G85u62Tsc_Zt9gl7fUip3K-_AgI1WJShkRioQQDi58znGglMzwqD0_8XWZyNfGwl-k_jnevxqFEAAA_H0bTGDInWQyf21M"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-3 right-3 text-white">
+<p class="text-xs font-bold">La Tagliata</p>
+<div class="flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-[12px] text-primary-fixed" data-icon="star" data-weight="fill" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="text-[10px] font-bold">4.9 • Farm to Table</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right: Interactive Map -->
+<div class="lg:col-span-7 sticky top-28 h-[600px] rounded-3xl overflow-hidden shadow-xl shadow-primary/5 bg-surface-container-high border-4 border-surface-container-lowest">
+<div class="relative w-full h-full">
+<!-- Map Placeholder -->
+<img alt="Map" class="w-full h-full object-cover" data-alt="satellite style aesthetic map of the Amalfi Coast with artistic blue water and soft beige topography" data-location="Amalfi Coast, Italy" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2I0rxA9dbT86C3xch1yYw9H2ZckXHgxe9vmrgdhVEh36mA_aNuvBj1LypEsF1ojpXX0gonlnhZBt4yY3Mxer5YGwwp8g-cSWJ0m6l74ud1MfDc_9PUj4SA0dhN8xH3Eno9aYbC32j9DJOpouVREX_bYZ64T_LSAodEi19JimHJcEYUI-iGwDnh9jLsHkvsPWauPiwhnxfwBw1gLojORo_fm7AunuoSHTT2KU0ZIDUmQrrxUM_Xk4VSpta3ilwBUwwe75cXlc9_W0"/>
+<!-- Floating Map Controls -->
+<div class="absolute top-4 right-4 flex flex-col gap-2">
+<button class="w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-primary shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+<button class="w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-primary shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="remove">remove</span>
+</button>
+</div>
+<!-- Custom Map Pin -->
+<div class="absolute top-1/2 left-1/3 group">
+<div class="relative">
+<div class="absolute -top-12 -left-1/2 bg-white px-3 py-1.5 rounded-lg shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+<p class="text-xs font-bold text-on-surface">Hotel Santa Caterina</p>
+</div>
+<div class="w-8 h-8 bg-primary rounded-full border-4 border-white shadow-lg flex items-center justify-center text-white cursor-pointer hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-[18px]" data-icon="location_on" data-weight="fill" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-primary/20 rounded-full animate-pulse -z-10"></div>
+</div>
+</div>
+<!-- Route Legend Layer -->
+<div class="absolute bottom-6 left-6 right-6">
+<div class="bg-white/80 backdrop-blur-xl p-4 rounded-2xl shadow-2xl flex items-center gap-6 overflow-hidden">
+<div class="flex flex-col">
+<span class="text-[10px] font-black text-primary uppercase tracking-widest">Route Leg</span>
+<span class="text-sm font-bold text-on-surface">Amalfi ➔ Ravello</span>
+</div>
+<div class="flex-grow h-px bg-primary-fixed"></div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline" data-icon="directions_car">directions_car</span>
+<span class="text-sm font-bold text-on-surface">18 min</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-low flex justify-around items-center px-4 pb-6 pt-3 rounded-t-[2rem] z-50 shadow-[0_-4px_24px_rgba(0,93,144,0.06)]">
+<a class="flex flex-col items-center justify-center text-outline-variant px-5 py-2 active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-['Manrope'] text-xs font-semibold mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-fixed text-on-primary-fixed rounded-full px-5 py-2 active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="map" data-weight="fill" style="font-variation-settings: 'FILL' 1;">map</span>
+<span class="font-['Manrope'] text-xs font-semibold mt-1">Trips</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline-variant px-5 py-2 active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-['Manrope'] text-xs font-semibold mt-1">Budget</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline-variant px-5 py-2 active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-['Manrope'] text-xs font-semibold mt-1">Profile</span>
+</a>
+</nav>
+<!-- Contextual FAB -->
+<button class="fixed right-6 bottom-24 md:bottom-8 bg-primary text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform group">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span class="absolute right-full mr-4 bg-primary px-4 py-2 rounded-full text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">New Activity</span>
+</button>
+</body></html>

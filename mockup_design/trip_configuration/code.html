@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#e1e3e4",
+                        "tertiary-container": "#007c95",
+                        "on-primary-fixed-variant": "#004b74",
+                        "on-tertiary-fixed-variant": "#004e5f",
+                        "on-primary-container": "#f3f7ff",
+                        "on-secondary-fixed-variant": "#763300",
+                        "on-secondary-fixed": "#331200",
+                        "surface-container": "#edeeef",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-container": "#672c00",
+                        "on-surface-variant": "#404850",
+                        "tertiary-fixed": "#b3ebff",
+                        "error": "#ba1a1a",
+                        "tertiary": "#006176",
+                        "primary": "#005d90",
+                        "surface-container-high": "#e7e8e9",
+                        "surface-tint": "#006399",
+                        "on-background": "#191c1d",
+                        "primary-fixed-dim": "#94ccff",
+                        "surface-container-low": "#f3f4f5",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#ecf9ff",
+                        "tertiary-fixed-dim": "#4cd6fb",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f8f9fa",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#ffb68d",
+                        "outline-variant": "#bfc7d1",
+                        "outline": "#707881",
+                        "surface-dim": "#d9dadb",
+                        "error-container": "#ffdad6",
+                        "background": "#f8f9fa",
+                        "primary-container": "#0077b6",
+                        "on-surface": "#191c1d",
+                        "primary-fixed": "#cde5ff",
+                        "secondary-fixed": "#ffdbc9",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#fc8a40",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f2",
+                        "secondary": "#9b4500",
+                        "surface-bright": "#f8f9fa",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#94ccff",
+                        "on-primary-fixed": "#001d32",
+                        "on-tertiary-fixed": "#001f27"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Manrope', sans-serif; }
+        h1, h2, h3 { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopAppBar -->
+<header class="bg-surface/80 dark:bg-on-surface/80 backdrop-blur-md font-['Plus_Jakarta_Sans'] font-bold tracking-tight docked full-width top-0 z-50 shadow-[0_8px_32px_rgba(0,93,144,0.04)] fixed w-full">
+<div class="flex justify-between items-center w-full px-6 py-4">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-black text-primary dark:text-primary-fixed-dim">Horizon</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-primary dark:text-primary-fixed font-bold" href="#">Home</a>
+<a class="text-outline dark:text-outline-variant hover:bg-surface-container-low transition-colors duration-300 px-3 py-1 rounded-full" href="#">Explore</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-outline p-2 hover:bg-surface-container-low rounded-full transition-colors">notifications</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-fixed">
+<img alt="User profile" data-alt="Portrait of a modern traveler with mountains in the background, cinematic lighting, warm tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC7qF9Sw2WWPs5eQxIgFivmTAeZTYWgviIvU_ABIk2k6K4abJyfDMYShpZ1qN4eINleaI-0AOd5bU-UmYrYGcX6HD3tSWgnOrhloeQDlL36YZZ2rPkFGCa4GX8iLJyr-0ER5P5oJiPfVLlgvufoVO71zttFY-PVb92W4SS1j0WXMJMytPH4H9k8u8HxRQkoju_1tEe009cf-rhHJWY78rxmEXeiBBPJoC-iCD8OYCqSjwTC7PyxXtetEswMRdtaUehWs_2CiH1NJ9k"/>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-32">
+<!-- Hero Section -->
+<section class="relative h-[460px] w-full overflow-hidden mb-12">
+<img alt="Dream destination" class="absolute inset-0 w-full h-full object-cover" data-alt="Wide panoramic view of a turquoise tropical beach with white sand and palm trees at sunrise, soft pastel sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3qw5BFPScK59Ke-eENOQcJiLA1U3obt1k7bcECA2or7bWSmlqZEPclKK5g991OWQKt0XLNCsvCgooVd9RgKX8-v9rVV9FzmrUBsbFeSc58kBDsfxWF9w53jDS9uGyKnMXBDgkhCkazfj9vo7c-RRi3X2JSWI8HAn7rtnqlyV0n8_uKoui2yMq9m87RIZItfQJyhnvvVLUomVDfK8Ib2mxaS45mowT-gPWKllRTMMQB-fPYxV80EensMW4TVbx_mFaXP9qefmf9TY"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent"></div>
+<div class="absolute inset-0 flex flex-col justify-end px-8 pb-12 max-w-7xl mx-auto w-full">
+<h1 class="text-5xl md:text-7xl font-extrabold text-on-surface tracking-tighter mb-4">Where to <span class="text-primary">next?</span></h1>
+<p class="text-on-surface-variant text-lg max-w-lg font-medium">Define your escape. Our AI digital concierge crafts the perfect itinerary while you dream.</p>
+</div>
+</section>
+<div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12">
+<!-- Config Form -->
+<div class="lg:col-span-7 space-y-8">
+<div class="bg-surface-container-lowest p-8 rounded-xl shadow-sm space-y-8 relative overflow-hidden">
+<!-- Glass Texture Accent -->
+<div class="absolute -top-24 -right-24 w-48 h-48 bg-primary/5 rounded-full blur-3xl"></div>
+<div class="space-y-6">
+<!-- Cities Input -->
+<div class="space-y-3">
+<label class="text-sm font-bold uppercase tracking-widest text-outline">Destinations</label>
+<div class="flex flex-wrap gap-2 p-4 bg-surface-container-high rounded-lg min-h-[56px] items-center">
+<div class="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
+                                    Kyoto <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
+</div>
+<div class="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
+                                    Osaka <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
+</div>
+<input class="bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant flex-1 min-w-[120px]" placeholder="Add city..." type="text"/>
+</div>
+</div>
+<!-- Grid for Dates & Budget -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Dates -->
+<div class="space-y-3">
+<label class="text-sm font-bold uppercase tracking-widest text-outline">When are you going?</label>
+<div class="relative flex items-center bg-surface-container-high rounded-lg p-4 group focus-within:bg-primary-fixed/30 transition-colors">
+<span class="material-symbols-outlined text-primary mr-3">calendar_month</span>
+<input class="bg-transparent border-none focus:ring-0 text-on-surface font-semibold w-full" placeholder="Oct 12 - Oct 24" type="text"/>
+</div>
+</div>
+<!-- Budget -->
+<div class="space-y-3">
+<label class="text-sm font-bold uppercase tracking-widest text-outline">Trip Budget</label>
+<div class="relative flex items-center bg-surface-container-high rounded-lg p-4 group focus-within:bg-primary-fixed/30 transition-colors">
+<span class="material-symbols-outlined text-primary mr-3">payments</span>
+<input class="bg-transparent border-none focus:ring-0 text-on-surface font-semibold w-full" placeholder="$2,500 - $4,000" type="text"/>
+</div>
+</div>
+</div>
+</div>
+<!-- CTA Button -->
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold py-5 rounded-full text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3">
+                        Generate Magic Itinerary
+                        <span class="material-symbols-outlined">auto_awesome</span>
+</button>
+</div>
+<!-- Bento Quick Suggestions -->
+<div class="space-y-6">
+<h2 class="text-2xl font-bold tracking-tight">Trending Escapes</h2>
+<div class="grid grid-cols-2 md:grid-cols-3 gap-4 h-[400px]">
+<div class="relative rounded-xl overflow-hidden group cursor-pointer col-span-2">
+<img alt="Bagan" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Stunning sunset over the ancient temples of Bagan, Myanmar, golden warm light and hazy horizon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASupYTgk_MOyH65A4nh1D_ZGbu8ua2SZodu5XNuKYqZ7tuc5tUXrBYtD6JIspwj_CeFbAt6ZWrdtvrui2Y2po_IpVPNFPOncnsqslatXKXr8N_yGelSUF9aS59mMDtOFwn2b9AN7kFvv7ei6TLZYyZl5Oh6ZgPEd0vz_HWLDIJBkGBQ_U_U_Jb5rx4hvQ_obz6HaOO5fHc18GSaZ5zl2lZuFDawuei7XVNeSVxDRm1YMu8tFQCUV64KiXJVoiyZAbnenHc-D9K0Ls"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<span class="bg-secondary-fixed text-on-secondary-fixed text-[10px] font-black uppercase px-2 py-0.5 rounded-sm mb-1 inline-block">Top Rated</span>
+<p class="text-white font-bold text-xl">Bagan, Myanmar</p>
+</div>
+</div>
+<div class="relative rounded-xl overflow-hidden group cursor-pointer">
+<img alt="Maldives" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Crystal clear water and overwater bungalows in the Maldives under a bright blue sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjijp6IjDNNT2pQmeTTcWpMB-jV45GSGpPVWpEf9yn9ZMnpdqX31qtyTirVPTRwgdvqvbuu267Hj-MAEtPc_C_7IV_cuARyjkdY_KIESqTtfJnQ576s8ktegMwOwupgV0mwhc-YewxrIHeVHIIdVGpghODSI010tDoOCgb0pW6mMqQl31WvqXlImf0e2dlY9dQpLI9iXdZmpkARdeFakL9ir_cUCwho9dzsorjOY9FpxOadz9cZZmmpDxEka0z3q7l8yDWhkDnVu0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<p class="text-white font-bold">Maldives</p>
+</div>
+</div>
+<div class="relative rounded-xl overflow-hidden group cursor-pointer">
+<img alt="Paris" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Classic view of the Eiffel Tower from a Parisian street with spring flowers in the foreground" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAp6lBV4ytBvV1-vSBt1Zkgp0dYQJZf3tCHNAqrxA_cpJQLL8ABGkEkUmty91St-FUuUYDsNBCnBZ9S5n5xTZCQ9WA_dJZAYpcY3VrPWzZ-Wkit2tvGwUn3kEYj9Q7jX_pNzlE7EPnEkXDg9WEXF17EHoqYmwlGR0ia7NZcaIvUiTcGGis-6DDZ-jHKXl6teEyAyMk-BJiujnCkanfjICjY6FYmoXlJaOaRpqAZ87v9fEunXv6ACCvJCSoTz_VhQB5OkELU6YAntvk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<p class="text-white font-bold">Paris</p>
+</div>
+</div>
+<div class="relative rounded-xl overflow-hidden group cursor-pointer col-span-2">
+<img alt="Bali" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Aerial drone shot of lush green rice terraces in Bali with morning mist" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyh-iaVcN8PJQ7Z3DaeheXN6P62yvkwibFlMjKASGtxQeAz-VicUUKQCR9xWoT8Z2KyxbW8wT0XQbqeE2IM-PBjikSrt9C6fH2oeEJbIo4MpFBCofQXOOU9ogIUKqtbNjvUjPq8_wEZJeEbhfvDll42wgXDDMLHV5Hkc1NkhOQSMJkq-fIPI9ZH8hKLglNAVyFMguT4UXv7vOKQwIVgwpw-a625BacOQqSOQ_EDFtRl4YifDkIRnP5A0OK_maZqDtIq7hZKAblllM"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<p class="text-white font-bold text-xl">Ubud, Bali</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Context -->
+<div class="lg:col-span-5 space-y-8">
+<div class="bg-surface-container-low rounded-xl p-8 sticky top-28 border border-outline-variant/10">
+<h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-weight="fill">tips_and_updates</span>
+                        Smart Tips
+                    </h3>
+<div class="space-y-6">
+<div class="flex gap-4">
+<div class="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary">flight</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Mid-week departures</p>
+<p class="text-sm text-on-surface-variant">Flying on a Tuesday or Wednesday can save up to 22% on your Kyoto trip.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-12 h-12 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary">festival</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Local Festivities</p>
+<p class="text-sm text-on-surface-variant">Your dates overlap with the Jidai Matsuri in Kyoto. Expect crowds but amazing views!</p>
+</div>
+</div>
+</div>
+<hr class="my-8 border-none h-px bg-outline-variant/20"/>
+<div class="space-y-4">
+<p class="text-sm font-bold text-outline uppercase tracking-widest">Recent Activity</p>
+<div class="bg-surface-container-lowest rounded-lg p-4 flex items-center gap-4">
+<img alt="India" class="w-12 h-12 rounded-lg object-cover" data-alt="Close up of the Taj Mahal at sunrise with soft morning light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD29sx8rFoac54bsHqhgSPl77QMOWvl3rS5A_w8m9xmcTQ7XnuUmOrsPOP_a1BY-Lj1uA8b-rDZQvRtTFEb-yD26M567O_ZiZWoUyu5mKNhTquGkPIByPYIaFbUfyI2e-FrJwnsX6YH6tRT1CHu9Heu0LJP3Ei3HY9w7hRWwEsFOOZWFsSPjtutWYO9IYs4cgg43pohm2H1QVPVBizft__nGHo47rN7P9F2nPeq45t6zs-f0bOtjwfjS4YJvc4x5Fa1i6s68Dv7hmA"/>
+<div>
+<p class="text-sm font-bold">Planned Taj Mahal trip</p>
+<p class="text-xs text-outline">2 days ago</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-surface dark:bg-on-surface font-['Manrope'] text-xs font-semibold docked full-width rounded-t-[2rem] z-50 tonal-shift bg-surface-container-low shadow-[0_-4px_24px_rgba(0,93,144,0.06)] md:hidden">
+<a class="flex flex-col items-center justify-center bg-primary-fixed text-on-primary-fixed rounded-full px-5 py-2 active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined" data-weight="fill">home</span>
+<span>Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline-variant dark:text-outline px-5 py-2 hover:text-primary transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined">map</span>
+<span>Trips</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline-variant dark:text-outline px-5 py-2 hover:text-primary transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span>Budget</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline-variant dark:text-outline px-5 py-2 hover:text-primary transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined">person</span>
+<span>Profile</span>
+</a>
+</nav>
+</body></html>
