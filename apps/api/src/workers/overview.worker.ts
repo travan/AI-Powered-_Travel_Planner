@@ -10,13 +10,29 @@ import type { CityMetadata } from "@travel/types";
 
 const ai = createAIProvider(env.AI_PROVIDER);
 
+function formatDaylightHours(dayLength: unknown): string {
+  if (typeof dayLength === "string") {
+    const [hoursRaw] = dayLength.split(":");
+    const parsedHours = Number.parseInt(hoursRaw ?? "", 10);
+    if (Number.isFinite(parsedHours)) return `~${parsedHours} hours of daylight`;
+  }
+
+  if (typeof dayLength === "number" && Number.isFinite(dayLength) && dayLength > 0) {
+    const hours = Math.max(1, Math.round(dayLength / 3600));
+    return `~${hours} hours of daylight`;
+  }
+
+  return "~12 hours of daylight";
+}
+
 /**
  * Phase 1 Worker — generates a lightweight overview (~2-3s).
  * Publishes "overview_ready" SSE event when complete.
  */
 export async function processOverview(job: Job<ItineraryJobData>): Promise<void> {
-  const { jobId, input } = job.data;
-  const channel = `itinerary:progress:${jobId}`;
+  const { input } = job.data;
+  const sourceJobId = job.data.jobId && job.data.jobId.length > 0 ? job.data.jobId : String(job.id);
+  const channel = `itinerary:progress:${sourceJobId}`;
 
   const publish = (type: string, data: unknown) =>
     redis.publish(channel, JSON.stringify({ type, data }));
@@ -53,9 +69,7 @@ export async function processOverview(job: Job<ItineraryJobData>): Promise<void>
         ]);
 
         const { note, highlights, warnings } = buildWeatherNote(forecasts);
-
-        const daylightParts = astro.day_length.split(":");
-        const daylightHours = `~${daylightParts[0] ?? "12"} hours of daylight`;
+        const daylightHours = formatDaylightHours(astro.day_length);
 
         return {
           city: meta?.name?.["en"] ?? cityName,
@@ -85,9 +99,12 @@ export async function processOverview(job: Job<ItineraryJobData>): Promise<void>
 
     await publish("overview_ready", overview);
 
+    // Keep overview for phase 2 worker consumption.
+    await redis.setex(`job:overview:${sourceJobId}`, 1800, JSON.stringify(overview));
+
     // Store city data for Phase 2 workers via Redis (TTL: 30 min)
     await redis.setex(
-      `job:citydata:${jobId}`,
+      `job:citydata:${sourceJobId}`,
       1800,
       JSON.stringify(cityDataList)
     );

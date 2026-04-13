@@ -2,7 +2,8 @@ import { Queue, Worker, type Job } from "bullmq";
 import { redis } from "../db/redis.js";
 import type { ItineraryInput } from "@travel/types";
 
-export const QUEUE_NAME = "itinerary";
+export const OVERVIEW_QUEUE_NAME = "itinerary_overview";
+export const DETAIL_QUEUE_NAME = "itinerary_detail";
 
 export interface ItineraryJobData {
   jobId: string;
@@ -12,7 +13,17 @@ export interface ItineraryJobData {
 }
 
 // Shared queue instance (used by API to enqueue)
-export const itineraryQueue = new Queue<ItineraryJobData>(QUEUE_NAME, {
+export const itineraryQueue = new Queue<ItineraryJobData>(OVERVIEW_QUEUE_NAME, {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: { age: 3600 }, // keep completed jobs 1h
+    removeOnFail: { age: 86400 },    // keep failed jobs 24h
+  },
+});
+
+export const itineraryDetailQueue = new Queue<ItineraryJobData>(DETAIL_QUEUE_NAME, {
   connection: redis,
   defaultJobOptions: {
     attempts: 2,
@@ -23,9 +34,10 @@ export const itineraryQueue = new Queue<ItineraryJobData>(QUEUE_NAME, {
 });
 
 export function createWorker(
-  processor: (job: Job<ItineraryJobData>) => Promise<void>
+  queueName: string,
+  processor: (job: Job<ItineraryJobData>) => Promise<unknown>
 ): Worker<ItineraryJobData> {
-  return new Worker<ItineraryJobData>(QUEUE_NAME, processor, {
+  return new Worker<ItineraryJobData>(queueName, processor, {
     connection: redis,
     concurrency: 10,
   });

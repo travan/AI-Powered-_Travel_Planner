@@ -110,6 +110,14 @@ export function buildWeatherNote(forecasts: WeatherForecast[]): {
   highlights: string[];
   warnings: string[];
 } {
+  if (forecasts.length === 0) {
+    return {
+      note: "Weather data is limited for the selected dates.",
+      highlights: [],
+      warnings: [],
+    };
+  }
+
   const avgMax = forecasts.reduce((s, f) => s + f.temperature_max, 0) / forecasts.length;
   const rainyDays = forecasts.filter((f) => f.precipitation_sum > 5).length;
 
@@ -128,7 +136,8 @@ export function buildWeatherNote(forecasts: WeatherForecast[]): {
     highlights.push("Cool weather — ideal for hiking and city exploration");
   }
 
-  const note = `Average high: ${Math.round(avgMax)}°C. ${rainyDays > 0 ? `Rain on ${rainyDays} day(s).` : "Mostly dry."}`;
+  const rainText = rainyDays > 0 ? `Rain on ${rainyDays} day(s).` : "Mostly dry.";
+  const note = `Average high: ${Math.round(avgMax)}°C. ${rainText}`;
 
   return { note, highlights, warnings };
 }

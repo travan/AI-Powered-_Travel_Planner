@@ -22,22 +22,26 @@ const ai = createAIProvider(env.AI_PROVIDER);
  * Phase 2 Worker — fetches all data and generates full itinerary detail.
  * Publishes city_ready, transport_ready, restaurants_ready, complete events.
  */
-export async function processDetail(job: Job<ItineraryJobData>): Promise<void> {
-  const { jobId, input, cacheKey } = job.data;
-  const channel = `itinerary:progress:${jobId}`;
+export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itinerary_id: string; status: "complete" }> {
+  const { input, cacheKey } = job.data;
+  const sourceJobId =
+    job.data.jobId && job.data.jobId.length > 0
+      ? job.data.jobId
+      : String(job.id).replace(/^detail-/, "");
+  const channel = `itinerary:progress:${sourceJobId}`;
 
   const publish = (type: string, data: unknown) =>
     redis.publish(channel, JSON.stringify({ type, data }));
 
   try {
     // Retrieve city data from Phase 1
-    const cityDataRaw = await redis.get(`job:citydata:${jobId}`);
+    const cityDataRaw = await redis.get(`job:citydata:${sourceJobId}`);
     if (!cityDataRaw) throw new Error("City data from Phase 1 not found — Phase 1 may have failed");
 
     const cityDataList = JSON.parse(cityDataRaw) as PreFetchedCityData[];
 
     // Retrieve overview (stored by Phase 1 in a separate key)
-    const overviewRaw = await redis.get(`job:overview:${jobId}`);
+    const overviewRaw = await redis.get(`job:overview:${sourceJobId}`);
     if (!overviewRaw) throw new Error("Overview from Phase 1 not found");
     const overview = JSON.parse(overviewRaw) as ItineraryOverview;
 
@@ -123,11 +127,13 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<void> {
 
     const itinerary = await ai.generateDetail(input, overview, enrichedCityData);
 
-    // Save to Supabase
+    let itineraryId: string;
+
+    // Save to Supabase; in local dev, fall back to Redis-only persistence.
     const { data: saved, error } = await supabase
       .from("itineraries")
       .insert({
-        job_id: jobId,
+        job_id: sourceJobId,
         cities: input.cities,
         countries: enrichedCityData.map((c) => c.country),
         start_date: input.start_date,
@@ -142,12 +148,26 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<void> {
       .select("id")
       .single();
 
-    if (error) throw new Error(`Failed to save itinerary: ${error.message}`);
+    if (error || !saved?.id) {
+      if (env.NODE_ENV === "production") {
+        throw new Error(`Failed to save itinerary: ${error?.message ?? "unknown error"}`);
+      }
+      itineraryId = `local-${sourceJobId}`;
+      await cacheSet(`itinerary:${itineraryId}`, itinerary, TTL.ITINERARY_RESULT);
+    } else {
+      itineraryId = saved.id;
+    }
 
     // Cache result in Redis
     await cacheSet(`cache:itinerary:${cacheKey}`, itinerary, TTL.ITINERARY_RESULT);
 
-    await publish("complete", { itinerary_id: saved?.id, status: "complete" });
+    const completePayload: { itinerary_id: string; status: "complete" } = {
+      itinerary_id: itineraryId,
+      status: "complete",
+    };
+    await redis.setex(`job:result:${sourceJobId}`, 1800, JSON.stringify(completePayload));
+    await publish("complete", completePayload);
+    return completePayload;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     await publish("error", { message, code: "DETAIL_FAILED" });
@@ -156,7 +176,7 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<void> {
     await supabase
       .from("itineraries")
       .update({ status: "failed" })
-      .eq("job_id", jobId);
+      .eq("job_id", sourceJobId);
 
     throw err;
   }

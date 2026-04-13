@@ -28,6 +28,34 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
     return reply.send(data);
   });
 
+  // GET /itinerary/job/:jobId (local/dev fallback retrieval)
+  fastify.get<{ Params: { jobId: string } }>("/itinerary/job/:jobId", async (request, reply) => {
+    const { jobId } = request.params;
+    const localKey = `itinerary:local-${jobId}`;
+    const cached = await cacheGet(localKey);
+    if (cached) return reply.send(cached);
+
+    const { data, error } = await supabase
+      .from("itineraries")
+      .select("*")
+      .eq("job_id", jobId)
+      .single();
+
+    if (error || !data) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Itinerary for job not found",
+      });
+    }
+
+    if (data.id) {
+      await cacheSet(`itinerary:${data.id}`, data, TTL.ITINERARY_RESULT);
+    }
+
+    return reply.send(data);
+  });
+
   // GET /itinerary/shared/:shareToken (public)
   fastify.get<{ Params: { shareToken: string } }>(
     "/itinerary/shared/:shareToken",

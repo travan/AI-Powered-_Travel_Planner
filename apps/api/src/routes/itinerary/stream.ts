@@ -4,7 +4,7 @@ import { initSSE, sendSSEEvent, closeSSE, sendHeartbeat } from "../../lib/sse.js
 
 export async function streamRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { jobId: string } }>(
-    "/stream/:jobId",
+    "/itinerary/stream/:jobId",
     async (request, reply) => {
       const { jobId } = request.params;
 
@@ -20,6 +20,30 @@ export async function streamRoutes(fastify: FastifyInstance) {
       // Send current state immediately
       const state = await job.getState();
       sendSSEEvent(reply, "queued", { status: state, job_id: jobId });
+
+      // If job is already terminal, emit terminal event and close immediately.
+      if (state === "completed") {
+        const resultRaw = await fastify.redis.get(`job:result:${jobId}`);
+        if (resultRaw) {
+          const payload = JSON.parse(resultRaw) as { itinerary_id?: string; status?: string };
+          sendSSEEvent(reply, "complete", payload);
+          closeSSE(reply);
+          return;
+        }
+
+        // Overview is done, but detail phase may still be running.
+        sendSSEEvent(reply, "processing", { step: "awaiting_detail_phase", job_id: jobId });
+      }
+
+      if (state === "failed") {
+        sendSSEEvent(reply, "error", {
+          message: "Job failed before stream subscription",
+          code: "JOB_FAILED",
+          job_id: jobId,
+        });
+        closeSSE(reply);
+        return;
+      }
 
       // Poll job progress via Redis pub/sub
       const channel = `itinerary:progress:${jobId}`;
@@ -61,8 +85,8 @@ export async function streamRoutes(fastify: FastifyInstance) {
       function cleanup() {
         clearInterval(heartbeatInterval);
         clearTimeout(timeout);
-        void subscriber.unsubscribe(channel);
-        void subscriber.quit();
+        subscriber.unsubscribe(channel).catch(() => undefined);
+        subscriber.quit().catch(() => undefined);
         closeSSE(reply);
       }
     }

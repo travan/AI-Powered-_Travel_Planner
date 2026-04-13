@@ -1,6 +1,6 @@
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
-import { createWorker } from "./lib/queue.js";
+import { createWorker, itineraryDetailQueue, OVERVIEW_QUEUE_NAME, DETAIL_QUEUE_NAME } from "./lib/queue.js";
 import { processOverview } from "./workers/overview.worker.js";
 import { processDetail } from "./workers/detail.worker.js";
 import { redis } from "./db/redis.js";
@@ -11,20 +11,24 @@ async function main() {
 
   // ─── Start BullMQ workers ─────────────────────────────────────────────────
 
-  const overviewWorker = createWorker(async (job) => {
+  const overviewWorker = createWorker(OVERVIEW_QUEUE_NAME, async (job) => {
     await processOverview(job);
     // After overview, immediately enqueue detail job
-    const detailQueue = (await import("./lib/queue.js")).itineraryQueue;
+    const normalizedData = {
+      ...job.data,
+      jobId: job.data.jobId && job.data.jobId.length > 0 ? job.data.jobId : String(job.id),
+    };
+
     // Store overview for detail worker
-    const overviewRaw = await redis.get(`job:overview:${job.data.jobId}`);
+    const overviewRaw = await redis.get(`job:overview:${normalizedData.jobId}`);
     if (!overviewRaw) {
       // Overview was published via SSE; re-read from the last published event
       // In production, the overview worker stores it explicitly
     }
-    await detailQueue.add("detail", job.data, { jobId: `detail:${job.id}` });
+    await itineraryDetailQueue.add("detail", normalizedData, { jobId: `detail-${normalizedData.jobId}` });
   });
 
-  const detailWorker = createWorker(processDetail);
+  const detailWorker = createWorker(DETAIL_QUEUE_NAME, processDetail);
 
   overviewWorker.on("failed", (job, err) => {
     console.error(`Overview job ${job?.id} failed:`, err.message);

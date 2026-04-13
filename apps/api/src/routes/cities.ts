@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { getDb } from "../../db/mongodb.js";
-import { cacheGet, cacheSet, TTL } from "../../db/redis.js";
+import { getDb } from "../db/mongodb.js";
+import { cacheGet, cacheSet, TTL } from "../db/redis.js";
 
 export async function citiesRoutes(fastify: FastifyInstance) {
   // ── Search (autocomplete) ──────────────────────────────────────────────────

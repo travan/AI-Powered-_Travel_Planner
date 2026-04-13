@@ -23,7 +23,7 @@ const generateSchema = z.object({
 );
 
 export async function generateRoutes(fastify: FastifyInstance) {
-  fastify.post("/generate", {
+  fastify.post("/itinerary/generate", {
     schema: { body: { type: "object" } },
   }, async (request, reply) => {
     const parsed = generateSchema.safeParse(request.body);

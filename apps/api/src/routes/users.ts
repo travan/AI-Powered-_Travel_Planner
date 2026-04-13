@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getDb } from "../../db/mongodb.js";
+import { getDb } from "../db/mongodb.js";
 
 const PROMPT_HISTORY_TTL_DAYS = 90;
 
