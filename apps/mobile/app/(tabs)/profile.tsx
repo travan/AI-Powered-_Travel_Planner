@@ -2,9 +2,13 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicat
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import { signInWithGoogleOnMobile } from "../../lib/auth";
+import { mobileTheme } from "../../lib/theme";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,11 +26,11 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSignIn = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: "horizon://auth/callback" },
-    });
-    if (error) Alert.alert("Sign in error", error.message);
+    try {
+      await signInWithGoogleOnMobile();
+    } catch (error) {
+      Alert.alert("Sign in error", error instanceof Error ? error.message : "Please try again");
+    }
   };
 
   const handleSignOut = async () => {
@@ -36,7 +40,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color={BRAND} />
+        <ActivityIndicator size="large" color={mobileTheme.colors.primaryStrong} />
       </View>
     );
   }
@@ -44,15 +48,29 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
-        <Ionicons name="person-circle-outline" size={72} color="#d1d5db" />
+        <Ionicons name="person-circle-outline" size={72} color="#c9d3de" />
         <Text style={styles.title}>Not signed in</Text>
         <Text style={styles.sub}>Sign in to save trips and sync across devices.</Text>
         <TouchableOpacity
-          style={styles.btn}
+          style={[styles.btn, styles.primaryBtn]}
+          onPress={() => router.push("/login")}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.btnText}>Sign in with email</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.secondaryBtn]}
+          onPress={() => router.push("/signup")}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.secondaryBtnText}>Create account</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, styles.secondaryBtn]}
           onPress={handleSignIn}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnText}>Sign in with Google</Text>
+          <Text style={styles.secondaryBtnText}>Continue with Google</Text>
         </TouchableOpacity>
       </View>
     );
@@ -71,14 +89,14 @@ export default function ProfileScreen() {
           style={{ width: 72, height: 72, borderRadius: 36 }}
         />
       ) : (
-        <Ionicons name="person-circle" size={72} color={BRAND} />
+        <Ionicons name="person-circle" size={72} color={mobileTheme.colors.primaryStrong} />
       )}
       <Text style={styles.title}>{displayName}</Text>
       {user.email && user.email !== displayName && (
         <Text style={styles.sub}>{user.email}</Text>
       )}
       <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#ef4444" }]}
+        style={[styles.btn, { backgroundColor: mobileTheme.colors.danger }]}
         onPress={handleSignOut}
         activeOpacity={0.85}
       >
@@ -88,12 +106,24 @@ export default function ProfileScreen() {
   );
 }
 
-const BRAND = "#6366f1";
-
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12, backgroundColor: "#f9fafb" },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  sub: { fontSize: 14, color: "#6b7280", textAlign: "center" },
-  btn: { marginTop: 8, backgroundColor: BRAND, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12 },
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 12,
+    backgroundColor: mobileTheme.colors.background,
+  },
+  title: { fontSize: 20, fontWeight: "700", color: mobileTheme.colors.text },
+  sub: { fontSize: 14, color: mobileTheme.colors.textMuted, textAlign: "center" },
+  btn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 14, borderRadius: mobileTheme.radius.md },
+  primaryBtn: { backgroundColor: mobileTheme.colors.primaryStrong },
+  secondaryBtn: {
+    backgroundColor: mobileTheme.colors.surface,
+    borderColor: mobileTheme.colors.outline,
+    borderWidth: 1,
+  },
   btnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  secondaryBtnText: { color: mobileTheme.colors.text, fontSize: 15, fontWeight: "600" },
 });

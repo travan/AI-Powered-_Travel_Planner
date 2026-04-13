@@ -1,20 +1,19 @@
 "use client";
 
-import type { TransportOption } from "@travel/types";
+import type { TransportSegment } from "@travel/types";
 
 const MODE_ICONS: Record<string, string> = {
   flight: "✈️",
   train: "🚆",
   bus: "🚌",
-  car_rental: "🚗",
-  motorbike_rental: "🛵",
+  car: "🚗",
+  self_drive: "🚙",
+  motorbike: "🛵",
   taxi: "🚕",
-  ferry: "⛴️",
-  walk: "🚶",
 };
 
 interface Props {
-  segments: TransportOption[];
+  segments: TransportSegment[];
 }
 
 export function TransportSection({ segments }: Props) {
@@ -32,47 +31,44 @@ export function TransportSection({ segments }: Props) {
           >
             {/* Route header */}
             <div className="flex items-center gap-2">
-              <span className="text-xl">{MODE_ICONS[seg.mode] ?? "🚀"}</span>
+              <span className="text-xl">{MODE_ICONS[seg.recommended_mode] ?? "🚀"}</span>
               <div>
                 <p className="font-medium text-gray-900 text-sm">
                   {seg.from} → {seg.to}
                 </p>
                 <p className="text-xs text-gray-500 capitalize">
-                  {seg.mode.replace(/_/g, " ")}
-                  {seg.duration_hours != null && ` · ~${seg.duration_hours}h`}
-                  {seg.distance_km != null && ` · ${Math.round(seg.distance_km)} km`}
+                  {seg.recommended_mode.replace(/_/g, " ")}
                 </p>
               </div>
             </div>
 
-            {/* Price */}
-            {seg.estimated_price != null && (
-              <p className="text-sm font-semibold text-emerald-700">
-                ~{seg.currency ?? "USD"} {seg.estimated_price.toLocaleString()}
-              </p>
-            )}
-
-            {/* Booking links */}
-            {seg.booking_links && seg.booking_links.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {seg.booking_links.map((link, j) => (
-                  <a
-                    key={j}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium ring-1 ring-gray-300 hover:ring-brand-400 hover:text-brand-700 transition-colors"
-                  >
-                    {link.provider}
-                  </a>
-                ))}
-              </div>
-            )}
-
-            {/* Notes */}
-            {seg.notes && (
-              <p className="text-xs text-gray-500 italic">{seg.notes}</p>
-            )}
+            <div className="space-y-2">
+              {seg.options.map((option, j) => (
+                <div key={j} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-900">{option.provider}</p>
+                    <span className="text-sm font-semibold text-emerald-700">{option.price_range}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {option.type.replace(/_/g, " ")}
+                    {option.duration ? ` · ${option.duration}` : ""}
+                    {option.departure ? ` · ${option.departure}` : ""}
+                    {option.arrival ? ` - ${option.arrival}` : ""}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <a
+                      href={option.booking_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium ring-1 ring-gray-300 hover:ring-brand-400 hover:text-brand-700 transition-colors"
+                    >
+                      Book now
+                    </a>
+                    {option.note && <span className="text-xs text-gray-500 italic">{option.note}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>

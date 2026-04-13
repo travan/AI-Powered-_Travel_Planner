@@ -80,52 +80,58 @@ export default function ItineraryDetailScreen() {
     );
   }
 
+  const itinerary = data.itineraries?.[0];
+
+  if (!itinerary) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>No itinerary data available.</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Overview */}
-      {data.overview && (
-        <View style={styles.overviewCard}>
-          <Text style={styles.overviewTitle}>{data.overview.title}</Text>
-          <Text style={styles.overviewSub}>
-            {data.overview.cities?.join(" → ")} · {data.overview.total_days} days
-          </Text>
-          {data.overview.summary && (
-            <Text style={styles.overviewText}>{data.overview.summary}</Text>
-          )}
-        </View>
-      )}
+      <View style={styles.overviewCard}>
+        <Text style={styles.overviewTitle}>{itinerary.title}</Text>
+        <Text style={styles.overviewSub}>
+          {itinerary.num_days} days · {itinerary.num_travelers} travelers
+        </Text>
+        <Text style={styles.overviewText}>{itinerary.overview}</Text>
+      </View>
 
       {/* Days */}
-      {data.days?.map((day) => (
-        <View key={day.day} style={styles.daySection}>
+      {itinerary.days.map((day) => (
+        <View key={day.day_number} style={styles.daySection}>
           <View style={styles.dayHeader}>
             <View style={styles.dayBadge}>
-              <Text style={styles.dayBadgeText}>{day.day}</Text>
+              <Text style={styles.dayBadgeText}>{day.day_number}</Text>
             </View>
             <View>
-              <Text style={styles.dayCity}>{day.city}</Text>
+              <Text style={styles.dayCity}>{day.title}</Text>
               {day.date && <Text style={styles.dayDate}>{day.date}</Text>}
             </View>
           </View>
 
           {day.activities.map((act, i) => (
-            <View key={act.id ?? i} style={styles.activityCard}>
+            <View key={`${day.day_number}-${i}`} style={styles.activityCard}>
               <View style={styles.activityHeader}>
                 <Text style={styles.activityName}>{act.name}</Text>
-                {act.estimated_cost != null && (
+                {act.cost != null && (
                   <Text style={styles.activityCost}>
-                    ~{act.currency ?? "USD"} {act.estimated_cost.toLocaleString()}
+                    ~{act.currency ?? "USD"} {act.cost.toLocaleString()}
                   </Text>
                 )}
               </View>
-              {act.time_slot && <Text style={styles.activityTime}>{act.time_slot}</Text>}
+              <Text style={styles.activityTime}>{act.time} · {act.duration}</Text>
               {act.description && (
                 <Text style={styles.activityDesc}>{act.description}</Text>
               )}
               {act.golden_moment && (
                 <View style={styles.goldenBadge}>
                   <Text style={styles.goldenText}>
-                    ✨ {act.golden_moment.label}
+                    ✨ {act.golden_moment.type.replace(/_/g, " ")} · {act.golden_moment.best_time}
                   </Text>
                 </View>
               )}
@@ -135,12 +141,12 @@ export default function ItineraryDetailScreen() {
       ))}
 
       {/* Budget */}
-      {data.budget_breakdown?.total != null && (
+      {itinerary.budget_breakdown?.total != null && (
         <View style={styles.budgetCard}>
           <Text style={styles.budgetLabel}>Estimated Total</Text>
           <Text style={styles.budgetTotal}>
-            {data.budget_breakdown.currency ?? "USD"}{" "}
-            {data.budget_breakdown.total.toLocaleString()}
+            {itinerary.budget_breakdown.currency ?? "USD"}{" "}
+            {itinerary.budget_breakdown.total.toLocaleString()}
           </Text>
         </View>
       )}

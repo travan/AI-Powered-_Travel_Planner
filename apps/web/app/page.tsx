@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export default function LandingPage() {
   redirect("/plan");
@@ -24,10 +25,14 @@ export default function LandingPage() {
 
         <div className="flex gap-4">
           <Link href="/plan">
-            <Button size="lg">Start Planning — It&apos;s Free</Button>
+            <span className="inline-flex rounded-xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700">
+              Start Planning - It&apos;s Free
+            </span>
           </Link>
           <Link href="/plan">
-            <Button size="lg" variant="secondary">See an Example</Button>
+            <span className="inline-flex rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50">
+              See an Example
+            </span>
           </Link>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { ItineraryInput, TripStyle } from "@travel/types";
 import { itineraryQueue } from "../../lib/queue.js";
 import { buildCacheKey } from "../../lib/cache-key.js";
 import { cacheGet } from "../../db/redis.js";
@@ -22,6 +23,25 @@ const generateSchema = z.object({
   { message: "Either start_date+end_date or num_days is required" }
 );
 
+type GenerateInput = z.infer<typeof generateSchema>;
+
+function normalizeTripStyle(style: GenerateInput["trip_style"]): TripStyle {
+  switch (style) {
+    case "budget":
+    case "mid_range":
+    case "luxury":
+      return "mixed";
+    case "family":
+      return "relax";
+    case "romantic":
+      return "food";
+    case "cultural":
+      return "culture";
+    default:
+      return style;
+  }
+}
+
 export async function generateRoutes(fastify: FastifyInstance) {
   fastify.post("/itinerary/generate", {
     schema: { body: { type: "object" } },
@@ -35,7 +55,18 @@ export async function generateRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const input = parsed.data;
+    const rawInput = parsed.data;
+    const input: ItineraryInput = {
+      cities: rawInput.cities,
+      start_date: rawInput.start_date,
+      end_date: rawInput.end_date,
+      num_days: rawInput.num_days,
+      budget: rawInput.budget,
+      currency: rawInput.currency,
+      trip_style: normalizeTripStyle(rawInput.trip_style),
+      locale: rawInput.locale,
+      num_travelers: rawInput.num_travelers,
+    };
     const cacheKey = buildCacheKey(input);
 
     // 1. Check Redis cache first
@@ -73,8 +104,8 @@ export async function generateRoutes(fastify: FastifyInstance) {
       userId,
       cacheKey,
       cities: input.cities,
-      cityNames: input.city_names ?? input.cities,
-      input: input as Record<string, unknown>,
+      cityNames: rawInput.city_names ?? input.cities,
+      input: input as unknown as Record<string, unknown>,
     }).catch(() => {/* non-critical, swallow errors */});
 
     return reply.status(202).send({

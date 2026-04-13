@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { mobileTheme } from "../../lib/theme";
 
 const TRIP_STYLES = [
   { key: "budget", label: "Budget", emoji: "💰" },
@@ -100,56 +101,54 @@ const FEATURES = [
   { emoji: "🌅", title: "Golden moments", desc: "Sunrise & sunset hints in your schedule" },
 ];
 
-const BRAND = "#6366f1";
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb" },
+  container: { flex: 1, backgroundColor: mobileTheme.colors.background },
   content: { padding: 16, paddingBottom: 40, gap: 16 },
   hero: { paddingVertical: 24 },
-  heroTitle: { fontSize: 28, fontWeight: "700", color: "#111827", marginBottom: 6 },
-  heroSub: { fontSize: 15, color: "#6b7280", lineHeight: 22 },
+  heroTitle: { fontSize: 28, fontWeight: "700", color: mobileTheme.colors.text, marginBottom: 6 },
+  heroSub: { fontSize: 15, color: mobileTheme.colors.textMuted, lineHeight: 22 },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: mobileTheme.colors.surface,
+    borderRadius: mobileTheme.radius.md,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
-  sectionLabel: { fontSize: 12, fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  sectionLabel: { fontSize: 12, fontWeight: "600", color: mobileTheme.colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
   input: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#111827",
-    backgroundColor: "#f9fafb",
+    color: mobileTheme.colors.text,
+    backgroundColor: mobileTheme.colors.background,
   },
   styleScroll: { marginHorizontal: -4 },
   styleChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: mobileTheme.colors.surfaceMuted,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginHorizontal: 4,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
   },
-  styleChipActive: { backgroundColor: `${BRAND}18`, borderColor: BRAND },
+  styleChipActive: { backgroundColor: "#d9ecff", borderColor: mobileTheme.colors.primary },
   styleEmoji: { fontSize: 14 },
-  styleLabel: { fontSize: 13, color: "#374151" },
-  styleLabelActive: { color: BRAND, fontWeight: "600" },
+  styleLabel: { fontSize: 13, color: mobileTheme.colors.textMuted },
+  styleLabelActive: { color: mobileTheme.colors.primary, fontWeight: "600" },
   planButton: {
     marginTop: 20,
-    backgroundColor: BRAND,
+    backgroundColor: mobileTheme.colors.primaryStrong,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -158,14 +157,14 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   featureCard: {
     width: "47.5%",
-    backgroundColor: "#fff",
+    backgroundColor: mobileTheme.colors.surface,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     gap: 4,
   },
   featureEmoji: { fontSize: 24 },
-  featureTitle: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  featureDesc: { fontSize: 12, color: "#6b7280", lineHeight: 18 },
+  featureTitle: { fontSize: 14, fontWeight: "600", color: mobileTheme.colors.text },
+  featureDesc: { fontSize: 12, color: mobileTheme.colors.textMuted, lineHeight: 18 },
 });

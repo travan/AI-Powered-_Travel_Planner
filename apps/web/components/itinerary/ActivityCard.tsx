@@ -14,9 +14,9 @@ function TicketChip({ option }: { option: TicketOption }) {
       className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium ring-1 ring-gray-300 hover:ring-brand-400 hover:text-brand-700 transition-colors"
     >
       {option.platform}
-      {option.price_from !== undefined && (
+      {option.price_from && (
         <span className="text-gray-400">
-          from {option.currency} {option.price_from}
+          from {option.price_from}
         </span>
       )}
     </a>
@@ -33,7 +33,7 @@ function GoldenBadge({ moment }: { moment: GoldenMoment }) {
   };
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-      {icons[moment.type] ?? "⭐"} {moment.label}
+      {icons[moment.type] ?? "⭐"} {moment.type.replace(/_/g, " ")} · {moment.best_time}
     </span>
   );
 }
@@ -71,13 +71,11 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
                 <GoldenBadge moment={activity.golden_moment} />
               )}
             </div>
-            {activity.time_slot && (
-              <p className="text-xs text-gray-400 mt-0.5">{activity.time_slot}</p>
-            )}
+            <p className="text-xs text-gray-400 mt-0.5">{activity.time} · {activity.duration}</p>
           </div>
-          {activity.estimated_cost != null && (
+          {activity.cost != null && (
             <span className="text-sm font-medium text-emerald-700 whitespace-nowrap">
-              ~{activity.currency ?? "USD"} {activity.estimated_cost.toLocaleString()}
+              ~{activity.currency ?? "USD"} {activity.cost.toLocaleString()}
             </span>
           )}
         </div>
@@ -88,9 +86,9 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
         )}
 
         {/* Tips */}
-        {activity.tips && (
+        {activity.golden_moment?.tip && (
           <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
-            <span className="font-semibold">Tip:</span> {activity.tips}
+            <span className="font-semibold">Tip:</span> {activity.golden_moment.tip}
           </div>
         )}
 
@@ -105,9 +103,9 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
 
         {/* Links */}
         <div className="flex flex-wrap gap-3 pt-1">
-          {activity.google_maps_url && (
+          {activity.maps_link && (
             <a
-              href={activity.google_maps_url}
+              href={activity.maps_link}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
@@ -122,20 +120,15 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
               View on Maps
             </a>
           )}
-          {activity.suggestions && activity.suggestions.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {activity.suggestions.map((s, i) => (
-                <a
-                  key={i}
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-gray-500 hover:text-brand-600 hover:underline"
-                >
-                  {s.platform}
-                </a>
-              ))}
-            </div>
+          {activity.booking_link && (
+            <a
+              href={activity.booking_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-500 hover:text-brand-600 hover:underline"
+            >
+              Booking link
+            </a>
           )}
         </div>
       </div>

@@ -1,16 +1,19 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
-const BRAND = "#6366f1";
+import { mobileTheme } from "../../lib/theme";
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: BRAND,
+        tabBarActiveTintColor: mobileTheme.colors.primary,
         tabBarInactiveTintColor: "#9ca3af",
-        tabBarStyle: { borderTopWidth: 1, borderTopColor: "#e5e7eb" },
-        headerStyle: { backgroundColor: "#ffffff" },
+        tabBarStyle: {
+          borderTopWidth: 1,
+          borderTopColor: mobileTheme.colors.outline,
+          backgroundColor: mobileTheme.colors.surface,
+        },
+        headerStyle: { backgroundColor: mobileTheme.colors.surface },
         headerShadowVisible: false,
       }}
     >

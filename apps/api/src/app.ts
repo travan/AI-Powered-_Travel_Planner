@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -40,7 +41,7 @@ export async function buildApp() {
 
   // ─── Auth decorator ────────────────────────────────────────────────────────
 
-  app.decorate("authenticate", async (request: Parameters<typeof app.authenticate>[0], reply: Parameters<typeof app.authenticate>[1]) => {
+  app.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await request.jwtVerify();
     } catch {

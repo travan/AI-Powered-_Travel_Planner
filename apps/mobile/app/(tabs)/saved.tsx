@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { mobileTheme } from "../../lib/theme";
 
 type SavedTrip = { id: string; title: string; cities: string[]; days: number; date: string };
 
@@ -44,7 +45,7 @@ export default function SavedScreen() {
   if (loading) {
     return (
       <View style={styles.empty}>
-        <ActivityIndicator size="large" color={BRAND} />
+        <ActivityIndicator size="large" color={mobileTheme.colors.primaryStrong} />
       </View>
     );
   }
@@ -52,7 +53,7 @@ export default function SavedScreen() {
   if (trips.length === 0) {
     return (
       <View style={styles.empty}>
-        <Ionicons name="bookmark-outline" size={56} color="#d1d5db" />
+        <Ionicons name="bookmark-outline" size={56} color="#c9d3de" />
         <Text style={styles.emptyTitle}>No saved trips yet</Text>
         <Text style={styles.emptySub}>Plan a trip and save it to see it here.</Text>
         <TouchableOpacity
@@ -88,24 +89,22 @@ export default function SavedScreen() {
   );
 }
 
-const BRAND = "#6366f1";
-
 const styles = StyleSheet.create({
-  list: { padding: 16, gap: 12 },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#374151" },
-  emptySub: { fontSize: 14, color: "#6b7280", textAlign: "center" },
-  cta: { marginTop: 8, backgroundColor: BRAND, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  ctaText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  list: { padding: 16, gap: 12, backgroundColor: mobileTheme.colors.background },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12, backgroundColor: mobileTheme.colors.background },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: mobileTheme.colors.text },
+  emptySub: { fontSize: 14, color: mobileTheme.colors.textMuted, textAlign: "center" },
+  cta: { marginTop: 8, backgroundColor: mobileTheme.colors.primaryStrong, paddingHorizontal: 24, paddingVertical: 12, borderRadius: mobileTheme.radius.md },
+  ctaText: { color: mobileTheme.colors.onPrimary, fontSize: 15, fontWeight: "600" },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: mobileTheme.colors.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     gap: 4,
   },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  cardSub: { fontSize: 13, color: "#6b7280" },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: mobileTheme.colors.text },
+  cardSub: { fontSize: 13, color: mobileTheme.colors.textMuted },
   cardDate: { fontSize: 12, color: "#9ca3af" },
 });

@@ -1,26 +1,32 @@
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import { useFonts } from "expo-font";
-import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-
-SplashScreen.preventAutoHideAsync();
+import * as Linking from "expo-linking";
+import { supabase } from "../lib/supabase";
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
-    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
-  });
-
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
-  }, [loaded]);
+    const handleDeepLink = async (url: string | null) => {
+      if (!url) return;
+      if (url.includes("access_token") || url.includes("code=")) {
+        await supabase.auth.exchangeCodeForSession(url);
+      }
+    };
 
-  if (!loaded) return null;
+    Linking.getInitialURL().then(handleDeepLink);
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   return (
     <>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen
           name="itinerary/[id]"
           options={{ title: "Itinerary", headerBackTitle: "Back" }}

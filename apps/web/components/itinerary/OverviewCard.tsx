@@ -1,45 +1,45 @@
 "use client";
 
-import type { ItineraryOverview } from "@travel/types";
+import type { Itinerary } from "@travel/types";
 import { Badge } from "@travel/ui";
 
 interface Props {
-  overview: ItineraryOverview;
+  itinerary: Itinerary;
 }
 
-export function OverviewCard({ overview }: Props) {
+export function OverviewCard({ itinerary }: Props) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{overview.title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{itinerary.title}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {overview.cities.join(" → ")} · {overview.total_days} day
-            {overview.total_days !== 1 ? "s" : ""}
+            {itinerary.num_days} day{itinerary.num_days !== 1 ? "s" : ""} · {itinerary.num_travelers} traveler
+            {itinerary.num_travelers !== 1 ? "s" : ""}
           </p>
         </div>
         <Badge variant="info" className="text-sm px-3 py-1">
-          {overview.trip_style}
+          {itinerary.currency} {itinerary.total_cost.toLocaleString()}
         </Badge>
       </div>
 
-      <p className="text-gray-700 leading-relaxed">{overview.summary}</p>
+      <p className="text-gray-700 leading-relaxed">{itinerary.overview}</p>
 
       {/* Day plan pills */}
       <div className="flex flex-wrap gap-2">
-        {overview.day_plan.map((day) => (
+        {itinerary.days.map((day) => (
           <span
-            key={day.day}
+            key={day.day_number}
             className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-200"
           >
-            <span className="font-bold">Day {day.day}</span>
+            <span className="font-bold">Day {day.day_number}</span>
             <span>{day.city}</span>
           </span>
         ))}
       </div>
 
       {/* Budget estimate */}
-      {overview.estimated_budget_range && (
+      {itinerary.budget_breakdown && (
         <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3">
           <svg
             className="h-5 w-5 text-emerald-600 shrink-0"
@@ -55,21 +55,19 @@ export function OverviewCard({ overview }: Props) {
             />
           </svg>
           <span className="text-sm font-medium text-emerald-800">
-            Estimated budget: {overview.estimated_budget_range.min.toLocaleString()} –{" "}
-            {overview.estimated_budget_range.max.toLocaleString()}{" "}
-            {overview.estimated_budget_range.currency}
+            Estimated budget: {itinerary.budget_breakdown.currency} {itinerary.budget_breakdown.total.toLocaleString()}
           </span>
         </div>
       )}
 
       {/* Highlights */}
-      {overview.highlights && overview.highlights.length > 0 && (
+      {itinerary.seasonal_notes?.highlights && itinerary.seasonal_notes.highlights.length > 0 && (
         <div className="space-y-1.5">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
             Trip highlights
           </h3>
           <ul className="grid gap-1 sm:grid-cols-2">
-            {overview.highlights.map((h, i) => (
+            {itinerary.seasonal_notes.highlights.map((h, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-400 shrink-0" />
                 {h}

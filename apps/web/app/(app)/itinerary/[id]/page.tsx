@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { createServerClient } from "../../../lib/supabase/server";
-import { getItinerary } from "../../../lib/api";
-import { OverviewCard } from "../../../components/itinerary/OverviewCard";
-import { DayTimeline } from "../../../components/itinerary/DayTimeline";
-import { TransportSection } from "../../../components/itinerary/TransportSection";
-import { SeasonalNote } from "../../../components/itinerary/SeasonalNote";
-import { BudgetBreakdown } from "../../../components/itinerary/BudgetBreakdown";
-import { ShareButton } from "../../../components/itinerary/ShareButton";
-import type { ItineraryOutput } from "@travel/types";
+import { createClient } from "../../../../lib/supabase/server";
+import { getItinerary } from "../../../../lib/api";
+import { OverviewCard } from "../../../../components/itinerary/OverviewCard";
+import { DayTimeline } from "../../../../components/itinerary/DayTimeline";
+import { TransportSection } from "../../../../components/itinerary/TransportSection";
+import { SeasonalNote } from "../../../../components/itinerary/SeasonalNote";
+import { BudgetBreakdown } from "../../../../components/itinerary/BudgetBreakdown";
+import { ShareButton } from "../../../../components/itinerary/ShareButton";
+import type { Itinerary } from "@travel/types";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { id } = await params;
   try {
     const data = await getItinerary(id);
-    return { title: data.overview?.title ?? "Travel Itinerary" };
+    return { title: data.itineraries?.[0]?.title ?? "Travel Itinerary" };
   } catch {
     return { title: "Travel Itinerary" };
   }
@@ -26,15 +26,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ItineraryDetailPage({ params }: PageProps) {
   const { id } = await params;
-  let itinerary: ItineraryOutput;
+  let itinerary: Itinerary;
 
   try {
-    itinerary = await getItinerary(id);
+    const data = await getItinerary(id);
+    itinerary = data.itineraries?.[0] as Itinerary;
+    if (!itinerary) notFound();
   } catch {
     notFound();
   }
 
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -61,14 +63,14 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
       </div>
 
       {/* Overview */}
-      {itinerary.overview && <OverviewCard overview={itinerary.overview} />}
+      <OverviewCard itinerary={itinerary} />
 
       {/* Seasonal notes */}
       {itinerary.seasonal_notes && <SeasonalNote notes={itinerary.seasonal_notes} />}
 
       {/* Transport */}
-      {itinerary.transport_options && itinerary.transport_options.length > 0 && (
-        <TransportSection segments={itinerary.transport_options} />
+      {itinerary.transport_summary && itinerary.transport_summary.length > 0 && (
+        <TransportSection segments={itinerary.transport_summary} />
       )}
 
       {/* Day Timeline */}

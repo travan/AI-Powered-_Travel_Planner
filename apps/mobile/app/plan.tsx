@@ -3,7 +3,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   TextInput,
   TouchableOpacity,
   Alert,
@@ -13,6 +12,7 @@ import { useRouter } from "expo-router";
 import { useState, useCallback } from "react";
 import { useCitySearch } from "@travel/hooks";
 import { TRIP_STYLES } from "@travel/types";
+import { mobileTheme } from "../lib/theme";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -23,7 +23,7 @@ export default function PlanScreen() {
   const [cities, setCities] = useState<{ slug: string; name: string }[]>([]);
   const [numDays, setNumDays] = useState("5");
   const [budget, setBudget] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const currency = "USD";
   const [style, setStyle] = useState("mid_range");
   const [travelers, setTravelers] = useState("2");
   const [loading, setLoading] = useState(false);
@@ -211,27 +211,25 @@ export default function PlanScreen() {
   );
 }
 
-const BRAND = "#6366f1";
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb" },
+  container: { flex: 1, backgroundColor: mobileTheme.colors.background },
   content: { padding: 16, paddingBottom: 60, gap: 6 },
-  label: { fontSize: 12, fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
+  label: { fontSize: 12, fontWeight: "600", color: mobileTheme.colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: mobileTheme.colors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#111827",
+    color: mobileTheme.colors.text,
   },
   row: { flexDirection: "row", gap: 8, alignItems: "center" },
   addBtn: {
     width: 44,
     height: 44,
-    backgroundColor: BRAND,
+    backgroundColor: mobileTheme.colors.primaryStrong,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -241,49 +239,49 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: `${BRAND}18`,
+    backgroundColor: "#d9ecff",
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     gap: 6,
     borderWidth: 1,
-    borderColor: BRAND,
+    borderColor: mobileTheme.colors.primary,
   },
-  chipText: { fontSize: 13, color: BRAND, fontWeight: "500" },
-  chipRemove: { fontSize: 16, color: BRAND, lineHeight: 18 },
+  chipText: { fontSize: 13, color: mobileTheme.colors.primary, fontWeight: "500" },
+  chipRemove: { fontSize: 16, color: mobileTheme.colors.primary, lineHeight: 18 },
   currencyBadge: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: mobileTheme.colors.surfaceMuted,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
   },
-  currencyText: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  currencyText: { fontSize: 14, fontWeight: "600", color: mobileTheme.colors.textMuted },
   styleChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: mobileTheme.colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     marginRight: 8,
   },
-  styleChipActive: { backgroundColor: `${BRAND}18`, borderColor: BRAND },
-  styleText: { fontSize: 13, color: "#374151", textTransform: "capitalize" },
-  styleTextActive: { color: BRAND, fontWeight: "600" },
+  styleChipActive: { backgroundColor: "#d9ecff", borderColor: mobileTheme.colors.primary },
+  styleText: { fontSize: 13, color: mobileTheme.colors.textMuted, textTransform: "capitalize" },
+  styleTextActive: { color: mobileTheme.colors.primary, fontWeight: "600" },
   generateBtn: {
     marginTop: 24,
-    backgroundColor: BRAND,
+    backgroundColor: mobileTheme.colors.primaryStrong,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
   },
   generateText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   suggestionList: {
-    backgroundColor: "#fff",
+    backgroundColor: mobileTheme.colors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: mobileTheme.colors.outline,
     borderRadius: 10,
     marginTop: 4,
     overflow: "hidden",
@@ -292,9 +290,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: mobileTheme.colors.surfaceMuted,
     gap: 2,
   },
-  suggestionText: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  suggestionSubText: { fontSize: 12, color: "#6b7280" },
+  suggestionText: { fontSize: 14, fontWeight: "600", color: mobileTheme.colors.text },
+  suggestionSubText: { fontSize: 12, color: mobileTheme.colors.textMuted },
 });

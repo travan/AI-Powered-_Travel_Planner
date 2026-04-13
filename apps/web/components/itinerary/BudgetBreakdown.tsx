@@ -16,10 +16,8 @@ export function BudgetBreakdown({ breakdown }: Props) {
     { label: "Accommodation", value: breakdown.accommodation ?? 0 },
     { label: "Food", value: breakdown.food ?? 0 },
     { label: "Activities", value: breakdown.activities ?? 0 },
-    { label: "Transport", value: breakdown.local_transport ?? 0 },
-    { label: "Inter-city", value: breakdown.inter_city_transport ?? 0 },
-    { label: "Shopping", value: breakdown.shopping ?? 0 },
-    { label: "Misc", value: breakdown.miscellaneous ?? 0 },
+    { label: "Transport", value: breakdown.transport ?? 0 },
+    { label: "Contingency", value: breakdown.contingency ?? 0 },
   ].filter((c) => c.value > 0);
 
   return (
