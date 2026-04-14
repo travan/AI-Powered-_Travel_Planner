@@ -2,7 +2,11 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import {
+  isSupabaseConfigured,
+  requireSupabase,
+  SUPABASE_CONFIG_ERROR,
+} from "../../lib/supabase";
 import { mobileTheme } from "../../lib/theme";
 
 type SavedTrip = { id: string; title: string; cities: string[]; days: number; date: string };
@@ -14,6 +18,12 @@ export default function SavedScreen() {
 
   useEffect(() => {
     async function fetchSaved() {
+      if (!isSupabaseConfigured) {
+        setLoading(false);
+        return;
+      }
+
+      const supabase = requireSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
@@ -54,8 +64,14 @@ export default function SavedScreen() {
     return (
       <View style={styles.empty}>
         <Ionicons name="bookmark-outline" size={56} color="#c9d3de" />
-        <Text style={styles.emptyTitle}>No saved trips yet</Text>
-        <Text style={styles.emptySub}>Plan a trip and save it to see it here.</Text>
+        <Text style={styles.emptyTitle} testID="mobile-saved-state">
+          {isSupabaseConfigured ? "No saved trips yet" : "Saved trips unavailable"}
+        </Text>
+        <Text style={styles.emptySub}>
+          {isSupabaseConfigured
+            ? "Plan a trip and save it to see it here."
+            : SUPABASE_CONFIG_ERROR}
+        </Text>
         <TouchableOpacity
           style={styles.cta}
           onPress={() => router.push("/plan")}

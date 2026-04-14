@@ -1,12 +1,13 @@
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import { supabase } from "./supabase";
+import { requireSupabase } from "./supabase";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export const OAUTH_REDIRECT_URL = Linking.createURL("auth/callback");
 
 export async function signInWithGoogleOnMobile() {
+  const supabase = requireSupabase();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

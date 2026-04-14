@@ -30,6 +30,8 @@ pnpm-debug.log*
 coverage
 .nyc_output
 .playwright-mcp
+playwright-report
+test-results
 
 # Supabase
 supabase/.temp

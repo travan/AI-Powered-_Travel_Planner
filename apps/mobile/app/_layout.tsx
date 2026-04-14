@@ -2,14 +2,16 @@ import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
-import { supabase } from "../lib/supabase";
+import { isSupabaseConfigured, requireSupabase } from "../lib/supabase";
 
 export default function RootLayout() {
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
       if (url.includes("access_token") || url.includes("code=")) {
-        await supabase.auth.exchangeCodeForSession(url);
+        await requireSupabase().auth.exchangeCodeForSession(url);
       }
     };
 

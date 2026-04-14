@@ -12,7 +12,7 @@ export function OverviewCard({ itinerary }: Props) {
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{itinerary.title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900" data-testid="web-itinerary-title">{itinerary.title}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {itinerary.num_days} day{itinerary.num_days !== 1 ? "s" : ""} · {itinerary.num_travelers} traveler
             {itinerary.num_travelers !== 1 ? "s" : ""}

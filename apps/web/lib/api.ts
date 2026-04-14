@@ -1,11 +1,17 @@
-import type { ItineraryOutput, CitySuggestion, PromptHistoryEntry } from "@travel/types";
+import type {
+  ItineraryOutput,
+  CitySuggestion,
+  PromptHistoryEntry,
+  GenerateRequest,
+  GenerateResponse,
+} from "@travel/types";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
 
 export async function generateItinerary(
-  body: unknown,
+  body: GenerateRequest,
   authToken?: string
-): Promise<{ job_id: string; stream_url: string; status: string; result?: unknown }> {
+): Promise<GenerateResponse> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
@@ -15,7 +21,7 @@ export async function generateItinerary(
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
-  return res.json() as Promise<{ job_id: string; stream_url: string; status: string; result?: unknown }>;
+  return res.json() as Promise<GenerateResponse>;
 }
 
 export async function getItinerary(id: string): Promise<ItineraryOutput> {
@@ -73,4 +79,3 @@ export async function shareItinerary(
   if (!res.ok) throw new Error(`Share failed: ${res.status}`);
   return res.json() as Promise<{ share_token: string; share_url: string }>;
 }
-

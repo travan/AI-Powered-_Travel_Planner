@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ItineraryInput, TripStyle } from "@travel/types";
 import { itineraryQueue } from "../../lib/queue.js";
 import { buildCacheKey } from "../../lib/cache-key.js";
-import { cacheGet } from "../../db/redis.js";
+import { cacheDel, cacheGet } from "../../db/redis.js";
 import { savePromptHistory } from "../users.js";
 
 const generateSchema = z.object({
@@ -72,7 +72,16 @@ export async function generateRoutes(fastify: FastifyInstance) {
     // 1. Check Redis cache first
     const cached = await cacheGet(`cache:itinerary:${cacheKey}`);
     if (cached) {
-      return reply.send({ status: "cached", result: cached });
+      if (isCachedItineraryRecord(cached)) {
+        return reply.send({
+          status: "cached",
+          itinerary_id: cached.itinerary_id,
+          result: cached.itinerary,
+        });
+      }
+
+      // Discard stale cache entries that do not include an itinerary id.
+      await cacheDel(`cache:itinerary:${cacheKey}`);
     }
 
     // 2. Enqueue job
@@ -115,4 +124,13 @@ export async function generateRoutes(fastify: FastifyInstance) {
       estimated_wait_seconds: 10,
     });
   });
+}
+
+function isCachedItineraryRecord(
+  value: unknown
+): value is { itinerary_id: string; itinerary: unknown } {
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+  return typeof record.itinerary_id === "string" && "itinerary" in record;
 }

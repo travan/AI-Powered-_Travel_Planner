@@ -3,7 +3,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
-import { supabase } from "../../lib/supabase";
+import {
+  isSupabaseConfigured,
+  requireSupabase,
+  SUPABASE_CONFIG_ERROR,
+} from "../../lib/supabase";
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 
@@ -13,6 +17,12 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
+    const supabase = requireSupabase();
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
       setLoading(false);
@@ -34,7 +44,7 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await requireSupabase().auth.signOut();
   };
 
   if (loading) {
@@ -49,11 +59,18 @@ export default function ProfileScreen() {
     return (
       <View style={styles.container}>
         <Ionicons name="person-circle-outline" size={72} color="#c9d3de" />
-        <Text style={styles.title}>Not signed in</Text>
-        <Text style={styles.sub}>Sign in to save trips and sync across devices.</Text>
+        <Text style={styles.title} testID="mobile-profile-state">
+          {isSupabaseConfigured ? "Not signed in" : "Auth unavailable"}
+        </Text>
+        <Text style={styles.sub}>
+          {isSupabaseConfigured
+            ? "Sign in to save trips and sync across devices."
+            : SUPABASE_CONFIG_ERROR}
+        </Text>
         <TouchableOpacity
           style={[styles.btn, styles.primaryBtn]}
           onPress={() => router.push("/login")}
+          disabled={!isSupabaseConfigured}
           activeOpacity={0.85}
         >
           <Text style={styles.btnText}>Sign in with email</Text>
@@ -61,6 +78,7 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={[styles.btn, styles.secondaryBtn]}
           onPress={() => router.push("/signup")}
+          disabled={!isSupabaseConfigured}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryBtnText}>Create account</Text>
@@ -68,6 +86,7 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={[styles.btn, styles.secondaryBtn]}
           onPress={handleSignIn}
+          disabled={!isSupabaseConfigured}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryBtnText}>Continue with Google</Text>

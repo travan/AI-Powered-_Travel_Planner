@@ -1,16 +1,27 @@
-import type { ItineraryInput, ItineraryStatus, SSEEventType, ItineraryOverview } from "./itinerary";
+import type { ItineraryInput, ItineraryStatus, SSEEventType, ItineraryOverview, TripStyle } from "./itinerary";
+import type { TripStyleKey } from "./constants";
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
-export interface GenerateRequest extends ItineraryInput {}
+export interface GenerateRequest extends Omit<ItineraryInput, "trip_style"> {
+  trip_style: TripStyle | TripStyleKey;
+  city_names?: string[];
+}
 
-export interface GenerateResponse {
+export interface QueuedGenerateResponse {
   job_id: string;
-  status: "queued" | "cached";
+  status: "queued";
   stream_url: string;
   estimated_wait_seconds?: number;
+}
+
+export interface CachedGenerateResponse {
+  status: "cached";
+  itinerary_id?: string;
   result?: unknown; // present when status === "cached"
 }
+
+export type GenerateResponse = QueuedGenerateResponse | CachedGenerateResponse;
 
 // ─── SSE Events ───────────────────────────────────────────────────────────────
 

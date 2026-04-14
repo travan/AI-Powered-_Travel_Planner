@@ -11,7 +11,16 @@ import {
 import { useRouter } from "expo-router";
 import { useState, useCallback } from "react";
 import { useCitySearch } from "@travel/hooks";
-import { TRIP_STYLES } from "@travel/types";
+import {
+  TRIP_STYLES,
+  buildGenerateRequest,
+  createCityFromSuggestion,
+  createManualCity,
+  resolveGenerateNavigationTarget,
+  type GenerateResponse,
+  type SelectedCity,
+  type TripStyleKey,
+} from "@travel/types";
 import { mobileTheme } from "../lib/theme";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -20,11 +29,11 @@ export default function PlanScreen() {
   const router = useRouter();
 
   const [cityQuery, setCityQuery] = useState("");
-  const [cities, setCities] = useState<{ slug: string; name: string }[]>([]);
+  const [cities, setCities] = useState<SelectedCity[]>([]);
   const [numDays, setNumDays] = useState("5");
   const [budget, setBudget] = useState("");
   const currency = "USD";
-  const [style, setStyle] = useState("mid_range");
+  const [style, setStyle] = useState<TripStyleKey>("mid_range");
   const [travelers, setTravelers] = useState("2");
   const [loading, setLoading] = useState(false);
 
@@ -41,9 +50,12 @@ export default function PlanScreen() {
     if (!trimmed) return;
     const match = suggestions[0];
     if (match) {
-      addCityFromSuggestion(match.slug, match.name["en"] ?? trimmed);
-    } else if (!cities.some((c) => c.slug === trimmed.toLowerCase())) {
-      setCities((prev) => [...prev, { slug: trimmed.toLowerCase(), name: trimmed }]);
+      const selectedCity = createCityFromSuggestion(match);
+      addCityFromSuggestion(selectedCity.slug, selectedCity.name);
+    } else {
+      const selectedCity = createManualCity(trimmed);
+      if (cities.some((c) => c.slug === selectedCity.slug)) return;
+      setCities((prev) => [...prev, selectedCity]);
       setCityQuery("");
     }
   }, [cityQuery, cities, suggestions, addCityFromSuggestion]);
@@ -62,19 +74,33 @@ export default function PlanScreen() {
       const res = await fetch(`${API_URL}/api/itinerary/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cities: cities.map((c) => c.slug),
-          num_days: Number(numDays) || 5,
-          budget: budget ? Number(budget) : undefined,
-          currency,
-          trip_style: style,
-          traveler_count: Number(travelers) || 1,
-          locale: "en",
-        }),
+        body: JSON.stringify(
+          buildGenerateRequest({
+            cities,
+            num_days: numDays,
+            budget,
+            currency,
+            trip_style: style,
+            num_travelers: travelers,
+            locale: "en",
+          })
+        ),
       });
       if (!res.ok) throw new Error("Generation failed");
-      const { job_id } = await res.json();
-      router.replace(`/itinerary/${job_id}`);
+      const response = await res.json() as GenerateResponse;
+      const target = resolveGenerateNavigationTarget(response);
+
+      if (!target) {
+        throw new Error("Generation response is missing the next route target.");
+      }
+
+      router.replace({
+        pathname: "/itinerary/[id]",
+        params: {
+          id: target.id,
+          source: target.kind,
+        },
+      });
     } catch (e: unknown) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to generate");
     } finally {
@@ -83,11 +109,12 @@ export default function PlanScreen() {
   }, [cities, numDays, budget, currency, style, travelers, router]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" testID="mobile-plan-screen">
       {/* Cities */}
       <Text style={styles.label}>Cities</Text>
       <View style={styles.row}>
         <TextInput
+          testID="mobile-plan-city-input"
           style={[styles.input, { flex: 1 }]}
           placeholder="Search a city…"
           placeholderTextColor="#9ca3af"
@@ -96,7 +123,7 @@ export default function PlanScreen() {
           onSubmitEditing={addCity}
           returnKeyType="done"
         />
-        <TouchableOpacity style={styles.addBtn} onPress={addCity}>
+        <TouchableOpacity testID="mobile-plan-add-city" style={styles.addBtn} onPress={addCity}>
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
@@ -196,6 +223,7 @@ export default function PlanScreen() {
 
       {/* Submit */}
       <TouchableOpacity
+        testID="mobile-plan-generate"
         style={[styles.generateBtn, loading && { opacity: 0.6 }]}
         onPress={handleGenerate}
         disabled={loading}

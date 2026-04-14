@@ -159,7 +159,11 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
     }
 
     // Cache result in Redis
-    await cacheSet(`cache:itinerary:${cacheKey}`, itinerary, TTL.ITINERARY_RESULT);
+    await cacheSet(
+      `cache:itinerary:${cacheKey}`,
+      { itinerary_id: itineraryId, itinerary },
+      TTL.ITINERARY_RESULT
+    );
 
     const completePayload: { itinerary_id: string; status: "complete" } = {
       itinerary_id: itineraryId,

@@ -16,7 +16,7 @@ const POLL_INTERVAL_MS = 2000;
 type FetchState = "loading" | "polling" | "done" | "error";
 
 export default function ItineraryDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, source } = useLocalSearchParams<{ id: string; source?: "queued" | "cached" }>();
   const [data, setData] = useState<ItineraryOutput | null>(null);
   const [fetchState, setFetchState] = useState<FetchState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,12 @@ export default function ItineraryDetailScreen() {
 
     async function attempt() {
       try {
-        const res = await fetch(`${API_URL}/api/itinerary/${id}`);
+        const endpoint =
+          source === "queued"
+            ? `${API_URL}/api/itinerary/job/${id}`
+            : `${API_URL}/api/itinerary/${id}`;
+
+        const res = await fetch(endpoint);
 
         if (res.status === 404 || res.status === 202) {
           // Still generating — poll
@@ -65,7 +70,7 @@ export default function ItineraryDetailScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.loadingText}>
+        <Text style={styles.loadingText} testID="mobile-itinerary-loading">
           {fetchState === "polling" ? "Still building your itinerary…" : "Loading itinerary…"}
         </Text>
       </View>
@@ -94,7 +99,7 @@ export default function ItineraryDetailScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Overview */}
       <View style={styles.overviewCard}>
-        <Text style={styles.overviewTitle}>{itinerary.title}</Text>
+        <Text style={styles.overviewTitle} testID="mobile-itinerary-title">{itinerary.title}</Text>
         <Text style={styles.overviewSub}>
           {itinerary.num_days} days · {itinerary.num_travelers} travelers
         </Text>

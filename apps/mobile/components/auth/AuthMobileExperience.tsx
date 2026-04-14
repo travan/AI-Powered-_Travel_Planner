@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
+  ActivityIndicator,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +13,11 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { supabase } from "../../lib/supabase";
+import {
+  isSupabaseConfigured,
+  requireSupabase,
+  SUPABASE_CONFIG_ERROR,
+} from "../../lib/supabase";
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 
@@ -47,6 +51,11 @@ export function AuthMobileExperience({ mode }: Props) {
   );
 
   const onSubmit = async () => {
+    if (!isSupabaseConfigured) {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
     if (!email || !password || (mode === "signup" && !fullName.trim())) {
       Alert.alert("Missing information", "Please fill in all required fields.");
       return;
@@ -54,6 +63,7 @@ export function AuthMobileExperience({ mode }: Props) {
 
     setSubmitting(true);
     try {
+      const supabase = requireSupabase();
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,
@@ -89,6 +99,11 @@ export function AuthMobileExperience({ mode }: Props) {
   };
 
   const onForgotPassword = async () => {
+    if (!isSupabaseConfigured) {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
     if (!email) {
       Alert.alert("Missing email", "Enter your email first.");
       return;
@@ -96,6 +111,7 @@ export function AuthMobileExperience({ mode }: Props) {
 
     setSubmitting(true);
     try {
+      const supabase = requireSupabase();
       const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3005";
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${webUrl}/reset-password`,
@@ -110,6 +126,11 @@ export function AuthMobileExperience({ mode }: Props) {
   };
 
   const onGoogle = async () => {
+    if (!isSupabaseConfigured) {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
     setSubmitting(true);
     try {
       await signInWithGoogleOnMobile();

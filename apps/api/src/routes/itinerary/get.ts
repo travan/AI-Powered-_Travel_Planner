@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { Itinerary, ItineraryOutput } from "@travel/types";
 import { supabase } from "../../db/supabase.js";
 import { cacheGet, cacheSet, TTL } from "../../db/redis.js";
 
@@ -9,7 +10,10 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
 
     // Check Redis cache
     const cached = await cacheGet(`itinerary:${id}`);
-    if (cached) return reply.send(cached);
+    if (cached) {
+      const normalized = normalizeItineraryOutput(cached, id);
+      if (normalized) return reply.send(normalized);
+    }
 
     // Fetch from Supabase
     const { data, error } = await supabase
@@ -25,7 +29,16 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
     // Cache for 1 hour
     await cacheSet(`itinerary:${id}`, data, TTL.ITINERARY_RESULT);
 
-    return reply.send(data);
+    const normalized = normalizeItineraryOutput(data, id);
+    if (!normalized) {
+      return reply.status(500).send({
+        statusCode: 500,
+        error: "Internal Server Error",
+        message: "Stored itinerary has an unexpected shape",
+      });
+    }
+
+    return reply.send(normalized);
   });
 
   // GET /itinerary/job/:jobId (local/dev fallback retrieval)
@@ -33,7 +46,10 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
     const { jobId } = request.params;
     const localKey = `itinerary:local-${jobId}`;
     const cached = await cacheGet(localKey);
-    if (cached) return reply.send(cached);
+    if (cached) {
+      const normalized = normalizeItineraryOutput(cached, `local-${jobId}`);
+      if (normalized) return reply.send(normalized);
+    }
 
     const { data, error } = await supabase
       .from("itineraries")
@@ -53,7 +69,16 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
       await cacheSet(`itinerary:${data.id}`, data, TTL.ITINERARY_RESULT);
     }
 
-    return reply.send(data);
+    const normalized = normalizeItineraryOutput(data, data.id ?? `local-${jobId}`);
+    if (!normalized) {
+      return reply.status(500).send({
+        statusCode: 500,
+        error: "Internal Server Error",
+        message: "Stored itinerary has an unexpected shape",
+      });
+    }
+
+    return reply.send(normalized);
   });
 
   // GET /itinerary/shared/:shareToken (public)
@@ -73,7 +98,16 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ statusCode: 404, error: "Not Found", message: "Shared itinerary not found" });
       }
 
-      return reply.send(data);
+      const normalized = normalizeItineraryOutput(data, data.id as string | undefined);
+      if (!normalized) {
+        return reply.status(500).send({
+          statusCode: 500,
+          error: "Internal Server Error",
+          message: "Stored shared itinerary has an unexpected shape",
+        });
+      }
+
+      return reply.send(normalized);
     }
   );
 
@@ -125,5 +159,53 @@ export async function getItineraryRoutes(fastify: FastifyInstance) {
 
       return reply.send({ is_public, share_token: data?.share_token });
     }
+  );
+}
+
+function normalizeItineraryOutput(
+  value: unknown,
+  fallbackId?: string
+): ItineraryOutput | null {
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+
+  if (Array.isArray(record.itineraries)) {
+    return value as ItineraryOutput;
+  }
+
+  if (isItinerary(record)) {
+    return {
+      itineraries: [
+        {
+          ...record,
+          id: typeof record.id === "string" ? record.id : fallbackId,
+        } as Itinerary,
+      ],
+    };
+  }
+
+  if (record.result && typeof record.result === "object" && isItinerary(record.result)) {
+    return {
+      itineraries: [
+        {
+          ...(record.result as Itinerary),
+          id: typeof record.id === "string" ? record.id : fallbackId,
+        },
+      ],
+    };
+  }
+
+  return null;
+}
+
+function isItinerary(value: unknown): value is Itinerary {
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.title === "string" &&
+    Array.isArray(record.days) &&
+    typeof record.currency === "string"
   );
 }

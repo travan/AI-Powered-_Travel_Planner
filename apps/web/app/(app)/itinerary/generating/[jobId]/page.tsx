@@ -80,7 +80,7 @@ export default function GeneratingPage() {
   const completedSet = new Set(steps.map((s) => s.type));
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6" data-testid="web-generating-screen">
       <div className="w-full max-w-lg space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">

@@ -8,22 +8,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { TRIP_STYLES, type TripStyleKey } from "@travel/types";
 import { mobileTheme } from "../../lib/theme";
-
-const TRIP_STYLES = [
-  { key: "budget", label: "Budget", emoji: "💰" },
-  { key: "mid_range", label: "Mid-range", emoji: "🏨" },
-  { key: "luxury", label: "Luxury", emoji: "✨" },
-  { key: "adventure", label: "Adventure", emoji: "🧗" },
-  { key: "family", label: "Family", emoji: "👨‍👩‍👧" },
-  { key: "romantic", label: "Romantic", emoji: "💑" },
-  { key: "cultural", label: "Cultural", emoji: "🏛️" },
-];
 
 export default function HomeScreen() {
   const router = useRouter();
   const [cityQuery, setCityQuery] = useState("");
-  const [selectedStyle, setSelectedStyle] = useState("mid_range");
+  const [selectedStyle, setSelectedStyle] = useState<TripStyleKey>("mid_range");
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

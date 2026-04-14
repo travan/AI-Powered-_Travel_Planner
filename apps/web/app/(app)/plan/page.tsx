@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { generateItinerary } from "../../../lib/api";
 import { useCitySearch, usePopularCities } from "@travel/hooks";
-import { TRIP_STYLES } from "@travel/types";
+import {
+  TRIP_STYLES,
+  buildGenerateRequest,
+  createCityFromSuggestion,
+  createManualCity,
+  resolveGenerateNavigationTarget,
+  type SelectedCity,
+  type TripStyleKey,
+} from "@travel/types";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
 
@@ -28,7 +36,7 @@ export default function PlanPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [cities, setCities] = useState<{ slug: string; name: string }[]>([]);
+  const [cities, setCities] = useState<SelectedCity[]>([]);
   const [cityInput, setCityInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [numDays, setNumDays] = useState(7);
@@ -37,7 +45,7 @@ export default function PlanPage() {
   const [useDateRange, setUseDateRange] = useState(false);
   const [budgetValue, setBudgetValue] = useState(3500);
   const [currency, setCurrency] = useState("USD");
-  const [tripStyle, setTripStyle] = useState("mid_range");
+  const [tripStyle, setTripStyle] = useState<TripStyleKey>("mid_range");
   const [numTravelers, setNumTravelers] = useState(2);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,9 +79,11 @@ export default function PlanPage() {
     if (!trimmed) return;
     const match = suggestions[0];
     if (match) {
-      addCity(match.slug, match.name["en"] ?? trimmed);
+      const selectedCity = createCityFromSuggestion(match);
+      addCity(selectedCity.slug, selectedCity.name);
     } else {
-      addCity(trimmed.toLowerCase().replace(/\s+/g, "-"), trimmed);
+      const selectedCity = createManualCity(trimmed);
+      addCity(selectedCity.slug, selectedCity.name);
     }
   };
 
@@ -86,32 +96,34 @@ export default function PlanPage() {
     setLoading(true);
     setError(null);
     try {
-      const body = {
-        cities: cities.map((c) => c.slug),
-        city_names: cities.map((c) => c.name),
-        ...(useDateRange && startDate
-          ? { start_date: startDate, end_date: endDate || undefined }
-          : { num_days: numDays }),
-        budget: budgetValue,
-        currency,
-        trip_style: tripStyle,
-        num_travelers: numTravelers,
-        locale: "en",
-      };
+      const response = await generateItinerary(
+        buildGenerateRequest({
+          cities,
+          use_date_range: useDateRange,
+          start_date: startDate,
+          end_date: endDate,
+          num_days: numDays,
+          budget: budgetValue,
+          currency,
+          trip_style: tripStyle,
+          num_travelers: numTravelers,
+          locale: "en",
+        })
+      );
 
-      const { job_id, status, result } = await generateItinerary(body);
-
-      if (status === "cached" && result) {
-        const cachedResult = result as { id?: string };
-        if (cachedResult.id) {
-          router.push(`/itinerary/${cachedResult.id}`);
-          return;
-        }
+      const target = resolveGenerateNavigationTarget(response);
+      if (!target) {
+        throw new Error("Generation response is missing the next route target.");
       }
 
-      router.push(`/itinerary/generating/${job_id}`);
+      router.push(
+        target.kind === "cached"
+          ? `/itinerary/${target.id}`
+          : `/itinerary/generating/${target.id}`
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
@@ -291,7 +303,7 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
-              <button onClick={handleGenerate} disabled={loading || cities.length === 0}
+              <button onClick={handleGenerate} disabled={loading || cities.length === 0} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary py-5 rounded-full font-headline font-extrabold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                 {loading ? (
                   <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -382,6 +394,7 @@ export default function PlanPage() {
                       </div>
                     ))}
                     <input ref={inputRef}
+                      data-testid="web-plan-city-input"
                       className="bg-transparent border-none focus:ring-0 outline-none text-on-surface placeholder:text-outline-variant flex-1 min-w-30 text-sm"
                       placeholder={cities.length === 0 ? "Search city (e.g. Tokyo, Paris, Da Nang)…" : "Add another city…"}
                       value={cityInput}
@@ -507,7 +520,7 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
-              <button onClick={handleGenerate} disabled={loading || cities.length === 0}
+              <button onClick={handleGenerate} disabled={loading || cities.length === 0} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary font-bold py-5 rounded-full text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed font-headline">
                 {loading ? (
                   <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -632,4 +645,3 @@ export default function PlanPage() {
     </div>
   );
 }
-
