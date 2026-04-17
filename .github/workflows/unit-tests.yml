@@ -44,8 +44,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
-        run: pnpm run build
+      - name: Build packages for unit tests
+        run: pnpm exec turbo run build --filter=@travel/ai --filter=@travel/scrapers
 
       - name: Get changed files
         id: changed-files
@@ -66,7 +66,7 @@ jobs:
             echo "No source files changed, skipping test generation."
           fi
         env:
-      NODE_ENV: development
+          NODE_ENV: development
 
       - name: Run type check
         run: pnpm run type-check
