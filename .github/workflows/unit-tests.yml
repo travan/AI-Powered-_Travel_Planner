@@ -1,0 +1,80 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'apps/**/src/**'
+      - 'packages/**/src/**'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+      - 'vitest.config.ts'
+      - 'package.json'
+      - 'turbo.json'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'apps/**/src/**'
+      - 'packages/**/src/**'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+      - 'vitest.config.ts'
+      - 'package.json'
+      - 'turbo.json'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '\.(ts|tsx|js|jsx)$' | grep -v -E '\.(test|spec)\.' | head -20)
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 | grep -E '\.(ts|tsx|js|jsx)$' | grep -v -E '\.(test|spec)\.' | head -20)
+          fi
+          echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+
+      - name: Scan and generate unit tests for changed files
+        run: |
+          if [ -n "${{ steps.changed-files.outputs.changed_files }}" ]; then
+            echo "Generating unit tests for changed files..."
+            node scripts/generate-unit-tests.mjs ${{ steps.changed-files.outputs.changed_files }}
+          else
+            echo "No source files changed, skipping test generation."
+          fi
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Run type check
+        run: pnpm run type-check
+
+      - name: Run unit tests with coverage
+        run: pnpm run test:coverage
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/coverage-final.json
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
