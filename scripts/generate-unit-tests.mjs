@@ -21,7 +21,9 @@ async function generateUnitTests(filePath) {
       return;
     }
 
-    const aiProvider = createAIProvider('openai'); // or from env
+    // Read AI_PROVIDER from env, default to 'mock' for testing
+    const aiProviderName = process.env.AI_PROVIDER || 'mock';
+    const aiProvider = createAIProvider(aiProviderName);
 
     const prompt = `Generate comprehensive unit tests for the following TypeScript/JavaScript code using Vitest framework. Include tests for all functions, classes, and edge cases. Ensure high coverage.
 
@@ -33,7 +35,7 @@ ${code}
 
 Generate tests in the same directory with .test.ts extension. Include describe blocks, it blocks, and proper assertions. Mock external dependencies if needed.`;
 
-    console.log(`Generating tests for ${filePath}...`);
+    console.log(`[${aiProviderName.toUpperCase()}] Generating tests for ${filePath}...`);
 
     // Note: This is a placeholder. In real implementation, you'd call the AI provider
     // const response = await aiProvider.generateTests(prompt);

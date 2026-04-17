@@ -25,13 +25,14 @@ on:
       - 'package.json'
       - 'turbo.json'
       - '.github/workflows/ci-cd.yml'
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build Project
+    name: Build packages and apps
     runs-on: ubuntu-latest
     env:
-      NODE_ENV: development
+      NODE_ENV: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -48,8 +49,15 @@ jobs:
         with:
           version: latest
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store/v3
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build packages and apps
         run: pnpm run build
@@ -70,7 +78,8 @@ jobs:
     needs: build
     env:
       NODE_ENV: development
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      AI_PROVIDER: mock
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -87,8 +96,15 @@ jobs:
         with:
           version: latest
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store/v3
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -141,20 +157,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: latest
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Cache pnpm store
+        uses: actions/cache@v4
         with:
-          name: build-artifacts
+          path: ~/.pnpm-store/v3
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
@@ -173,7 +191,7 @@ jobs:
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests, e2e-tests]
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
@@ -189,8 +207,15 @@ jobs:
         with:
           version: latest
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store/v3
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4

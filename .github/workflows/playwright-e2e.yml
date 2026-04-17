@@ -1,24 +1,7 @@
 name: Playwright E2E Tests
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'apps/**/src/**'
-      - 'packages/**/src/**'
-      - '**/*.spec.ts'
-      - 'playwright.config.ts'
-      - 'e2e/**'
-      - '.github/workflows/playwright-e2e.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'apps/**/src/**'
-      - 'packages/**/src/**'
-      - '**/*.spec.ts'
-      - 'playwright.config.ts'
-      - 'e2e/**'
-      - '.github/workflows/playwright-e2e.yml'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -32,15 +15,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: latest
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store/v3
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
