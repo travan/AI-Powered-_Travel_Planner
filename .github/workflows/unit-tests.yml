@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build packages
+        run: pnpm run build
+
       - name: Get changed files
         id: changed-files
         run: |
@@ -58,12 +61,12 @@ jobs:
         run: |
           if [ -n "${{ steps.changed-files.outputs.changed_files }}" ]; then
             echo "Generating unit tests for changed files..."
-            node scripts/generate-unit-tests.mjs ${{ steps.changed-files.outputs.changed_files }}
+            pnpm exec node scripts/generate-unit-tests.mjs ${{ steps.changed-files.outputs.changed_files }}
           else
             echo "No source files changed, skipping test generation."
           fi
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      NODE_ENV: development
 
       - name: Run type check
         run: pnpm run type-check
