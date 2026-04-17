@@ -29,6 +29,7 @@ pnpm-debug.log*
 # Testing
 coverage
 .nyc_output
+playwright-mcp
 .playwright-mcp
 playwright-report
 test-results
@@ -40,3 +41,10 @@ supabase/.temp
 .vscode
 .idea
 *.swp
+
+# Agent
+agents
+.agents
+
+# API Scripts (contains sensitive demo data)
+apps/api/scripts/

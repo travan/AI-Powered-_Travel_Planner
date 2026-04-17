@@ -10,7 +10,10 @@
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test --project=web-desktop",
     "test:e2e:mobile": "playwright test --project=mobile-web",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "supabase:seed-demo": "pnpm --dir apps/api exec node ./scripts/seed-demo-itineraries.mjs",
+    "supabase:query-demo": "pnpm --dir apps/api exec node ./scripts/query-demo-itineraries.mjs",
+    "supabase:verify-setup": "pnpm --dir apps/api exec node ./scripts/verify-supabase-setup.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",

@@ -5,6 +5,7 @@ const ROOT = __dirname;
 const MOCK_API_URL = "http://127.0.0.1:3101";
 
 export default defineConfig({
+  globalSetup: path.join(ROOT, "e2e/global-setup.ts"),
   testDir: path.join(ROOT, "e2e/specs"),
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,

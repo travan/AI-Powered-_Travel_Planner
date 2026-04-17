@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { queuedScenario } from "../fixtures/index.mjs";
+import {
+  API_BASE_URL,
+  apiJsonHeaders,
+  apiAuthHeaders,
+} from "./helpers/e2e-helpers";
 
 test.describe("web share and save contract flows", () => {
   test("share button is clickable on itinerary page", async ({ page }) => {
@@ -12,23 +17,18 @@ test.describe("web share and save contract flows", () => {
   });
 
   test("save and share endpoints are consistent with contract", async ({ request }) => {
-    const authHeaders = { Authorization: "Bearer e2e-user-1" };
-
     const saveResponse = await request.post(
-      `http://127.0.0.1:3101/api/itinerary/${queuedScenario.itineraryId}/save`,
-      { headers: authHeaders }
+      `${API_BASE_URL}/api/itinerary/${queuedScenario.itineraryId}/save`,
+      { headers: apiAuthHeaders() }
     );
     expect(saveResponse.ok()).toBeTruthy();
     const savePayload = await saveResponse.json();
     expect(savePayload).toMatchObject({ saved: true });
 
     const shareResponse = await request.patch(
-      `http://127.0.0.1:3101/api/itinerary/${queuedScenario.itineraryId}/share`,
+      `${API_BASE_URL}/api/itinerary/${queuedScenario.itineraryId}/share`,
       {
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: apiJsonHeaders(),
         data: { is_public: true },
       }
     );
@@ -39,7 +39,7 @@ test.describe("web share and save contract flows", () => {
     expect(sharePayload.share_token.length).toBeGreaterThan(0);
 
     const sharedResponse = await request.get(
-      `http://127.0.0.1:3101/api/itinerary/shared/${sharePayload.share_token}`
+      `${API_BASE_URL}/api/itinerary/shared/${sharePayload.share_token}`
     );
     expect(sharedResponse.ok()).toBeTruthy();
 
