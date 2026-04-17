@@ -3,8 +3,22 @@ name: Playwright E2E Tests
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'apps/**/src/**'
+      - 'packages/**/src/**'
+      - '**/*.spec.ts'
+      - 'playwright.config.ts'
+      - 'e2e/**'
+      - '.github/workflows/playwright-e2e.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'apps/**/src/**'
+      - 'packages/**/src/**'
+      - '**/*.spec.ts'
+      - 'playwright.config.ts'
+      - 'e2e/**'
+      - '.github/workflows/playwright-e2e.yml'
 
 jobs:
   test:
