@@ -31,8 +31,6 @@ jobs:
   build:
     name: Build packages and apps
     runs-on: ubuntu-latest
-    env:
-      NODE_ENV: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -60,7 +58,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages and apps
-        run: pnpm run build
+        run: NODE_ENV=production pnpm run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -223,7 +221,7 @@ jobs:
           name: build-artifacts
 
       - name: Build for production
-        run: pnpm run build
+        run: NODE_ENV=production pnpm run build
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
