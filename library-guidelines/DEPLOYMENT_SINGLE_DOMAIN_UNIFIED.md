@@ -26,8 +26,8 @@ This guide summarizes the production setup implemented in this repository to sup
 
 - apps/web/next.config.ts
   - Rewrites configured:
-   - /api/:path* -> API_PROXY_TARGET/api/:path*
-   - /health -> API_PROXY_TARGET/health
+    - /api/:path* -> API_PROXY_TARGET/api/:path*
+    - /health -> API_PROXY_TARGET/health
 
 - apps/web/lib/api.ts
   - API calls default to same-origin /api/* when NEXT_PUBLIC_API_URL is empty.
@@ -49,8 +49,8 @@ This guide summarizes the production setup implemented in this repository to sup
 
 - apps/api/package.json
   - Added scripts:
-   - dev:unified
-   - start:unified
+    - dev:unified
+    - start:unified
   - Added next as a runtime dependency.
 
 ## 3) Recommended Environment Configuration

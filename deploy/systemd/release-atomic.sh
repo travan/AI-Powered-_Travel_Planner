@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 APP_ROOT="${APP_ROOT:-/opt/ai-travel-planner}"
 RELEASES_DIR="$APP_ROOT/releases"
@@ -8,6 +8,24 @@ SOURCE_DIR="${SOURCE_DIR:-$PWD}"
 SERVICE_NAME="${SERVICE_NAME:-ai-travel-planner-unified}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/health}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
+SWITCHED=0
+
+rollback_release() {
+  if [[ "$SWITCHED" -eq 1 && -n "$PREVIOUS_RELEASE" && -d "$PREVIOUS_RELEASE" ]]; then
+    echo "Rolling back to previous release: $PREVIOUS_RELEASE"
+    ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
+    sudo systemctl restart "$SERVICE_NAME" || true
+  fi
+}
+
+on_error() {
+  local exit_code=$?
+  echo "Release failed with exit code $exit_code"
+  rollback_release
+  exit "$exit_code"
+}
+
+trap on_error ERR
 
 if ! command -v rsync >/dev/null 2>&1; then
   echo "rsync is required for atomic release"
@@ -40,6 +58,7 @@ rsync -a --delete \
   --exclude='playwright-report' \
   --exclude='test-results' \
   --exclude='.env' \
+  --exclude='.env.*' \
   "$SOURCE_DIR/" "$NEW_RELEASE/"
 
 pushd "$NEW_RELEASE" >/dev/null
@@ -49,6 +68,7 @@ popd >/dev/null
 
 echo "Switching current symlink to new release"
 ln -sfn "$NEW_RELEASE" "$CURRENT_LINK"
+SWITCHED=1
 
 echo "Restarting service: $SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
@@ -64,10 +84,4 @@ for i in $(seq 1 20); do
 done
 
 echo "Health check failed for new release"
-if [[ -n "$PREVIOUS_RELEASE" && -d "$PREVIOUS_RELEASE" ]]; then
-  echo "Rolling back to previous release: $PREVIOUS_RELEASE"
-  ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
-  sudo systemctl restart "$SERVICE_NAME"
-fi
-
-exit 1
+false

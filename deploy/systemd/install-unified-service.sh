@@ -61,13 +61,18 @@ fi
 sed \
   -e "s|^User=.*$|User=$APP_USER|" \
   -e "s|^WorkingDirectory=.*$|WorkingDirectory=$INSTALL_DIR/current|" \
+  -e "s|^EnvironmentFile=.*$|EnvironmentFile=-$ENV_FILE|" \
+  -e "s|^ReadWritePaths=.*$|ReadWritePaths=$LOG_DIR|" \
+  -e "s|^StandardOutput=.*$|StandardOutput=append:$LOG_DIR/out.log|" \
+  -e "s|^StandardError=.*$|StandardError=append:$LOG_DIR/error.log|" \
   "$SERVICE_TEMPLATE" > "$SERVICE_DEST"
 
 chmod 644 "$SERVICE_DEST"
 
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME"
+systemctl enable "$SERVICE_NAME"
 
-echo "Service installed and started: $SERVICE_NAME"
+echo "Service installed and enabled: $SERVICE_NAME"
+echo "Service is not started automatically until the first atomic release is deployed."
 echo "Environment file: $ENV_FILE"
 echo "Logs directory: $LOG_DIR"

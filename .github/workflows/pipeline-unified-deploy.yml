@@ -119,6 +119,9 @@ jobs:
     name: Deploy PM2
     runs-on: [self-hosted, linux]
     needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'pm2') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'pm2')
@@ -158,6 +161,9 @@ jobs:
     name: Deploy systemd
     runs-on: [self-hosted, linux]
     needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'systemd') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'systemd')
@@ -199,6 +205,9 @@ jobs:
     name: Deploy Docker
     runs-on: [self-hosted, linux]
     needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'docker') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'docker')
