@@ -15,7 +15,7 @@ import {
   type TripStyleKey,
 } from "@travel/types";
 
-const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
+const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
 
 // Fallback gradient backgrounds for cities without a cover_image
 const GRADIENT_FALLBACKS = [

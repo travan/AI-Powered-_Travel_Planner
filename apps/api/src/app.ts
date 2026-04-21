@@ -17,12 +17,25 @@ export async function buildApp() {
     logger: { level: env.NODE_ENV === "production" ? "warn" : "info" },
   });
 
+  const allowedOrigins = new Set<string>([
+    env.NEXT_PUBLIC_APP_URL,
+    ...env.CORS_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
+  ]);
+
   // ─── Plugins ────────────────────────────────────────────────────────────────
 
   await app.register(helmet, { contentSecurityPolicy: false });
 
   await app.register(cors, {
-    origin: [env.NEXT_PUBLIC_APP_URL, "http://localhost:3000", "http://localhost:8081"],
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error("Origin not allowed"), false);
+    },
     credentials: true,
   });
 

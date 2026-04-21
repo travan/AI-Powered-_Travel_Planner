@@ -74,6 +74,9 @@ importers:
       mongodb:
         specifier: ^6.12.0
         version: 6.21.0
+      next:
+        specifier: ^15.3.0
+        version: 15.5.15(@playwright/test@1.59.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       zod:
         specifier: ^3.24.1
         version: 3.25.76

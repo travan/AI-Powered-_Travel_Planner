@@ -5,9 +5,37 @@ import { processOverview } from "./workers/overview.worker.js";
 import { processDetail } from "./workers/detail.worker.js";
 import { redis } from "./db/redis.js";
 import { closeDb } from "./db/mongodb.js";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import next from "next";
+
+async function registerWebHandler(app: Awaited<ReturnType<typeof buildApp>>) {
+  if (!env.SERVE_WEB) return;
+
+  const webAppDir = path.resolve(process.cwd(), env.WEB_APP_DIR);
+  if (!existsSync(webAppDir)) {
+    throw new Error(`WEB_APP_DIR does not exist: ${webAppDir}`);
+  }
+
+  const nextApp = next({
+    dev: env.NODE_ENV !== "production",
+    dir: webAppDir,
+  });
+
+  await nextApp.prepare();
+  const handle = nextApp.getRequestHandler();
+
+  app.all("/*", async (request, reply) => {
+    await handle(request.raw, reply.raw);
+    reply.hijack();
+  });
+
+  app.log.info({ webAppDir }, "Next.js handler attached to API server");
+}
 
 async function main() {
   const app = await buildApp();
+  await registerWebHandler(app);
 
   // ─── Start BullMQ workers ─────────────────────────────────────────────────
 
@@ -56,7 +84,11 @@ async function main() {
   // ─── Start server ─────────────────────────────────────────────────────────
 
   await app.listen({ port: env.PORT, host: "0.0.0.0" });
-  console.info(`API server running on port ${env.PORT}`);
+  if (env.SERVE_WEB) {
+    console.info(`Unified server (API + Web) running on port ${env.PORT}`);
+  } else {
+    console.info(`API server running on port ${env.PORT}`);
+  }
 }
 
 main().catch((err) => {
