@@ -147,7 +147,12 @@ jobs:
       - name: Smoke test
         env:
           BASE_URL: ${{ vars.BASE_URL }}
-        run: pnpm deploy:smoke
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi
 
   deploy_systemd:
     name: Deploy systemd
@@ -183,7 +188,12 @@ jobs:
       - name: Smoke test
         env:
           BASE_URL: ${{ vars.BASE_URL }}
-        run: pnpm deploy:smoke
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi
 
   deploy_docker:
     name: Deploy Docker
@@ -196,10 +206,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Deploy Docker profile (production)
         run: pnpm deploy:docker:up:production
 
       - name: Smoke test
         env:
           BASE_URL: ${{ vars.BASE_URL }}
-        run: pnpm deploy:smoke
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi
