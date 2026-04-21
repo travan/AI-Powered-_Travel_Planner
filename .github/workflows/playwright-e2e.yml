@@ -41,6 +41,8 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: Run Playwright tests
+        env:
+          EXPO_ROUTER_APP_ROOT: app
         run: pnpm exec playwright test
 
       - name: Upload test results
