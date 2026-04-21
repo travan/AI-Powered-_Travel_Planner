@@ -30,7 +30,6 @@ export function Topbar({ title = "Horizon", icon, actions }: TopbarProps) {
 
         {/* Avatar */}
         <div className="h-8 w-8 overflow-hidden rounded-full bg-indigo-100 ring-2 ring-white shadow">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuC7qF9Sw2WWPs5eQxIgFivmTAeZTYWgviIvU_ABIk2k6K4abJyfDMYShpZ1qN4eINleaI-0AOd5bU-UmYrYGcX6HD3tSWgnOrhloeQDlL36YZZ2rPkFGCa4GX8iLJyr-0ER5P5oJiPfVLlgvufoVO71zttFY-PVb92W4SS1j0WXMJMytPH4H9k8u8HxRQkoju_1tEe009cf-rhHJWY78rxmEXeiBBPJoC-iCD8OYCqSjwTC7PyxXtetEswMRdtaUehWs_2CiH1NJ9k"
             alt="User"

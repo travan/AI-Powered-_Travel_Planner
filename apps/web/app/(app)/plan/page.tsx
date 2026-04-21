@@ -335,7 +335,6 @@ export default function PlanPage() {
                   <button key={city.slug} className="relative h-48 rounded-xl overflow-hidden text-left"
                     onClick={() => addCity(city.slug, getDisplayName(city))}>
                     {city.cover_image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img alt={getDisplayName(city)} className="w-full h-full object-cover" src={city.cover_image} />
                     ) : (
                       <div className={`absolute inset-0 bg-linear-to-br ${GRADIENT_FALLBACKS[idx % GRADIENT_FALLBACKS.length]}`} />
@@ -548,7 +547,6 @@ export default function PlanPage() {
                     <button key={city.slug} onClick={() => addCity(city.slug, getDisplayName(city))}
                       className={`relative rounded-xl overflow-hidden group cursor-pointer ${SPAN_CYCLE[idx % SPAN_CYCLE.length]}`}>
                       {city.cover_image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img alt={getDisplayName(city)}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                           src={city.cover_image} />

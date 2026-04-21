@@ -37,7 +37,6 @@ export function SiteHeader() {
       <div className="md:hidden flex justify-between items-center px-6 py-4">
         <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-primary-fixed bg-surface-container-high flex items-center justify-center">
           {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt="User profile" className="w-full h-full object-cover" />
           ) : (
             <span className="material-symbols-outlined text-outline text-lg">person</span>
@@ -82,7 +81,6 @@ export function SiteHeader() {
           </button>
           <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary-fixed bg-surface-container-high flex items-center justify-center">
             {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={avatarUrl} alt="User profile" className="w-full h-full object-cover" />
             ) : (
               <span className="material-symbols-outlined text-outline">person</span>
