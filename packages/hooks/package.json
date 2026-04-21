@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@travel/types": "workspace:*",
+    "@travel/types": "workspace:*"
+  },
+  "peerDependencies": {
     "react": "*"
   },
   "devDependencies": {
