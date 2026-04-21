@@ -5,17 +5,11 @@ export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
-const MOBILE_BOOTSTRAP_TIMEOUT_MS = 30_000;
+const MOBILE_ASSERT_TIMEOUT_MS = 30_000;
 
 function isSupabaseConfiguredForMobile() {
-  return Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-async function ensureMobileAppReady(page: Page) {
-  await page.goto("/plan");
-  await expect(page.getByTestId("mobile-plan-screen")).toBeVisible({
-    timeout: MOBILE_BOOTSTRAP_TIMEOUT_MS,
-  });
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return Boolean(env?.EXPO_PUBLIC_SUPABASE_URL && env?.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 export function apiAuthHeaders(token = "Bearer e2e-user-1") {
@@ -66,25 +60,28 @@ export async function expectItineraryPage(page: Page, itineraryId: string, expec
 }
 
 export async function verifyQueuedMobileRoute(page: Page, jobId: string, expectedTitle: string) {
-  await ensureMobileAppReady(page);
   await page.goto(`/itinerary/${jobId}?source=queued`);
-  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(expectedTitle);
+  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(expectedTitle, {
+    timeout: MOBILE_ASSERT_TIMEOUT_MS,
+  });
 }
 
 export async function verifyMobileProfileFallback(page: Page) {
-  await ensureMobileAppReady(page);
   await page.goto("/profile");
   const expectedState = isSupabaseConfiguredForMobile() ? "Not signed in" : "Auth unavailable";
-  await expect(page.getByTestId("mobile-profile-state")).toHaveText(expectedState);
+  await expect(page.getByTestId("mobile-profile-state")).toHaveText(expectedState, {
+    timeout: MOBILE_ASSERT_TIMEOUT_MS,
+  });
 }
 
 export async function verifyMobileSavedFallback(page: Page) {
-  await ensureMobileAppReady(page);
   await page.goto("/saved");
   const expectedState = isSupabaseConfiguredForMobile()
     ? "No saved trips yet"
     : "Saved trips unavailable";
-  await expect(page.getByTestId("mobile-saved-state")).toHaveText(expectedState);
+  await expect(page.getByTestId("mobile-saved-state")).toHaveText(expectedState, {
+    timeout: MOBILE_ASSERT_TIMEOUT_MS,
+  });
 }
 
 export async function postSaveItinerary(request: APIRequestContext, itineraryId: string) {

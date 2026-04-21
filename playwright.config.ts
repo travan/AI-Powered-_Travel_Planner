@@ -44,7 +44,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: "./node_modules/.bin/expo start --web --port 8081 --non-interactive",
+      command: "./node_modules/.bin/expo start --web --port 8081",
       cwd: path.join(ROOT, "apps/mobile"),
       url: "http://127.0.0.1:8081",
       reuseExistingServer: !process.env.CI,
