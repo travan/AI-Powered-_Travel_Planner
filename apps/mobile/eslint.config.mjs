@@ -3,6 +3,15 @@ import base from "../../packages/config/eslint/base.js";
 export default [
   ...base,
   {
+    files: ["babel.config.js"],
+    languageOptions: {
+      globals: {
+        module: "readonly",
+        require: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       globals: {
