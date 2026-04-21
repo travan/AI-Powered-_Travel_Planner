@@ -52,6 +52,7 @@ export default defineConfig({
         ...process.env,
         CI: "1",
         EXPO_NO_TELEMETRY: "1",
+        EXPO_ROUTER_APP_ROOT: "app",
         EXPO_PUBLIC_API_URL: MOCK_API_URL,
         EXPO_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
       },
