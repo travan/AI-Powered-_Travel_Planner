@@ -1,0 +1,33 @@
+module.exports = {
+  apps: [
+    {
+      name: "ai-travel-planner-unified",
+      cwd: ".",
+      script: "pnpm",
+      args: "--dir apps/api start:unified",
+      interpreter: "none",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      min_uptime: "20s",
+      max_restarts: 10,
+      exp_backoff_restart_delay: 100,
+      restart_delay: 2000,
+      listen_timeout: 10000,
+      max_memory_restart: "1G",
+      kill_timeout: 10000,
+      env: {
+        NODE_ENV: "production",
+        PORT: 3001,
+        SERVE_WEB: "true",
+        WEB_APP_DIR: "../web",
+      },
+      error_file: "./logs/pm2-error.log",
+      out_file: "./logs/pm2-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      merge_logs: true,
+      time: true,
+    },
+  ],
+};

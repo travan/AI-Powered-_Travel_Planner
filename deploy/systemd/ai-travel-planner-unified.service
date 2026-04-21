@@ -1,0 +1,37 @@
+[Unit]
+Description=AI Travel Planner Unified Server (API + Web)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/ai-travel-planner/current
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=SERVE_WEB=true
+Environment=WEB_APP_DIR=../web
+EnvironmentFile=-/etc/ai-travel-planner/ai-travel-planner.env
+ExecStart=/usr/bin/pnpm --dir apps/api start:unified
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+NoNewPrivileges=true
+UMask=027
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/log/ai-travel-planner
+LimitNOFILE=65535
+StandardOutput=append:/var/log/ai-travel-planner/out.log
+StandardError=append:/var/log/ai-travel-planner/error.log
+
+[Install]
+WantedBy=multi-user.target
