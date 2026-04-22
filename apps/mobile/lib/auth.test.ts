@@ -17,6 +17,7 @@ vi.mock("expo-web-browser", () => ({
 }));
 
 vi.mock("./supabase", () => ({
+  isMockAuthEnabled: false,
   requireSupabase: () => ({
     auth: {
       signInWithOAuth: signInWithOAuthMock,
