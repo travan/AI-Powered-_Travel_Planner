@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   isMockAuthEnabled,
   isSupabaseConfigured,
@@ -35,7 +36,7 @@ export default function SavedScreen() {
         return;
       }
 
-      const databaseClient = supabase as unknown as { from: (table: string) => any };
+      const databaseClient = supabase as unknown as SupabaseClient;
 
       const { data, error } = await databaseClient
         .from("saved_trips")

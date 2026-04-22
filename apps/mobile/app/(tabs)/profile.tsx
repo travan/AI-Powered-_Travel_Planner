@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
 import {
   isSupabaseConfigured,
