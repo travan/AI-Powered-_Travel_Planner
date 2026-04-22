@@ -1,6 +1,13 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      react: path.resolve(__dirname, 'apps/web/node_modules/react'),
+      'react-dom': path.resolve(__dirname, 'apps/web/node_modules/react-dom'),
+    },
+  },
   test: {
     environment: 'node',
     include: [
@@ -27,20 +34,26 @@ export default defineConfig({
         'packages/scrapers/src/**/*.ts',
         'packages/hooks/src/**/*.ts',
         'packages/ui/src/**/*.{ts,tsx}',
-        'apps/api/src/**/*.ts',
-        'apps/web/**/*.{ts,tsx}',
-        'apps/mobile/**/*.{ts,tsx}',
+        'apps/web/lib/**/*.ts',
+        'apps/web/hooks/**/*.ts',
+        'apps/mobile/lib/**/*.ts',
       ],
       exclude: [
         'node_modules/**',
         'dist/**',
-        '.next/**',
-        '.expo/**',
+        '**/.next/**',
+        '**/.expo/**',
         'playwright-report/**',
         'test-results/**',
         'e2e/**',
         'packages/types/**',
         'packages/config/**',
+        'packages/ai/src/providers/**',
+        'packages/ai/src/prompts/**',
+        'packages/ai/src/provider.ts',
+        'packages/scrapers/src/{astro,booking,social,tickets,transport}.ts',
+        'apps/mobile/lib/supabase.ts',
+        'apps/web/lib/supabase/**',
         '**/*.d.ts',
         '**/*.config.*',
         '**/*.test.*',

@@ -1,0 +1,245 @@
+name: Unified CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: "Deployment target"
+        required: true
+        default: "none"
+        type: choice
+        options:
+          - none
+          - pm2
+          - systemd
+          - docker
+      run_e2e:
+        description: "Run E2E tests"
+        required: true
+        default: true
+        type: boolean
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  quality_and_tests:
+    name: Quality and Tests
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      AI_PROVIDER: mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Unit tests with coverage
+        run: pnpm test:coverage
+
+      - name: Install Playwright browsers
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
+        run: pnpm test:e2e:install
+
+      - name: Run E2E tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
+        env:
+          NODE_ENV: development
+          EXPO_ROUTER_APP_ROOT: app
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+  build_unified:
+    name: Build Unified Artifacts
+    runs-on: ubuntu-latest
+    needs: quality_and_tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unified
+        run: pnpm build:unified
+
+      - name: Archive unified artifacts
+        run: |
+          tar -czf unified-artifacts.tar.gz \
+            apps/api/dist \
+            apps/web/.next \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json
+
+      - name: Upload unified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-artifacts
+          path: unified-artifacts.tar.gz
+          retention-days: 7
+
+  deploy_pm2:
+    name: Deploy PM2
+    runs-on: [self-hosted, linux]
+    needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'pm2') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'pm2')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: PM2 zero-downtime release
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: pnpm deploy:pm2:release
+
+      - name: Smoke test
+        env:
+          BASE_URL: ${{ vars.BASE_URL }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi
+
+  deploy_systemd:
+    name: Deploy systemd
+    runs-on: [self-hosted, linux]
+    needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'systemd') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'systemd')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Atomic systemd release
+        env:
+          APP_ROOT: ${{ vars.SYSTEMD_APP_ROOT }}
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+          KEEP_RELEASES: ${{ vars.KEEP_RELEASES }}
+        run: pnpm deploy:systemd:release
+
+      - name: Smoke test
+        env:
+          BASE_URL: ${{ vars.BASE_URL }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi
+
+  deploy_docker:
+    name: Deploy Docker
+    runs-on: [self-hosted, linux]
+    needs: build_unified
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'docker') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'docker')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy Docker profile (production)
+        run: pnpm deploy:docker:up:production
+
+      - name: Smoke test
+        env:
+          BASE_URL: ${{ vars.BASE_URL }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="http://127.0.0.1:3001" pnpm deploy:smoke
+          else
+            pnpm deploy:smoke
+          fi

@@ -3,6 +3,8 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(3001),
+  SERVE_WEB: z.coerce.boolean().default(false),
+  WEB_APP_DIR: z.string().default("../web"),
 
   // AI
   AI_PROVIDER: z.enum(["openai", "gemini", "claude"]).default("openai"),
@@ -35,6 +37,7 @@ const envSchema = z.object({
 
   // App
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:8081"),
 });
 
 const parsed = envSchema.safeParse(process.env);

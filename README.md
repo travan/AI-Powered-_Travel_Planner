@@ -106,6 +106,63 @@ pnpm --dir apps/mobile start # Mobile app only
 pnpm --dir apps/api dev      # API only
 ```
 
+### Single-Domain Mode (Web + API)
+
+To expose both frontend and backend under one domain, this project supports proxying `/api/*` and `/health` from Next.js to the API service.
+
+1. Configure web env in `apps/web/.env.local`:
+   ```env
+   NEXT_PUBLIC_API_URL=
+   API_PROXY_TARGET=http://127.0.0.1:3001
+   ```
+   - Leave `NEXT_PUBLIC_API_URL` empty so web code always calls same-domain `/api/*`.
+   - Set `API_PROXY_TARGET` to your API runtime address (internal service URL in production).
+
+2. Start services:
+   ```bash
+   pnpm --dir apps/api dev
+   pnpm --dir apps/web dev
+   ```
+
+3. Access from clients:
+   - Web browser: `https://your-domain/...`
+   - Mobile app API calls: `https://your-domain/api/...`
+
+This keeps one public domain while still allowing backend access for mobile clients.
+
+### Single-Artifact Mode (One Process)
+
+For deployment as a single process/artifact, run the API server in unified mode so it also serves the Next.js web app.
+
+1. Build web + api:
+   ```bash
+   pnpm --dir apps/web build
+   pnpm --dir apps/api build
+   ```
+
+2. Start unified server:
+   ```bash
+   pnpm --dir apps/api start:unified
+   ```
+
+   Note:
+   - `start` and `start:unified` now read environment variables directly from runtime.
+   - For local `.env` loading in manual runs, use:
+     ```bash
+     pnpm --dir apps/api start:unified:dotenv
+     ```
+
+3. For local development in unified mode:
+   ```bash
+   pnpm --dir apps/api dev:unified
+   ```
+
+4. Optional environment variables (API process):
+   - `SERVE_WEB=true`
+   - `WEB_APP_DIR=../web` (default; relative to `apps/api` working directory)
+
+In this mode, one Node.js process serves both web pages and API endpoints on the same domain/port, and mobile apps can call `https://your-domain/api/*`.
+
 ### Building
 ```bash
 # Build all apps

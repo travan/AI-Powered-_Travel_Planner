@@ -156,7 +156,6 @@ export default function ComparisonPage() {
                 <div className="relative group">
                   {/* Photo */}
                   <div className="aspect-4/5 w-full rounded-xl overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,93,144,0.08)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       alt={card.title}
                       className="w-full h-full object-cover grayscale-20"
@@ -262,7 +261,6 @@ export default function ComparisonPage() {
                 className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:-translate-y-2 transition-all duration-300 shadow-sm hover:shadow-xl"
               >
                 <div className="relative h-48 overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={card.title}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.git
+.github
+.vscode
+.idea
+coverage
+playwright-report
+test-results
+apps/mobile
+mockup_design
+library-guidelines
+*.log
+.env
+.env.*

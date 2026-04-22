@@ -4,6 +4,21 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "build:unified": "pnpm --dir apps/web build && pnpm --dir apps/api build",
+    "start:unified": "pnpm --dir apps/api start:unified",
+    "deploy:pm2:start": "pnpm build:unified && pm2 start deploy/pm2/ecosystem.config.cjs --env production",
+    "deploy:pm2:reload": "pnpm build:unified && pm2 reload deploy/pm2/ecosystem.config.cjs --env production",
+    "deploy:pm2:logrotate": "bash deploy/pm2/setup-logrotate.sh",
+    "deploy:pm2:release": "bash deploy/pm2/release-zero-downtime.sh",
+    "deploy:systemd:install": "sudo bash deploy/systemd/install-unified-service.sh",
+    "deploy:systemd:uninstall": "sudo bash deploy/systemd/uninstall-unified-service.sh",
+    "deploy:systemd:release": "bash deploy/systemd/release-atomic.sh",
+    "deploy:systemd:prune": "bash deploy/systemd/prune-old-releases.sh",
+    "deploy:smoke": "bash deploy/smoke-test.sh",
+    "deploy:docker:build": "docker build -f deploy/docker/Dockerfile.unified -t ai-travel-planner:unified .",
+    "deploy:docker:up": "docker compose -f deploy/docker/docker-compose.unified.yml up -d --build",
+    "deploy:docker:up:staging": "docker compose -f deploy/docker/docker-compose.profiles.yml --profile staging up -d --build",
+    "deploy:docker:up:production": "docker compose -f deploy/docker/docker-compose.profiles.yml --profile production up -d --build",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "clean": "turbo clean",
@@ -19,15 +34,25 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^2.1.8",
     "jsdom": "^25.0.1",
+    "prettier": "^3.4.2",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2",
-    "@types/node": "^22.10.2",
-    "prettier": "^3.4.2",
     "vitest": "^2.1.8"
   },
   "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "@babel/core": "7.29.0",
+      "react": "19.0.0",
+      "react-dom": "19.0.0"
+    }
+  },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"

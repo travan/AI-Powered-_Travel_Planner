@@ -1,0 +1,42 @@
+x-app-common: &app-common
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile.unified
+  image: ai-travel-planner:unified
+  environment:
+    NODE_ENV: production
+    PORT: 3001
+    SERVE_WEB: "true"
+    WEB_APP_DIR: ../web
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+  stop_grace_period: 20s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+  restart: unless-stopped
+
+services:
+  app-staging:
+    <<: *app-common
+    container_name: ai-travel-planner-staging
+    profiles: ["staging"]
+    env_file:
+      - ../../.env.staging
+    ports:
+      - "3101:3001"
+
+  app-prod:
+    <<: *app-common
+    container_name: ai-travel-planner-prod
+    profiles: ["production"]
+    env_file:
+      - ../../.env.production
+    ports:
+      - "3001:3001"

@@ -1,9 +1,16 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 export default async function globalSetup() {
   const seedScript = path.join(__dirname, "../apps/api/scripts/seed-demo-itineraries.mjs");
   const apiDir = path.join(__dirname, "../apps/api");
+
+  if (!existsSync(seedScript)) {
+    console.log("Skipping Supabase demo seed: script not found in this checkout.");
+    return;
+  }
+
   console.log("Running Supabase demo seed before Playwright tests...");
 
   try {

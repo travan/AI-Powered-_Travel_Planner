@@ -14,8 +14,8 @@ export function useSSE(
   const connect = useCallback(() => {
     if (!jobId || evtSourceRef.current) return;
 
-    const apiUrl = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
-    const url = `${apiUrl}/api/itinerary/stream/${jobId}`;
+    const apiUrl = process.env["NEXT_PUBLIC_API_URL"] ?? "";
+    const url = `${apiUrl.replace(/\/$/, "")}/api/itinerary/stream/${jobId}`;
 
     const es = new EventSource(url);
     evtSourceRef.current = es;

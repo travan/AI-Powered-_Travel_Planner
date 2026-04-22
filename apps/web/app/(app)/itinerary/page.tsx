@@ -145,7 +145,6 @@ function ItineraryContent() {
           {/* Hero card */}
           <section className="mb-8">
             <div className="relative h-48 w-full rounded-xl overflow-hidden mb-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="w-full h-full object-cover" alt="Amalfi Coast" src={HERO_IMG} />
               <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
               <div className="absolute bottom-4 left-6">
@@ -196,7 +195,6 @@ function ItineraryContent() {
                   <span className="font-bold text-primary text-sm uppercase tracking-wider">Explore Map</span>
                 </div>
               </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 className="w-full h-full object-cover opacity-60"
                 alt="Map"
@@ -232,7 +230,6 @@ function ItineraryContent() {
                       <p className="text-sm text-on-surface-variant leading-relaxed">{act.desc}</p>
                       {act.photo && (
                         <div className="mt-2 rounded-lg overflow-hidden h-32">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img className="w-full h-full object-cover" alt={act.title} src={act.photo} />
                         </div>
                       )}
@@ -253,7 +250,6 @@ function ItineraryContent() {
               {DINNER_SUGGESTIONS.map((d) => (
                 <div key={d.name} className="min-w-50 bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
                   <div className="h-32 relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="w-full h-full object-cover" alt={d.name} src={d.img} />
                     <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-on-surface flex items-center gap-1">
                       <span
@@ -368,7 +364,6 @@ function ItineraryContent() {
                             key={d.name}
                             className="relative shrink-0 w-40 h-64 rounded-xl overflow-hidden cursor-pointer group"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               alt={d.name}
                               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
@@ -390,7 +385,6 @@ function ItineraryContent() {
 
             {/* Map col 7 */}
             <div className="lg:col-span-7 sticky top-28 h-150 rounded-3xl overflow-hidden shadow-xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img alt="Route map" className="w-full h-full object-cover" src={MAP_IMG} />
               <div className="absolute bottom-6 left-6 right-6 bg-surface-container-lowest/80 backdrop-blur-md rounded-2xl p-5 flex flex-wrap gap-3">
                 {[

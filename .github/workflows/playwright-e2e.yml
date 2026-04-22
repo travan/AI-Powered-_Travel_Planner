@@ -1,5 +1,9 @@
 name: Playwright E2E Tests
 
+concurrency:
+  group: playwright-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
 
@@ -16,11 +20,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: pnpm
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 9.15.0
 
       - name: Cache pnpm store
         uses: actions/cache@v4
@@ -36,6 +41,8 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: Run Playwright tests
+        env:
+          EXPO_ROUTER_APP_ROOT: app
         run: pnpm exec playwright test
 
       - name: Upload test results
