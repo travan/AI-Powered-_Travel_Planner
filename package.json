@@ -48,6 +48,7 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
+      "@babel/core": "7.29.0",
       "react": "19.0.0",
       "react-dom": "19.0.0"
     }
