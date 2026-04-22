@@ -46,24 +46,23 @@ export default defineConfig({
       stderr: "pipe",
       timeout: 120_000,
     },
-    // TODO: re-enable when EXPO_ROUTER_APP_ROOT Metro bundling issue is resolved on CI
-    // {
-    //   command: "CI=1 EXPO_NO_TELEMETRY=1 EXPO_ROUTER_APP_ROOT=app EXPO_PUBLIC_API_URL=" + MOCK_API_URL + " EXPO_PUBLIC_WEB_URL=http://127.0.0.1:3000 ./node_modules/.bin/expo start --web --port 8081",
-    //   cwd: path.join(ROOT, "apps/mobile"),
-    //   url: "http://127.0.0.1:8081",
-    //   reuseExistingServer: !process.env.CI,
-    //   env: {
-    //     ...process.env,
-    //     CI: "1",
-    //     EXPO_NO_TELEMETRY: "1",
-    //     EXPO_ROUTER_APP_ROOT: "app",
-    //     EXPO_PUBLIC_API_URL: MOCK_API_URL,
-    //     EXPO_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
-    //   },
-    //   stdout: "pipe",
-    //   stderr: "pipe",
-    //   timeout: 180_000,
-    // },
+    {
+      command: "./node_modules/.bin/expo start --web --port 8081",
+      cwd: path.join(ROOT, "apps/mobile"),
+      url: "http://127.0.0.1:8081",
+      reuseExistingServer: !process.env.CI,
+      env: {
+        ...process.env,
+        CI: "1",
+        EXPO_NO_TELEMETRY: "1",
+        EXPO_ROUTER_APP_ROOT: "app",
+        EXPO_PUBLIC_API_URL: MOCK_API_URL,
+        EXPO_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 180_000,
+    },
   ],
   projects: [
     {
@@ -77,14 +76,13 @@ export default defineConfig({
         viewport: { width: 1440, height: 960 },
       },
     },
-    // TODO: re-enable when EXPO_ROUTER_APP_ROOT Metro bundling issue is resolved on CI
-    // {
-    //   name: "mobile-web",
-    //   testMatch: /mobile-web\.contract\.spec\.ts/,
-    //   use: {
-    //     ...devices["Pixel 5"],
-    //     baseURL: "http://127.0.0.1:8081",
-    //   },
-    // },
+    {
+      name: "mobile-web",
+      testMatch: /mobile-web\.contract\.spec\.ts/,
+      use: {
+        ...devices["Pixel 5"],
+        baseURL: "http://127.0.0.1:8081",
+      },
+    },
   ],
 });
