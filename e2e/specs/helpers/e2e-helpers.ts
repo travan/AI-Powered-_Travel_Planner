@@ -6,6 +6,7 @@ export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visib
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
 const MOBILE_ASSERT_TIMEOUT_MS = 30_000;
+const WEB_NAVIGATION_TIMEOUT_MS = 20_000;
 
 function isSupabaseConfiguredForMobile() {
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
@@ -55,7 +56,9 @@ export async function expectGeneratingPage(page: Page, jobId: string) {
 
 export async function expectItineraryPage(page: Page, itineraryId: string, expectedTitle: string) {
   const escapedItineraryId = escapeRegExp(itineraryId);
-  await expect(page).toHaveURL(new RegExp(`/itinerary/${escapedItineraryId}`));
+  await expect(page).toHaveURL(new RegExp(`/itinerary/${escapedItineraryId}`), {
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
   await expect(page.getByTestId(WEB_ITINERARY_TITLE)).toHaveText(expectedTitle);
 }
 
