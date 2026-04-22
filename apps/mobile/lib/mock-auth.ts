@@ -97,12 +97,24 @@ function emit(event: AuthChangeEvent, session: MockSession | null) {
   }
 }
 
+function hashEmailSuffix(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function createUser(email: string, userMetadata: Record<string, unknown>) {
   const normalizedEmail = normalizeEmail(email);
   const safeId = normalizedEmail.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "traveler";
+  const idSuffix = hashEmailSuffix(normalizedEmail);
 
   return {
-    id: `mock-mobile-${safeId}`,
+    id: `mock-mobile-${safeId}-${idSuffix}`,
     email: normalizedEmail,
     user_metadata: userMetadata,
   } satisfies MockUser;
@@ -169,11 +181,7 @@ export function createMockSupabaseClient() {
         });
         setUsers(users);
 
-        const session = createSession(user);
-        setSession(session);
-        emit("SIGNED_IN", session);
-
-        return { data: { user, session }, error: null };
+        return { data: { user, session: null }, error: null };
       },
       async signInWithPassword({ email, password }: { email: string; password: string }) {
         const normalizedEmail = normalizeEmail(email);

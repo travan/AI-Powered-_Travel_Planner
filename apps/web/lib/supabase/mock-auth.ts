@@ -78,7 +78,8 @@ const USERS_STORAGE_KEY = "horizon.mock.auth.users";
 const SESSION_STORAGE_KEY = "horizon.mock.auth.session";
 const AUTH_CHANGE_EVENT = "horizon:mock-auth-change";
 export const MOCK_AUTH_COOKIE = "horizon_mock_auth";
-export const MOCK_AUTH_ENABLED = process.env["NEXT_PUBLIC_ENABLE_MOCK_AUTH"] === "true";
+export const MOCK_AUTH_ENABLED =
+  process.env["ENABLE_MOCK_AUTH_SERVER"] === "true" && process.env.NODE_ENV !== "production";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -161,6 +162,28 @@ function getStoredUsers() {
 
 function setStoredUsers(users: StoredMockUser[]) {
   writeBrowserStorage(USERS_STORAGE_KEY, users);
+}
+
+function upsertStoredUser(user: MockUser, password: string) {
+  const users = getStoredUsers();
+  const index = users.findIndex((entry) => entry.id === user.id || entry.email === user.email);
+  const nextUser: StoredMockUser = {
+    id: user.id,
+    email: user.email,
+    password,
+    user_metadata: user.user_metadata,
+  };
+
+  if (index === -1) {
+    users.push(nextUser);
+  } else {
+    users[index] = {
+      ...users[index],
+      ...nextUser,
+    };
+  }
+
+  setStoredUsers(users);
 }
 
 function getStoredSession() {
@@ -257,6 +280,8 @@ export function createMockBrowserClient(): MockAuthClient {
           avatar_url: null,
           provider,
         });
+        upsertStoredUser(user, `oauth-${provider}-mock-password`);
+
         const session = createSession(user);
         setStoredSession(session);
         emitAuthChange("SIGNED_IN", session);

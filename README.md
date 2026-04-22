@@ -201,12 +201,14 @@ pnpm exec playwright test e2e/specs/mobile-web.auth.contract.spec.ts --project=m
 - To force Supabase auth mode in Playwright, override both flags:
 
 ```bash
-NEXT_PUBLIC_ENABLE_MOCK_AUTH=false EXPO_PUBLIC_ENABLE_MOCK_AUTH=false pnpm test:e2e
+ENABLE_MOCK_AUTH_SERVER=false EXPO_PUBLIC_ENABLE_MOCK_AUTH=false pnpm test:e2e
 ```
 
 - When Supabase auth mode is enabled, make sure these are set before running tests:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
 ## 📊 Demo Data
 

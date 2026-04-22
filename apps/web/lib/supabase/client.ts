@@ -2,7 +2,9 @@ import { createBrowserClient } from "@supabase/ssr";
 import { createMockBrowserClient, MOCK_AUTH_ENABLED } from "./mock-auth";
 
 export function createClient() {
-  if (MOCK_AUTH_ENABLED) {
+  const isProductionRuntime = process.env.NODE_ENV === "production";
+
+  if (MOCK_AUTH_ENABLED && !isProductionRuntime) {
     return createMockBrowserClient();
   }
 

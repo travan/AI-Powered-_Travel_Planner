@@ -5,6 +5,9 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 const apiProxyTarget = process.env["API_PROXY_TARGET"] ?? "http://127.0.0.1:3001";
 
 const nextConfig: NextConfig = {
+  env: {
+    ENABLE_MOCK_AUTH_SERVER: process.env["ENABLE_MOCK_AUTH_SERVER"] ?? "false",
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "maps.googleapis.com" },

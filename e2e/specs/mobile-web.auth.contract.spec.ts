@@ -17,12 +17,14 @@ test.describe("mobile web auth contract flows", () => {
     });
   });
 
-  test("signup followed by profile and saved routes reflects an authenticated mobile session", async ({ page }) => {
+  test("signup then login unlocks profile and saved routes", async ({ page }) => {
     const identity = createAuthIdentity();
 
     await page.goto("/signup");
     await signUpOnMobileWeb(page, identity);
     await expect(page).toHaveURL(/\/login$/);
+
+    await signInOnMobileWeb(page, identity);
 
     await page.goto("/profile");
     await expect(page.getByTestId("mobile-profile-name")).toBeVisible();
@@ -37,6 +39,8 @@ test.describe("mobile web auth contract flows", () => {
     await page.goto("/signup");
     await signUpOnMobileWeb(page, identity);
     await expect(page).toHaveURL(/\/login$/);
+
+    await signInOnMobileWeb(page, identity);
 
     await page.goto("/profile");
     await page.getByTestId("mobile-profile-signout").click();
