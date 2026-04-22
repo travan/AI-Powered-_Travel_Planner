@@ -54,6 +54,7 @@ export default defineConfig({
       env: {
         ...process.env,
         CI: "1",
+        NODE_ENV: "development",
         EXPO_NO_TELEMETRY: "1",
         EXPO_ROUTER_APP_ROOT: "app",
         EXPO_PUBLIC_API_URL: MOCK_API_URL,

@@ -67,6 +67,7 @@ jobs:
       - name: Run E2E tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
         env:
+          NODE_ENV: development
           EXPO_ROUTER_APP_ROOT: app
         run: pnpm test:e2e
 
