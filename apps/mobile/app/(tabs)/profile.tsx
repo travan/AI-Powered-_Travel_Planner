@@ -11,9 +11,17 @@ import {
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 
+type AuthenticatedUser = {
+  email?: string;
+  user_metadata?: {
+    avatar_url?: string;
+    full_name?: string;
+  };
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -110,14 +118,15 @@ export default function ProfileScreen() {
       ) : (
         <Ionicons name="person-circle" size={72} color={mobileTheme.colors.primaryStrong} />
       )}
-      <Text style={styles.title}>{displayName}</Text>
+      <Text style={styles.title} testID="mobile-profile-name">{displayName}</Text>
       {user.email && user.email !== displayName && (
-        <Text style={styles.sub}>{user.email}</Text>
+        <Text style={styles.sub} testID="mobile-profile-email">{user.email}</Text>
       )}
       <TouchableOpacity
         style={[styles.btn, { backgroundColor: mobileTheme.colors.danger }]}
         onPress={handleSignOut}
         activeOpacity={0.85}
+        testID="mobile-profile-signout"
       >
         <Text style={styles.btnText}>Sign out</Text>
       </TouchableOpacity>

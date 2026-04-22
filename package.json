@@ -27,6 +27,7 @@
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test --project=web-desktop",
     "test:e2e:mobile": "playwright test --project=mobile-web",
+    "test:e2e:auth": "playwright test e2e/specs/web.auth.contract.spec.ts --project=web-desktop && playwright test e2e/specs/mobile-web.auth.contract.spec.ts --project=mobile-web",
     "test:e2e:install": "playwright install chromium",
     "supabase:seed-demo": "pnpm --dir apps/api exec node ./scripts/seed-demo-itineraries.mjs",
     "supabase:query-demo": "pnpm --dir apps/api exec node ./scripts/query-demo-itineraries.mjs",

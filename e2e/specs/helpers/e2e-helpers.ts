@@ -5,6 +5,9 @@ export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
+export const WEB_AUTH_EMAIL = "web-auth-email";
+export const WEB_AUTH_PASSWORD = "web-auth-password";
+export const WEB_AUTH_FULL_NAME = "web-auth-full-name";
 const MOBILE_ASSERT_TIMEOUT_MS = 30_000;
 const WEB_NAVIGATION_TIMEOUT_MS = 20_000;
 
@@ -30,6 +33,39 @@ export function escapeRegExp(value: string) {
 
 export async function openPlanPage(page: Page) {
   await page.goto("/plan");
+}
+
+export async function clearWebMockAuthSession(page: Page) {
+  await page.context().clearCookies();
+  await page.evaluate(() => {
+    window.localStorage.removeItem("horizon.mock.auth.session");
+  });
+}
+
+export async function signUpOnWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+  await page.getByTestId(WEB_AUTH_FULL_NAME).fill(details.fullName);
+  await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
+  await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
+  await page.getByTestId("web-auth-submit-signup").click();
+}
+
+export async function signInOnWeb(page: Page, details: { email: string; password: string }) {
+  await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
+  await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
+  await page.getByTestId("web-auth-submit-login").click();
+}
+
+export async function signUpOnMobileWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+  await page.getByTestId("mobile-auth-full-name").fill(details.fullName);
+  await page.getByTestId("mobile-auth-email").fill(details.email);
+  await page.getByTestId("mobile-auth-password").fill(details.password);
+  await page.getByTestId("mobile-auth-submit-signup").click();
+}
+
+export async function signInOnMobileWeb(page: Page, details: { email: string; password: string }) {
+  await page.getByTestId("mobile-auth-email").fill(details.email);
+  await page.getByTestId("mobile-auth-password").fill(details.password);
+  await page.getByTestId("mobile-auth-submit-login").click();
 }
 
 export async function searchCity(page: Page, city: string) {

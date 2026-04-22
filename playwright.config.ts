@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const ROOT = __dirname;
 const MOCK_API_URL = "http://127.0.0.1:3101";
+const SKIP_AUTH_CONTRACTS = process.env.SKIP_AUTH_CONTRACTS === "true";
 
 export default defineConfig({
   globalSetup: path.join(ROOT, "e2e/global-setup.ts"),
@@ -39,6 +40,7 @@ export default defineConfig({
         ...process.env,
         NEXT_PUBLIC_API_URL: MOCK_API_URL,
         API_PROXY_TARGET: MOCK_API_URL,
+        NEXT_PUBLIC_ENABLE_MOCK_AUTH: process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH ?? "true",
         NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
         NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder-anon-key",
       },
@@ -58,6 +60,7 @@ export default defineConfig({
         EXPO_NO_TELEMETRY: "1",
         EXPO_ROUTER_APP_ROOT: "app",
         EXPO_PUBLIC_API_URL: MOCK_API_URL,
+        EXPO_PUBLIC_ENABLE_MOCK_AUTH: process.env.EXPO_PUBLIC_ENABLE_MOCK_AUTH ?? "true",
         EXPO_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
       },
       stdout: "pipe",
@@ -68,10 +71,13 @@ export default defineConfig({
   projects: [
     {
       name: "web-desktop",
-      testMatch: [
-        "**/web.contract.spec.ts",
-        "**/web.share-save.contract.spec.ts",
-      ],
+      testMatch: SKIP_AUTH_CONTRACTS
+        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts"]
+        : [
+            "**/web.contract.spec.ts",
+            "**/web.auth.contract.spec.ts",
+            "**/web.share-save.contract.spec.ts",
+          ],
       use: {
         baseURL: "http://127.0.0.1:3000",
         viewport: { width: 1440, height: 960 },
@@ -79,7 +85,9 @@ export default defineConfig({
     },
     {
       name: "mobile-web",
-      testMatch: /mobile-web\.contract\.spec\.ts/,
+      testMatch: SKIP_AUTH_CONTRACTS
+        ? /mobile-web\.contract\.spec\.ts/
+        : /mobile-web(\.auth)?\.contract\.spec\.ts/,
       use: {
         ...devices["Pixel 5"],
         baseURL: "http://127.0.0.1:8081",

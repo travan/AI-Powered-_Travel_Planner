@@ -187,7 +187,26 @@ pnpm test:e2e
 # E2E tests for specific platforms
 pnpm test:e2e:web     # Web desktop
 pnpm test:e2e:mobile  # Mobile web
+pnpm test:e2e:auth    # Auth contracts (web + mobile-web)
+
+# Auth-focused E2E contracts
+pnpm exec playwright test e2e/specs/web.auth.contract.spec.ts --project=web-desktop
+pnpm exec playwright test e2e/specs/mobile-web.auth.contract.spec.ts --project=mobile-web
 ```
+
+### Auth Test Modes (Playwright)
+
+- Default mode is mock auth (fast and deterministic) for both web and mobile-web projects.
+- This mode validates full login/signup UI flows, protected route redirects, and post-auth navigation without external auth dependencies.
+- To force Supabase auth mode in Playwright, override both flags:
+
+```bash
+NEXT_PUBLIC_ENABLE_MOCK_AUTH=false EXPO_PUBLIC_ENABLE_MOCK_AUTH=false pnpm test:e2e
+```
+
+- When Supabase auth mode is enabled, make sure these are set before running tests:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## 📊 Demo Data
 
@@ -235,6 +254,7 @@ We welcome contributions! Please follow these steps:
 | `pnpm test` | Run unit tests |
 | `pnpm test:coverage` | Run unit tests with coverage |
 | `pnpm test:e2e` | Run end-to-end tests |
+| `pnpm test:e2e:auth` | Run auth contract E2E tests (web + mobile-web) |
 | `pnpm supabase:seed-demo` | Seed demo data |
 | `pnpm supabase:query-demo` | Query demo data |
 
