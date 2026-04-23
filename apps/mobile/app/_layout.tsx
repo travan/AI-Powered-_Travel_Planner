@@ -37,6 +37,10 @@ export default function RootLayout() {
           name="plan"
           options={{ title: "Plan a Trip", presentation: "modal" }}
         />
+        <Stack.Screen
+          name="trips"
+          options={{ title: "Generated Results" }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </>

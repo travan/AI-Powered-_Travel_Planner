@@ -50,7 +50,7 @@ export default function GeneratingPage() {
       setDone(true);
       if (d.itinerary_id) {
         redirectTimeoutRef.current = setTimeout(() => {
-          router.replace(`/itinerary/${d.itinerary_id}`);
+          router.replace(`/trips?source=cached&id=${d.itinerary_id}`);
         }, 800);
       }
     },

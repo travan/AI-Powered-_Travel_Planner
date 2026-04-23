@@ -20,6 +20,7 @@ import {
 } from "../../lib/supabase";
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
+import { getPendingSearchIntent } from "../../lib/pending-search-intent";
 
 type Mode = "login" | "signup";
 
@@ -50,6 +51,16 @@ export function AuthMobileExperience({ mode }: Props) {
     [mode],
   );
 
+  const completeAuthFlow = async () => {
+    const pending = await getPendingSearchIntent();
+    if (pending) {
+      router.replace("/trips?resume=1");
+      return;
+    }
+
+    router.replace("/(tabs)");
+  };
+
   const onSubmit = async () => {
     if (!isSupabaseConfigured) {
       Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
@@ -77,6 +88,20 @@ export function AuthMobileExperience({ mode }: Props) {
         });
 
         if (error) throw error;
+
+        // Try immediate sign-in to support mock auth and environments without
+        // mandatory email confirmation. If sign-in fails, keep the explicit
+        // login step for providers that require confirmation.
+        const signInAfterSignup = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (!signInAfterSignup.error) {
+          await completeAuthFlow();
+          return;
+        }
+
         Alert.alert(
           "Account created",
           "Check your email to confirm your account, then sign in.",
@@ -89,7 +114,7 @@ export function AuthMobileExperience({ mode }: Props) {
         });
 
         if (error) throw error;
-        router.replace("/(tabs)");
+        await completeAuthFlow();
       }
     } catch (error) {
       Alert.alert("Auth error", error instanceof Error ? error.message : "Please try again.");
@@ -134,7 +159,7 @@ export function AuthMobileExperience({ mode }: Props) {
     setSubmitting(true);
     try {
       await signInWithGoogleOnMobile();
-      router.replace("/(tabs)");
+      await completeAuthFlow();
     } catch (error) {
       Alert.alert("Google sign-in error", error instanceof Error ? error.message : "Please try again.");
     } finally {

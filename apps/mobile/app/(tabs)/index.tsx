@@ -1,4 +1,5 @@
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -8,13 +9,55 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { TRIP_STYLES, type TripStyleKey } from "@travel/types";
+import {
+  TRIP_STYLES,
+  buildGenerateRequest,
+  createManualCity,
+  type TripStyleKey,
+} from "@travel/types";
 import { mobileTheme } from "../../lib/theme";
+import { requireSupabase, SUPABASE_CONFIG_ERROR } from "../../lib/supabase";
+import { savePendingSearchIntent } from "../../lib/pending-search-intent";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [cityQuery, setCityQuery] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<TripStyleKey>("mid_range");
+
+  const handlePlanPress = async () => {
+    let sessionToken: string | null = null;
+    try {
+      const {
+        data: { session },
+      } = await requireSupabase().auth.getSession();
+      sessionToken = session?.access_token ?? null;
+    } catch {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
+    if (!sessionToken) {
+      if (cityQuery.trim()) {
+        const city = createManualCity(cityQuery.trim());
+        await savePendingSearchIntent(
+          buildGenerateRequest({
+            cities: [city],
+            num_days: 5,
+            budget: undefined,
+            currency: "USD",
+            trip_style: selectedStyle,
+            num_travelers: 2,
+            locale: "en",
+          })
+        );
+      }
+
+      router.push("/login");
+      return;
+    }
+
+    router.push("/plan");
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -64,7 +107,9 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.planButton}
-          onPress={() => router.push("/plan")}
+          onPress={() => {
+            void handlePlanPress();
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.planButtonText}>Plan my trip →</Text>

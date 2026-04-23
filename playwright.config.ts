@@ -72,11 +72,12 @@ export default defineConfig({
     {
       name: "web-desktop",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts"]
+        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts"]
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
             "**/web.share-save.contract.spec.ts",
+            "**/web.trips.spec.ts",
           ],
       use: {
         baseURL: "http://127.0.0.1:3000",
@@ -86,8 +87,12 @@ export default defineConfig({
     {
       name: "mobile-web",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? /mobile-web\.contract\.spec\.ts/
-        : /mobile-web(\.auth)?\.contract\.spec\.ts/,
+        ? ["**/mobile-web.contract.spec.ts", "**/mobile-web.trips.spec.ts"]
+        : [
+            "**/mobile-web.contract.spec.ts",
+            "**/mobile-web.auth.contract.spec.ts",
+            "**/mobile-web.trips.spec.ts",
+          ],
       use: {
         ...devices["Pixel 5"],
         baseURL: "http://127.0.0.1:8081",

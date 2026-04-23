@@ -5,13 +5,23 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Sign-up - Horizon" };
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirectTo?: string }>;
+}) {
+  const params = await searchParams;
+  const redirectTo =
+    params.redirectTo && params.redirectTo.startsWith("/")
+      ? params.redirectTo
+      : "/plan";
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/plan");
+  if (user) redirect(redirectTo);
 
   return <AuthExperience mode="signup" />;
 }

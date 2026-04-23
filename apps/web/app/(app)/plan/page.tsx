@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { generateItinerary } from "../../../lib/api";
+import { createClient } from "../../../lib/supabase/client";
 import { useCitySearch, usePopularCities } from "@travel/hooks";
 import {
   TRIP_STYLES,
@@ -16,6 +17,13 @@ import {
 } from "@travel/types";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
+const PENDING_SEARCH_INTENT_KEY = "horizon.search.intent";
+const PENDING_SEARCH_INTENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+type PendingSearchIntent = {
+  request: ReturnType<typeof buildGenerateRequest>;
+  createdAt: number;
+};
 
 // Fallback gradient backgrounds for cities without a cover_image
 const GRADIENT_FALLBACKS = [
@@ -34,6 +42,7 @@ export default function PlanPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isResumingRef = useRef(false);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [cities, setCities] = useState<SelectedCity[]>([]);
@@ -65,6 +74,62 @@ export default function PlanPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Resume a blocked generate intent after successful authentication.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isResumingRef.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("resumeGenerate") !== "1") return;
+
+    const rawIntent = window.sessionStorage.getItem(PENDING_SEARCH_INTENT_KEY);
+    if (!rawIntent) return;
+
+    let parsed: PendingSearchIntent | null = null;
+    try {
+      parsed = JSON.parse(rawIntent) as PendingSearchIntent;
+    } catch {
+      window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+      return;
+    }
+
+    if (!parsed || !parsed.request || Date.now() - parsed.createdAt > PENDING_SEARCH_INTENT_MAX_AGE_MS) {
+      window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+      return;
+    }
+
+    isResumingRef.current = true;
+    void (async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        isResumingRef.current = false;
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await generateItinerary(parsed.request, session.access_token);
+        const target = resolveGenerateNavigationTarget(response);
+        if (!target) {
+          throw new Error("Generation response is missing the next route target.");
+        }
+
+        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+        router.replace(`/trips?source=${target.kind}&id=${target.id}`);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
+        isResumingRef.current = false;
+        setLoading(false);
+      }
+    })();
+  }, [router]);
+
   // ── City helpers ───────────────────────────────────────────────────────────
   const addCity = (slug: string, displayName: string) => {
     if (!cities.some((c) => c.slug === slug)) {
@@ -95,32 +160,48 @@ export default function PlanPage() {
     if (!cities.length) return;
     setLoading(true);
     setError(null);
+
+    const requestPayload = buildGenerateRequest({
+      cities,
+      use_date_range: useDateRange,
+      start_date: startDate,
+      end_date: endDate,
+      num_days: numDays,
+      budget: budgetValue,
+      currency,
+      trip_style: tripStyle,
+      num_travelers: numTravelers,
+      locale: "en",
+    });
+
     try {
-      const response = await generateItinerary(
-        buildGenerateRequest({
-          cities,
-          use_date_range: useDateRange,
-          start_date: startDate,
-          end_date: endDate,
-          num_days: numDays,
-          budget: budgetValue,
-          currency,
-          trip_style: tripStyle,
-          num_travelers: numTravelers,
-          locale: "en",
-        })
-      );
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        if (typeof window !== "undefined") {
+          const intent: PendingSearchIntent = {
+            request: requestPayload,
+            createdAt: Date.now(),
+          };
+          window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, JSON.stringify(intent));
+        }
+
+        const query = new URLSearchParams({ redirectTo: "/plan?resumeGenerate=1" }).toString();
+        router.push(`/login?${query}`);
+        return;
+      }
+
+      const response = await generateItinerary(requestPayload, session.access_token);
 
       const target = resolveGenerateNavigationTarget(response);
       if (!target) {
         throw new Error("Generation response is missing the next route target.");
       }
 
-      router.push(
-        target.kind === "cached"
-          ? `/itinerary/${target.id}`
-          : `/itinerary/generating/${target.id}`
-      );
+      router.push(`/trips?source=${target.kind}&id=${target.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
     } finally {

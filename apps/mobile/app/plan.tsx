@@ -22,6 +22,8 @@ import {
   type TripStyleKey,
 } from "@travel/types";
 import { mobileTheme } from "../lib/theme";
+import { requireSupabase } from "../lib/supabase";
+import { savePendingSearchIntent } from "../lib/pending-search-intent";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -69,22 +71,36 @@ export default function PlanScreen() {
       Alert.alert("Missing cities", "Please add at least one city.");
       return;
     }
+
+    const requestPayload = buildGenerateRequest({
+      cities,
+      num_days: numDays,
+      budget,
+      currency,
+      trip_style: style,
+      num_travelers: travelers,
+      locale: "en",
+    });
+
     setLoading(true);
     try {
+      const {
+        data: { session },
+      } = await requireSupabase().auth.getSession();
+
+      if (!session?.access_token) {
+        await savePendingSearchIntent(requestPayload);
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch(`${API_URL}/api/itinerary/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          buildGenerateRequest({
-            cities,
-            num_days: numDays,
-            budget,
-            currency,
-            trip_style: style,
-            num_travelers: travelers,
-            locale: "en",
-          })
-        ),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(requestPayload),
       });
       if (!res.ok) throw new Error("Generation failed");
       const response = await res.json() as GenerateResponse;
@@ -95,7 +111,7 @@ export default function PlanScreen() {
       }
 
       router.replace({
-        pathname: "/itinerary/[id]",
+        pathname: "/trips",
         params: {
           id: target.id,
           source: target.kind,

@@ -20,7 +20,7 @@ function useAvatarUrl() {
 
 const NAV_LINKS = [
   { href: "/plan", label: "Home" },
-  { href: "/itinerary/comparison", label: "Explore" },
+  { href: "/trips", label: "Explore" },
   { href: "/trips", label: "Guides" },
 ];
 
