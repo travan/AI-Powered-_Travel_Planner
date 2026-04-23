@@ -2,11 +2,14 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  isMockAuthEnabled,
   isSupabaseConfigured,
   requireSupabase,
   SUPABASE_CONFIG_ERROR,
 } from "../../lib/supabase";
+import { getMockSavedTrips } from "../../lib/mock-auth";
 import { mobileTheme } from "../../lib/theme";
 
 type SavedTrip = { id: string; title: string; cities: string[]; days: number; date: string };
@@ -27,7 +30,15 @@ export default function SavedScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
-      const { data, error } = await supabase
+      if (isMockAuthEnabled) {
+        setTrips(await getMockSavedTrips());
+        setLoading(false);
+        return;
+      }
+
+      const databaseClient = supabase as unknown as SupabaseClient;
+
+      const { data, error } = await databaseClient
         .from("saved_trips")
         .select("id, itinerary_id, created_at, itineraries(overview)")
         .eq("user_id", user.id)

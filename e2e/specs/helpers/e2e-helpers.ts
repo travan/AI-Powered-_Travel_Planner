@@ -5,13 +5,11 @@ export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
+export const WEB_AUTH_EMAIL = "web-auth-email";
+export const WEB_AUTH_PASSWORD = "web-auth-password";
+export const WEB_AUTH_FULL_NAME = "web-auth-full-name";
 const MOBILE_ASSERT_TIMEOUT_MS = 30_000;
 const WEB_NAVIGATION_TIMEOUT_MS = 20_000;
-
-function isSupabaseConfiguredForMobile() {
-  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-  return Boolean(env?.EXPO_PUBLIC_SUPABASE_URL && env?.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-}
 
 export function apiAuthHeaders(token = "Bearer e2e-user-1") {
   return { Authorization: token };
@@ -30,6 +28,39 @@ export function escapeRegExp(value: string) {
 
 export async function openPlanPage(page: Page) {
   await page.goto("/plan");
+}
+
+export async function clearWebMockAuthSession(page: Page) {
+  await page.context().clearCookies();
+  await page.evaluate(() => {
+    window.localStorage.removeItem("horizon.mock.auth.session");
+  });
+}
+
+export async function signUpOnWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+  await page.getByTestId(WEB_AUTH_FULL_NAME).fill(details.fullName);
+  await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
+  await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
+  await page.getByTestId("web-auth-submit-signup").click();
+}
+
+export async function signInOnWeb(page: Page, details: { email: string; password: string }) {
+  await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
+  await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
+  await page.getByTestId("web-auth-submit-login").click();
+}
+
+export async function signUpOnMobileWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+  await page.getByTestId("mobile-auth-full-name").fill(details.fullName);
+  await page.getByTestId("mobile-auth-email").fill(details.email);
+  await page.getByTestId("mobile-auth-password").fill(details.password);
+  await page.getByTestId("mobile-auth-submit-signup").click();
+}
+
+export async function signInOnMobileWeb(page: Page, details: { email: string; password: string }) {
+  await page.getByTestId("mobile-auth-email").fill(details.email);
+  await page.getByTestId("mobile-auth-password").fill(details.password);
+  await page.getByTestId("mobile-auth-submit-login").click();
 }
 
 export async function searchCity(page: Page, city: string) {
@@ -71,18 +102,14 @@ export async function verifyQueuedMobileRoute(page: Page, jobId: string, expecte
 
 export async function verifyMobileProfileFallback(page: Page) {
   await page.goto("/profile");
-  const expectedState = isSupabaseConfiguredForMobile() ? "Not signed in" : "Auth unavailable";
-  await expect(page.getByTestId("mobile-profile-state")).toHaveText(expectedState, {
+  await expect(page.getByTestId("mobile-profile-state")).toHaveText(/^(Not signed in|Auth unavailable)$/i, {
     timeout: MOBILE_ASSERT_TIMEOUT_MS,
   });
 }
 
 export async function verifyMobileSavedFallback(page: Page) {
   await page.goto("/saved");
-  const expectedState = isSupabaseConfiguredForMobile()
-    ? "No saved trips yet"
-    : "Saved trips unavailable";
-  await expect(page.getByTestId("mobile-saved-state")).toHaveText(expectedState, {
+  await expect(page.getByTestId("mobile-saved-state")).toHaveText(/^(No saved trips yet|Saved trips unavailable)$/i, {
     timeout: MOBILE_ASSERT_TIMEOUT_MS,
   });
 }

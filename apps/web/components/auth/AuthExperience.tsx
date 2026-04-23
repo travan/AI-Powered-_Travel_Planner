@@ -30,6 +30,21 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
     return target;
   }, [searchParams]);
 
+  const authTabHref = useMemo(() => {
+    if (redirectTo === "/plan") {
+      return {
+        login: "/login",
+        signup: "/signup",
+      };
+    }
+
+    const query = new URLSearchParams({ redirectTo }).toString();
+    return {
+      login: `/login?${query}`,
+      signup: `/signup?${query}`,
+    };
+  }, [redirectTo]);
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,7 +65,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       const baseUrl = window.location.origin;
       const callbackPath = redirectTo === "/" ? "/plan" : redirectTo;
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${baseUrl}${callbackPath}`,
@@ -59,6 +74,11 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
 
       if (error) {
         setErrorMessage(error.message);
+        return;
+      }
+
+      if (data?.url && data.url.startsWith(baseUrl)) {
+        window.location.assign(data.url);
       }
     } catch {
       setErrorMessage(t("google_error"));
@@ -189,16 +209,18 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
           <div className="mx-auto flex h-full w-full max-w-md flex-col">
             <p className="mb-10 font-headline text-3xl font-extrabold tracking-tight text-primary md:hidden">{t("brand")}</p>
 
-            <div className="mb-10 flex w-fit rounded-full bg-surface-container-low p-1.5">
+            <div className="mb-10 flex w-fit rounded-full bg-surface-container-low p-1.5" data-testid="web-auth-tabs">
               <Link
-                href="/login"
+                href={authTabHref.login}
                 className={`rounded-full px-8 py-2 text-sm font-semibold transition ${isLogin ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}
+                data-testid="web-auth-tab-login"
               >
                 {t("tab_login")}
               </Link>
               <Link
-                href="/signup"
+                href={authTabHref.signup}
                 className={`rounded-full px-8 py-2 text-sm font-semibold transition ${!isLogin ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}
+                data-testid="web-auth-tab-signup"
               >
                 {t("tab_signup")}
               </Link>
@@ -213,6 +235,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
               type="button"
               disabled={loading}
               onClick={handleGoogleAuth}
+              data-testid={`web-auth-google-${mode}`}
               className="mb-6 flex w-full items-center justify-center gap-3 rounded-full bg-linear-to-r from-primary to-primary-container px-6 py-4 text-base font-bold text-on-primary shadow-[0_18px_32px_-16px_rgba(0,93,144,0.9)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <GoogleIcon />
@@ -225,7 +248,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
               <div className="h-px flex-1 bg-outline-variant/45" />
             </div>
 
-            <form className="space-y-5" onSubmit={handleEmailAuth}>
+            <form className="space-y-5" onSubmit={handleEmailAuth} data-testid={`web-auth-form-${mode}`}>
               {!isLogin && (
                 <label className="block space-y-1.5">
                   <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">{t("full_name")}</span>
@@ -237,6 +260,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                       value={fullName}
                       onChange={(event) => setFullName(event.target.value)}
                       placeholder={t("full_name_placeholder")}
+                      data-testid="web-auth-full-name"
                       className="w-full rounded-xl bg-surface-container-high py-4 pr-4 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                     />
                   </span>
@@ -253,6 +277,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder={t("email_placeholder")}
+                    data-testid="web-auth-email"
                     className="w-full rounded-xl bg-surface-container-high py-4 pr-4 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                   />
                 </span>
@@ -266,6 +291,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                       type="button"
                       disabled={loading}
                       onClick={handleForgotPassword}
+                      data-testid="web-auth-forgot-password"
                       className="text-primary normal-case tracking-normal transition hover:text-primary-container disabled:opacity-60"
                     >
                       {t("forgot")}
@@ -281,6 +307,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder={t("password_placeholder")}
+                    data-testid="web-auth-password"
                     className="w-full rounded-xl bg-surface-container-high py-4 pr-12 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                   />
                   <button
@@ -293,14 +320,15 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                 </span>
               </label>
 
-              {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">{errorMessage}</p>}
+              {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container" data-testid="web-auth-error">{errorMessage}</p>}
               {successMessage && (
-                <p className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant">{successMessage}</p>
+                <p className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant" data-testid="web-auth-success">{successMessage}</p>
               )}
 
               <button
                 type="submit"
                 disabled={loading}
+                data-testid={`web-auth-submit-${mode}`}
                 className="mt-2 w-full rounded-full bg-on-surface py-4 text-base font-bold text-surface transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 {loading ? t("loading") : isLogin ? t("submit_login") : t("submit_signup")}

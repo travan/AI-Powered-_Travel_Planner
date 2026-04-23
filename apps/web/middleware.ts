@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getMockUserFromCookieValue, MOCK_AUTH_COOKIE, MOCK_AUTH_ENABLED } from "./lib/supabase/mock-auth";
 
 type CookieToSet = {
   name: string;
@@ -8,6 +9,23 @@ type CookieToSet = {
 };
 
 export async function middleware(request: NextRequest) {
+  if (MOCK_AUTH_ENABLED) {
+    const protectedPaths = ["/dashboard", "/saved"];
+    const isProtected = protectedPaths.some((p) =>
+      request.nextUrl.pathname.startsWith(p)
+    );
+    const user = getMockUserFromCookieValue(request.cookies.get(MOCK_AUTH_COOKIE)?.value);
+
+    if (isProtected && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("redirectTo", request.nextUrl.pathname);
+      return NextResponse.redirect(url);
+    }
+
+    return NextResponse.next({ request });
+  }
+
   // In dev without real Supabase credentials, skip auth middleware gracefully
   const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"] ?? "";
   const supabaseKey = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"] ?? "";

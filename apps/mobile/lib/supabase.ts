@@ -1,9 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
+import { createMockSupabaseClient, isMockAuthEnabled } from "./mock-auth";
 
 const supabaseUrl = process.env["EXPO_PUBLIC_SUPABASE_URL"] ?? "";
 const supabaseAnonKey = process.env["EXPO_PUBLIC_SUPABASE_ANON_KEY"] ?? "";
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export { isMockAuthEnabled };
+export const isSupabaseConfigured = isMockAuthEnabled || Boolean(supabaseUrl && supabaseAnonKey);
 export const SUPABASE_CONFIG_ERROR =
   "Supabase is not configured for mobile. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.";
 
@@ -14,7 +16,9 @@ const ExpoSecureStoreAdapter = {
 };
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+  ? isMockAuthEnabled
+    ? createMockSupabaseClient()
+    : createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         storage: ExpoSecureStoreAdapter,
         autoRefreshToken: true,

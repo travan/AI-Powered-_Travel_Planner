@@ -167,6 +167,7 @@ export function AuthMobileExperience({ mode }: Props) {
                 value={fullName}
                 onChangeText={setFullName}
                 autoCapitalize="words"
+                testID="mobile-auth-full-name"
               />
             </>
           )}
@@ -181,6 +182,7 @@ export function AuthMobileExperience({ mode }: Props) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            testID="mobile-auth-email"
           />
 
           <Text style={styles.label}>PASSWORD</Text>
@@ -191,15 +193,16 @@ export function AuthMobileExperience({ mode }: Props) {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            testID="mobile-auth-password"
           />
 
           {mode === "login" && (
-            <Pressable style={styles.forgotWrap} onPress={onForgotPassword}>
+            <Pressable style={styles.forgotWrap} onPress={onForgotPassword} testID="mobile-auth-forgot-password">
               <Text style={styles.forgot}>Forgot password?</Text>
             </Pressable>
           )}
 
-          <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
+          <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting} testID={`mobile-auth-submit-${mode}`}>
             {submitting ? (
               <ActivityIndicator color={mobileTheme.colors.onPrimary} />
             ) : (
@@ -215,13 +218,14 @@ export function AuthMobileExperience({ mode }: Props) {
             <View style={styles.divider} />
           </View>
 
-          <Pressable style={styles.secondaryButton} onPress={onGoogle} disabled={submitting}>
+          <Pressable style={styles.secondaryButton} onPress={onGoogle} disabled={submitting} testID={`mobile-auth-google-${mode}`}>
             <Text style={styles.secondaryText}>Continue with Google</Text>
           </Pressable>
 
           <Pressable
             style={styles.toggleWrap}
             onPress={() => router.replace(mode === "signup" ? "/login" : "/signup")}
+            testID={`mobile-auth-toggle-${mode}`}
           >
             <Text style={styles.toggleText}>
               {mode === "signup" ? "Already have an account? " : "No account yet? "}

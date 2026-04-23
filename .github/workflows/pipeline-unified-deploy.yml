@@ -27,6 +27,47 @@ env:
   NODE_VERSION: "20"
 
 jobs:
+  auth_contracts:
+    name: Auth Contracts (E2E)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: development
+      AI_PROVIDER: mock
+      EXPO_ROUTER_APP_ROOT: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
+        run: pnpm test:e2e:install
+
+      - name: Run auth contract tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
+        run: pnpm test:e2e:auth
+
+      - name: Upload Playwright auth report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-auth
+          path: playwright-report/
+          retention-days: 14
+
   quality_and_tests:
     name: Quality and Tests
     runs-on: ubuntu-latest
@@ -69,6 +110,7 @@ jobs:
         env:
           NODE_ENV: development
           EXPO_ROUTER_APP_ROOT: app
+          SKIP_AUTH_CONTRACTS: "true"
         run: pnpm test:e2e
 
       - name: Upload Playwright report
@@ -82,7 +124,9 @@ jobs:
   build_unified:
     name: Build Unified Artifacts
     runs-on: ubuntu-latest
-    needs: quality_and_tests
+    needs:
+      - quality_and_tests
+      - auth_contracts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
