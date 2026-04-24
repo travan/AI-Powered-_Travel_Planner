@@ -1,4 +1,5 @@
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -8,13 +9,79 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { TRIP_STYLES, type TripStyleKey } from "@travel/types";
+import {
+  TRIP_STYLES,
+  buildGenerateRequest,
+  createManualCity,
+  type TripStyleKey,
+} from "@travel/types";
 import { mobileTheme } from "../../lib/theme";
+import { requireSupabase, SUPABASE_CONFIG_ERROR } from "../../lib/supabase";
+import { savePendingSearchIntent } from "../../lib/pending-search-intent";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [cityQuery, setCityQuery] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<TripStyleKey>("mid_range");
+
+  const handlePlanPress = async () => {
+    let sessionToken: string | null = null;
+
+    let supabase: ReturnType<typeof requireSupabase>;
+    try {
+      supabase = requireSupabase();
+    } catch {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      sessionToken = session?.access_token ?? null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      Alert.alert("Sign-in error", `Could not retrieve session: ${message}`);
+      return;
+    }
+
+    if (!sessionToken) {
+      const trimmedCityQuery = cityQuery.trim();
+      const cities = trimmedCityQuery
+        ? [createManualCity(trimmedCityQuery)]
+        : [];
+
+      try {
+        await savePendingSearchIntent(
+          buildGenerateRequest({
+            cities,
+            num_days: 5,
+            budget: undefined,
+            currency: "USD",
+            trip_style: selectedStyle,
+            num_travelers: 2,
+            locale: "en",
+          })
+        );
+      } catch (err) {
+        console.error("Failed to save pending search intent:", err);
+        Alert.alert("Something went wrong", "Could not save your search. Please try again.");
+        return;
+      }
+
+      router.push("/login");
+      return;
+    }
+
+    router.push({
+      pathname: "/plan",
+      params: {
+        initialCityQuery: cityQuery.trim(),
+        initialStyle: selectedStyle,
+      },
+    });
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -64,7 +131,9 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.planButton}
-          onPress={() => router.push("/plan")}
+          onPress={() => {
+            void handlePlanPress();
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.planButtonText}>Plan my trip →</Text>

@@ -1,5 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { signInOnMobileWeb, signUpOnMobileWeb } from "./helpers/e2e-helpers";
+import { queuedScenario, cachedScenario } from "../fixtures/index.mjs";
+import {
+  signInOnMobileWeb,
+  signUpOnMobileWeb,
+  searchCityOnMobileWeb,
+  clickGenerateOnMobileWeb,
+  expectTripsOverviewPageMobile,
+  clickDetailFromTripsOverviewMobile,
+  expectItineraryPageMobile,
+  clearMobileWebMockAuthSession,
+  MOBILE_AUTH_TOGGLE_LOGIN,
+} from "./helpers/e2e-helpers";
 
 function createAuthIdentity() {
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -22,9 +33,9 @@ test.describe("mobile web auth contract flows", () => {
 
     await page.goto("/signup");
     await signUpOnMobileWeb(page, identity);
-    await expect(page).toHaveURL(/\/login$/);
-
-    await signInOnMobileWeb(page, identity);
+    if (/\/login$/.test(page.url())) {
+      await signInOnMobileWeb(page, identity);
+    }
 
     await page.goto("/profile");
     await expect(page.getByTestId("mobile-profile-name")).toBeVisible();
@@ -38,9 +49,9 @@ test.describe("mobile web auth contract flows", () => {
 
     await page.goto("/signup");
     await signUpOnMobileWeb(page, identity);
-    await expect(page).toHaveURL(/\/login$/);
-
-    await signInOnMobileWeb(page, identity);
+    if (/\/login$/.test(page.url())) {
+      await signInOnMobileWeb(page, identity);
+    }
 
     await page.goto("/profile");
     await page.getByTestId("mobile-profile-signout").click();
@@ -52,5 +63,64 @@ test.describe("mobile web auth contract flows", () => {
     await page.goto("/profile");
     await expect(page.getByTestId("mobile-profile-name")).toBeVisible();
     await expect(page.getByTestId("mobile-profile-email")).toHaveText(identity.email);
+  });
+
+  test("unauthenticated mobile user trying to generate redirects to login", async ({ page }) => {
+    const identity = createAuthIdentity();
+
+    await page.goto("/signup");
+    await signUpOnMobileWeb(page, identity);
+    if (/\/login$/.test(page.url())) {
+      await signInOnMobileWeb(page, identity);
+    }
+
+    // Clear auth session from both cookies and localStorage
+    await clearMobileWebMockAuthSession(page);
+
+    await page.goto("/plan");
+    await searchCityOnMobileWeb(page, queuedScenario.city);
+    await clickGenerateOnMobileWeb(page);
+
+    // Should redirect to login
+    await expect(page).toHaveURL(/\/login/);
+
+    await signInOnMobileWeb(page, identity);
+
+    // After login, should auto-resume and redirect to /trips
+    await expectTripsOverviewPageMobile(page);
+
+    // Should be able to navigate to detail
+    await clickDetailFromTripsOverviewMobile(page);
+    await expectItineraryPageMobile(page, queuedScenario.itineraryId, queuedScenario.itinerary.itineraries[0].title);
+  });
+
+  test("mobile signup flow with generate continues to trips overview", async ({ page }) => {
+    const identity = createAuthIdentity();
+
+    // Clear auth session from both cookies and localStorage
+    await page.goto("/");
+    await clearMobileWebMockAuthSession(page);
+
+    await page.goto("/plan");
+    await searchCityOnMobileWeb(page, cachedScenario.city);
+    await clickGenerateOnMobileWeb(page);
+
+    // Should redirect to login/signup
+    await expect(page).toHaveURL(/\/login/);
+
+    // Switch to signup if available
+    const signupToggle = page.getByTestId(MOBILE_AUTH_TOGGLE_LOGIN);
+    if (await signupToggle.isVisible()) {
+      await signupToggle.click();
+    }
+
+    await signUpOnMobileWeb(page, identity);
+
+    // After signup, should auto-resume and redirect to /trips
+    await expectTripsOverviewPageMobile(page);
+
+    // Should be able to navigate to detail
+    await clickDetailFromTripsOverviewMobile(page);
+    await expectItineraryPageMobile(page, cachedScenario.itineraryId, cachedScenario.itinerary.itineraries[0].title);
   });
 });

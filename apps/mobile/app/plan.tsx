@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useState, useCallback } from "react";
 import { useCitySearch } from "@travel/hooks";
 import {
@@ -22,18 +23,26 @@ import {
   type TripStyleKey,
 } from "@travel/types";
 import { mobileTheme } from "../lib/theme";
+import { requireSupabase } from "../lib/supabase";
+import { savePendingSearchIntent } from "../lib/pending-search-intent";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function PlanScreen() {
   const router = useRouter();
+  const { initialCityQuery, initialStyle } = useLocalSearchParams<{
+    initialCityQuery?: string;
+    initialStyle?: string;
+  }>();
 
-  const [cityQuery, setCityQuery] = useState("");
+  const [cityQuery, setCityQuery] = useState(initialCityQuery ?? "");
   const [cities, setCities] = useState<SelectedCity[]>([]);
   const [numDays, setNumDays] = useState("5");
   const [budget, setBudget] = useState("");
   const currency = "USD";
-  const [style, setStyle] = useState<TripStyleKey>("mid_range");
+  const [style, setStyle] = useState<TripStyleKey>(
+    (initialStyle as TripStyleKey | undefined) ?? "mid_range"
+  );
   const [travelers, setTravelers] = useState("2");
   const [loading, setLoading] = useState(false);
 
@@ -69,22 +78,36 @@ export default function PlanScreen() {
       Alert.alert("Missing cities", "Please add at least one city.");
       return;
     }
+
+    const requestPayload = buildGenerateRequest({
+      cities,
+      num_days: numDays,
+      budget,
+      currency,
+      trip_style: style,
+      num_travelers: travelers,
+      locale: "en",
+    });
+
     setLoading(true);
     try {
+      const {
+        data: { session },
+      } = await requireSupabase().auth.getSession();
+
+      if (!session?.access_token) {
+        await savePendingSearchIntent(requestPayload);
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch(`${API_URL}/api/itinerary/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          buildGenerateRequest({
-            cities,
-            num_days: numDays,
-            budget,
-            currency,
-            trip_style: style,
-            num_travelers: travelers,
-            locale: "en",
-          })
-        ),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(requestPayload),
       });
       if (!res.ok) throw new Error("Generation failed");
       const response = await res.json() as GenerateResponse;
@@ -95,7 +118,7 @@ export default function PlanScreen() {
       }
 
       router.replace({
-        pathname: "/itinerary/[id]",
+        pathname: "/trips",
         params: {
           id: target.id,
           source: target.kind,

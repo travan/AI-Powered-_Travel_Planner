@@ -58,8 +58,9 @@ export async function savePromptHistory(params: {
   itineraryId?: string;
 }): Promise<void> {
   const { userId, cacheKey, cities, cityNames, input } = params;
-  // Anonymous sessions are stored under "anonymous" — still useful for cache-hit analysis
-  const storedUserId = userId ?? "anonymous";
+  if (!userId) {
+    return;
+  }
 
   const db = await getDb();
 
@@ -67,10 +68,10 @@ export async function savePromptHistory(params: {
   const expiresAt = new Date(Date.now() + PROMPT_HISTORY_TTL_DAYS * 24 * 60 * 60 * 1000);
 
   await db.collection("user_prompt_history").updateOne(
-    { user_id: storedUserId, cache_key: cacheKey },
+    { user_id: userId, cache_key: cacheKey },
     {
       $set: {
-        user_id: storedUserId,
+        user_id: userId,
         cache_key: cacheKey,
         cities,
         city_names: cityNames,

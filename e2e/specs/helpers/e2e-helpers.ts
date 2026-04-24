@@ -5,9 +5,13 @@ export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
+export const WEB_TRIPS_OVERVIEW_CARD = "web-trips-overview-card";
+export const WEB_TRIPS_DETAIL_LINK = "web-trips-detail-link";
 export const WEB_AUTH_EMAIL = "web-auth-email";
 export const WEB_AUTH_PASSWORD = "web-auth-password";
 export const WEB_AUTH_FULL_NAME = "web-auth-full-name";
+export const MOBILE_AUTH_TOGGLE_LOGIN = "mobile-auth-toggle-login";
+export const MOBILE_AUTH_TOGGLE_SIGNUP = "mobile-auth-toggle-signup";
 const MOBILE_ASSERT_TIMEOUT_MS = 30_000;
 const WEB_NAVIGATION_TIMEOUT_MS = 20_000;
 
@@ -37,6 +41,50 @@ export async function clearWebMockAuthSession(page: Page) {
   });
 }
 
+export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-user") {
+  await page.evaluate((uid) => {
+    const session = {
+      access_token: `mock-access-mock-${uid}`,
+      refresh_token: `mock-refresh-mock-${uid}`,
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: {
+        id: `mock-${uid}`,
+        email: `${uid}@test.com`,
+        user_metadata: {},
+      },
+    };
+    window.localStorage.setItem("horizon.mock.auth.session", JSON.stringify(session));
+  }, userId);
+}
+
+export async function clearMobileWebMockAuthSession(page: Page) {
+  await page.context().clearCookies();
+  await page.evaluate(() => {
+    window.localStorage.removeItem("horizon.mobile.mock.session");
+    window.localStorage.removeItem("horizon.mobile.search.intent");
+  });
+}
+
+export async function injectMobileMockAuthSession(page: Page, userId = "e2e-trips-user") {
+  await page.evaluate((uid) => {
+    const session = {
+      access_token: `mock-mobile-access-mock-${uid}`,
+      refresh_token: `mock-refresh-mock-${uid}`,
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: {
+        id: `mock-${uid}`,
+        email: `${uid}@test.com`,
+        user_metadata: {},
+      },
+    };
+    window.localStorage.setItem("horizon.mobile.mock.session", JSON.stringify(session));
+  }, userId);
+}
+
 export async function signUpOnWeb(page: Page, details: { fullName: string; email: string; password: string }) {
   await page.getByTestId(WEB_AUTH_FULL_NAME).fill(details.fullName);
   await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
@@ -61,6 +109,29 @@ export async function signInOnMobileWeb(page: Page, details: { email: string; pa
   await page.getByTestId("mobile-auth-email").fill(details.email);
   await page.getByTestId("mobile-auth-password").fill(details.password);
   await page.getByTestId("mobile-auth-submit-login").click();
+}
+
+export async function searchCityOnMobileWeb(page: Page, city: string) {
+  const input = page.getByTestId("mobile-plan-city-input");
+  await input.fill(city);
+  // Click the + button instead of pressing Enter to avoid stale-closure issues
+  // (onSubmitEditing captures cityQuery before the fill re-render)
+  await page.getByTestId("mobile-plan-add-city").click();
+}
+
+export async function clickGenerateOnMobileWeb(page: Page) {
+  await page.getByTestId("mobile-plan-generate").click();
+}
+
+export async function expectTripsOverviewPageMobile(page: Page) {
+  await expect(page).toHaveURL(/\/trips/, { timeout: WEB_NAVIGATION_TIMEOUT_MS });
+  await expect(page.getByTestId("mobile-trips-overview-card")).toBeVisible({
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
+}
+
+export async function clickDetailFromTripsOverviewMobile(page: Page) {
+  await page.getByTestId("mobile-trips-detail-link").first().click();
 }
 
 export async function searchCity(page: Page, city: string) {
@@ -91,6 +162,33 @@ export async function expectItineraryPage(page: Page, itineraryId: string, expec
     timeout: WEB_NAVIGATION_TIMEOUT_MS,
   });
   await expect(page.getByTestId(WEB_ITINERARY_TITLE)).toHaveText(expectedTitle);
+}
+
+export async function expectItineraryPageMobile(page: Page, itineraryId: string, expectedTitle: string) {
+  const escapedItineraryId = escapeRegExp(itineraryId);
+  await expect(page).toHaveURL(new RegExp(`/itinerary/${escapedItineraryId}`), {
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
+  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(expectedTitle);
+}
+
+export async function expectTripsOverviewPage(page: Page) {
+  await expect(page).toHaveURL(/\/trips/, { timeout: WEB_NAVIGATION_TIMEOUT_MS });
+  await expect(page.getByTestId(WEB_TRIPS_OVERVIEW_CARD)).toBeVisible({
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
+}
+
+export async function clickDetailFromTripsOverview(page: Page) {
+  await page.getByTestId(WEB_TRIPS_DETAIL_LINK).first().click();
+}
+
+export async function expectTripsWithCachedResult(page: Page, itineraryId: string) {
+  const escapedItineraryId = escapeRegExp(itineraryId);
+  await expect(page).toHaveURL(
+    new RegExp(`/trips.*source=cached.*id=${escapedItineraryId}`),
+    { timeout: WEB_NAVIGATION_TIMEOUT_MS }
+  );
 }
 
 export async function verifyQueuedMobileRoute(page: Page, jobId: string, expectedTitle: string) {
