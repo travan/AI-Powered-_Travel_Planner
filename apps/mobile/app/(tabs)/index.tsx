@@ -26,13 +26,23 @@ export default function HomeScreen() {
 
   const handlePlanPress = async () => {
     let sessionToken: string | null = null;
+
+    let supabase: ReturnType<typeof requireSupabase>;
+    try {
+      supabase = requireSupabase();
+    } catch {
+      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+      return;
+    }
+
     try {
       const {
         data: { session },
-      } = await requireSupabase().auth.getSession();
+      } = await supabase.auth.getSession();
       sessionToken = session?.access_token ?? null;
-    } catch {
-      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      Alert.alert("Sign-in error", `Could not retrieve session: ${message}`);
       return;
     }
 
