@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useState, useCallback } from "react";
 import { useCitySearch } from "@travel/hooks";
 import {
@@ -29,13 +30,19 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function PlanScreen() {
   const router = useRouter();
+  const { initialCityQuery, initialStyle } = useLocalSearchParams<{
+    initialCityQuery?: string;
+    initialStyle?: string;
+  }>();
 
-  const [cityQuery, setCityQuery] = useState("");
+  const [cityQuery, setCityQuery] = useState(initialCityQuery ?? "");
   const [cities, setCities] = useState<SelectedCity[]>([]);
   const [numDays, setNumDays] = useState("5");
   const [budget, setBudget] = useState("");
   const currency = "USD";
-  const [style, setStyle] = useState<TripStyleKey>("mid_range");
+  const [style, setStyle] = useState<TripStyleKey>(
+    (initialStyle as TripStyleKey | undefined) ?? "mid_range"
+  );
   const [travelers, setTravelers] = useState("2");
   const [loading, setLoading] = useState(false);
 

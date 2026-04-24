@@ -139,6 +139,8 @@ type JwtDecoderInstance = {
   verify: (token: string) => unknown;
 };
 
+const MOCK_TOKENS_ENABLED = process.env.TEST_ENABLE_MOCK_TOKENS === "true";
+
 function resolveUserIdFromAuthorizationHeader(
   jwt: JwtDecoderInstance,
   header: string
@@ -146,14 +148,16 @@ function resolveUserIdFromAuthorizationHeader(
   const token = header.replace("Bearer ", "").trim();
   if (!token) return null;
 
-  if (token.startsWith("mock-access-")) {
-    const mockUserId = token.slice("mock-access-".length);
-    return mockUserId || null;
-  }
+  if (MOCK_TOKENS_ENABLED) {
+    if (token.startsWith("mock-access-")) {
+      const mockUserId = token.slice("mock-access-".length);
+      return mockUserId || null;
+    }
 
-  if (token.startsWith("mock-mobile-access-")) {
-    const mockMobileUserId = token.slice("mock-mobile-access-".length);
-    return mockMobileUserId || null;
+    if (token.startsWith("mock-mobile-access-")) {
+      const mockMobileUserId = token.slice("mock-mobile-access-".length);
+      return mockMobileUserId || null;
+    }
   }
 
   try {

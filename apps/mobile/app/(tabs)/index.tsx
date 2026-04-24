@@ -42,23 +42,35 @@ export default function HomeScreen() {
         ? [createManualCity(trimmedCityQuery)]
         : [];
 
-      await savePendingSearchIntent(
-        buildGenerateRequest({
-          cities,
-          num_days: 5,
-          budget: undefined,
-          currency: "USD",
-          trip_style: selectedStyle,
-          num_travelers: 2,
-          locale: "en",
-        })
-      );
+      try {
+        await savePendingSearchIntent(
+          buildGenerateRequest({
+            cities,
+            num_days: 5,
+            budget: undefined,
+            currency: "USD",
+            trip_style: selectedStyle,
+            num_travelers: 2,
+            locale: "en",
+          })
+        );
+      } catch (err) {
+        console.error("Failed to save pending search intent:", err);
+        Alert.alert("Something went wrong", "Could not save your search. Please try again.");
+        return;
+      }
 
       router.push("/login");
       return;
     }
 
-    router.push("/plan");
+    router.push({
+      pathname: "/plan",
+      params: {
+        initialCityQuery: cityQuery.trim(),
+        initialStyle: selectedStyle,
+      },
+    });
   };
 
   return (
