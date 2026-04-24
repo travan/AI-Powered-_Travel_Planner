@@ -41,6 +41,52 @@ export async function clearWebMockAuthSession(page: Page) {
   });
 }
 
+/**
+ * Simulates a full Google OAuth flow in mock-auth mode.
+ *
+ * In mock mode, `signInWithOAuth` synchronously:
+ *   1. Creates the user and stores the session in localStorage
+ *   2. Returns `{ data: { url: callbackUrl } }`
+ * The component then calls `window.location.assign(callbackUrl)`.
+ *
+ * Because the Next.js callback route requires a real `code` param, we intercept
+ * the navigation with `page.route()` and redirect to the landing path. The session
+ * is already in localStorage from step 1, so no additional injection is needed.
+ *
+ * NOTE: Do NOT call `page.evaluate` before the click to pre-inject the session —
+ * it would cause the auth page to navigate away before the button can be clicked.
+ *
+ * @param page        Playwright Page
+ * @param mode        "login" | "signup" — matches the data-testid of the Google button
+ * @param landingPath The path the user should land on after OAuth (default "/plan")
+ */
+export async function triggerGoogleOAuthOnWeb(
+  page: Page,
+  mode: "login" | "signup" = "login",
+  landingPath = "/plan",
+) {
+  const baseUrl = new URL(page.url()).origin;
+
+  // Intercept the /auth/callback navigation triggered by mock signInWithOAuth.
+  // The mock already sets the session in localStorage before window.location.assign
+  // fires, so we just need to redirect to the landing path.
+  await page.route("**/auth/callback**", async (route) => {
+    const url = new URL(route.request().url());
+    const next = url.searchParams.get("next") ?? landingPath;
+    const target = next.startsWith("/") && !next.startsWith("//") ? next : landingPath;
+    await route.fulfill({
+      status: 302,
+      headers: { Location: `${baseUrl}${target}` },
+    });
+  });
+
+  await page.getByTestId(`web-auth-google-${mode}`).click();
+
+  // Clean up the route. Use unrouteAll with ignoreErrors because the page may
+  // have already navigated away by the time this line executes.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+}
+
 export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-user") {
   await page.evaluate((uid) => {
     const session = {

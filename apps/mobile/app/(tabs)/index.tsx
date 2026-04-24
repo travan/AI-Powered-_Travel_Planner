@@ -48,9 +48,13 @@ export default function HomeScreen() {
 
     if (!sessionToken) {
       const trimmedCityQuery = cityQuery.trim();
-      const cities = trimmedCityQuery
-        ? [createManualCity(trimmedCityQuery)]
-        : [];
+
+      if (!trimmedCityQuery) {
+        router.push("/login");
+        return;
+      }
+
+      const cities = [createManualCity(trimmedCityQuery)];
 
       try {
         await savePendingSearchIntent(

@@ -172,12 +172,24 @@ export default function PlanPage() {
 
   // ── Generate ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!cities.length) return;
+    const trimmed = cityInput.trim();
+    let effectiveCities = cities;
+
+    if (trimmed && !cities.some((c) => c.slug === trimmed.toLowerCase().replace(/\s+/g, "-"))) {
+      const match = suggestions[0];
+      const newCity = match ? createCityFromSuggestion(match) : createManualCity(trimmed);
+      effectiveCities = [...cities, { slug: newCity.slug, name: newCity.name }];
+      setCities(effectiveCities);
+      setCityInput("");
+      setShowSuggestions(false);
+    }
+
+    if (!effectiveCities.length) return;
     setLoading(true);
     setError(null);
 
     const requestPayload = buildGenerateRequest({
-      cities,
+      cities: effectiveCities,
       use_date_range: useDateRange,
       start_date: startDate,
       end_date: endDate,
@@ -399,7 +411,7 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
-              <button onClick={handleGenerate} disabled={loading || cities.length === 0} data-testid="web-plan-generate"
+              <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary py-5 rounded-full font-headline font-extrabold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                 {loading ? (
                   <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -615,7 +627,7 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
-              <button onClick={handleGenerate} disabled={loading || cities.length === 0} data-testid="web-plan-generate"
+              <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary font-bold py-5 rounded-full text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed font-headline">
                 {loading ? (
                   <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
