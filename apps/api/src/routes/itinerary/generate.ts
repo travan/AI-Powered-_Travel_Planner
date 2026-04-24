@@ -136,6 +136,7 @@ export async function generateRoutes(fastify: FastifyInstance) {
 
 type JwtDecoderInstance = {
   decode: (token: string) => unknown;
+  verify: (token: string) => unknown;
 };
 
 function resolveUserIdFromAuthorizationHeader(
@@ -156,7 +157,7 @@ function resolveUserIdFromAuthorizationHeader(
   }
 
   try {
-    const payload = jwt.decode(token) as { sub?: string } | null;
+    const payload = jwt.verify(token) as { sub?: string } | null;
     return payload?.sub ?? null;
   } catch {
     return null;

@@ -25,6 +25,17 @@ type PendingSearchIntent = {
   createdAt: number;
 };
 
+function shouldRestorePendingSearchIntent(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message === "Generation response is missing the next route target.") return true;
+
+  const statusMatch = error.message.match(/Generate failed: (\d+)/);
+  if (!statusMatch) return false;
+
+  const status = Number(statusMatch[1]);
+  return status === 400 || status === 422;
+}
+
 // Fallback gradient backgrounds for cities without a cover_image
 const GRADIENT_FALLBACKS = [
   "from-primary/70 to-secondary/60",
@@ -112,17 +123,21 @@ export default function PlanPage() {
 
       setLoading(true);
       setError(null);
+      const serializedIntent = JSON.stringify(parsed);
 
       try {
+        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+
         const response = await generateItinerary(parsed.request, session.access_token);
         const target = resolveGenerateNavigationTarget(response);
         if (!target) {
           throw new Error("Generation response is missing the next route target.");
         }
-
-        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
         router.replace(`/trips?source=${target.kind}&id=${target.id}`);
       } catch (e: unknown) {
+        if (shouldRestorePendingSearchIntent(e)) {
+          window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, serializedIntent);
+        }
         setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
         isResumingRef.current = false;
         setLoading(false);

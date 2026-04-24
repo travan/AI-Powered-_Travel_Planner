@@ -37,20 +37,22 @@ export default function HomeScreen() {
     }
 
     if (!sessionToken) {
-      if (cityQuery.trim()) {
-        const city = createManualCity(cityQuery.trim());
-        await savePendingSearchIntent(
-          buildGenerateRequest({
-            cities: [city],
-            num_days: 5,
-            budget: undefined,
-            currency: "USD",
-            trip_style: selectedStyle,
-            num_travelers: 2,
-            locale: "en",
-          })
-        );
-      }
+      const trimmedCityQuery = cityQuery.trim();
+      const cities = trimmedCityQuery
+        ? [createManualCity(trimmedCityQuery)]
+        : [];
+
+      await savePendingSearchIntent(
+        buildGenerateRequest({
+          cities,
+          num_days: 5,
+          budget: undefined,
+          currency: "USD",
+          trip_style: selectedStyle,
+          num_travelers: 2,
+          locale: "en",
+        })
+      );
 
       router.push("/login");
       return;

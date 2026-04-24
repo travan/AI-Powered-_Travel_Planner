@@ -12,7 +12,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const redirectTo =
-    params.redirectTo && params.redirectTo.startsWith("/")
+    params.redirectTo && params.redirectTo.startsWith("/") && !params.redirectTo.startsWith("//")
       ? params.redirectTo
       : "/plan";
 

@@ -15,6 +15,7 @@ import { mobileTheme } from "../lib/theme";
 import {
   clearPendingSearchIntent,
   getPendingSearchIntentResult,
+  savePendingSearchIntent,
 } from "../lib/pending-search-intent";
 import { requireSupabase } from "../lib/supabase";
 
@@ -50,6 +51,12 @@ export default function TripsScreen() {
     let cancelled = false;
 
     async function run() {
+      setError(null);
+      setItinerary(null);
+      setItineraryId(null);
+      setQueuedJobId(null);
+      pollCountRef.current = 0;
+
       if (resume === "1") {
         setState("generating");
         const {
@@ -74,13 +81,20 @@ export default function TripsScreen() {
           return;
         }
 
+        const pendingRequest = pendingIntent.request;
+        await clearPendingSearchIntent();
+
+        const restorePendingRequest = async () => {
+          await savePendingSearchIntent(pendingRequest);
+        };
+
         const response = await fetch(`${API_URL}/api/itinerary/generate`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify(pendingIntent.request),
+          body: JSON.stringify(pendingRequest),
         });
 
         if (!response.ok) {
@@ -91,16 +105,20 @@ export default function TripsScreen() {
             router.replace("/login");
             return;
           }
+
+          if (response.status === 400 || response.status === 422) {
+            await restorePendingRequest();
+          }
+
           throw new Error("Unable to resume generation");
         }
 
         const payload = await response.json() as GenerateResponse;
         const target = resolveGenerateNavigationTarget(payload);
         if (!target) {
+          await restorePendingRequest();
           throw new Error("Generation response is missing the next route target.");
         }
-
-        await clearPendingSearchIntent();
 
         if (cancelled) return;
 

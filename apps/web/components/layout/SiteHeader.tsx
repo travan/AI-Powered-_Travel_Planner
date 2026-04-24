@@ -21,7 +21,7 @@ function useAvatarUrl() {
 const NAV_LINKS = [
   { href: "/plan", label: "Home" },
   { href: "/trips", label: "Explore" },
-  { href: "/trips", label: "Guides" },
+  { href: "/guides", label: "Guides" },
 ];
 
 export function SiteHeader() {

@@ -72,12 +72,13 @@ export default defineConfig({
     {
       name: "web-desktop",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts"]
+        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.nav.spec.ts"]
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
             "**/web.share-save.contract.spec.ts",
             "**/web.trips.spec.ts",
+            "**/web.nav.spec.ts",
           ],
       use: {
         baseURL: "http://127.0.0.1:3000",

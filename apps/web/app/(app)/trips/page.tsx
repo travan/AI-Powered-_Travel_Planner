@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { Itinerary, SSEEventType } from "@travel/types";
@@ -21,6 +21,7 @@ export default function TripsPage() {
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [itineraryId, setItineraryId] = useState<string | null>(null);
   const [steps, setSteps] = useState<SSEEventType[]>([]);
+  const previousContextRef = useRef<string | null>(null);
 
   const isQueued = source === "queued" && Boolean(id);
 
@@ -51,6 +52,15 @@ export default function TripsPage() {
   });
 
   useEffect(() => {
+    const contextKey = `${source ?? ""}:${id ?? ""}`;
+    if (previousContextRef.current !== contextKey) {
+      setItinerary(null);
+      setSteps([]);
+      setItineraryId(null);
+      setError(null);
+      previousContextRef.current = contextKey;
+    }
+
     const targetId = source === "cached" ? id : itineraryId;
 
     if (!targetId) {

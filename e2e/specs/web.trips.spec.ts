@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { queuedScenario, cachedScenario } from "../fixtures/index.mjs";
 import {
   expectTripsOverviewPage,
+  expectTripsWithCachedResult,
   clickDetailFromTripsOverview,
   expectItineraryPage,
   searchCity,
@@ -34,7 +35,8 @@ test.describe("web /trips results overview route", () => {
     await searchCity(page, cachedScenario.city);
     await clickGenerate(page);
 
-    // Should redirect directly to /trips
+    // Should redirect via cached path to /trips
+    await expectTripsWithCachedResult(page, cachedScenario.itineraryId);
     await expectTripsOverviewPage(page);
   });
 
