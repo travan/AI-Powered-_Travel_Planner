@@ -63,12 +63,13 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
     try {
       const supabase = createClient();
       const baseUrl = window.location.origin;
-      const callbackPath = redirectTo === "/" ? "/plan" : redirectTo;
+      const finalPath = redirectTo === "/" ? "/plan" : redirectTo;
+      const callbackUrl = `${baseUrl}/auth/callback?next=${encodeURIComponent(finalPath)}`;
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${baseUrl}${callbackPath}`,
+          redirectTo: callbackUrl,
         },
       });
 
@@ -77,7 +78,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
         return;
       }
 
-      if (data?.url && data.url.startsWith(baseUrl)) {
+      if (data?.url) {
         window.location.assign(data.url);
       }
     } catch {

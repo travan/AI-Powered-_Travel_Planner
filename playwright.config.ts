@@ -76,6 +76,7 @@ export default defineConfig({
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
+            "**/web.auth.oauth.spec.ts",
             "**/web.share-save.contract.spec.ts",
             "**/web.trips.spec.ts",
             "**/web.nav.spec.ts",
