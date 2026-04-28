@@ -6,11 +6,18 @@ import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
+import { normalizeSupabaseAuthError } from "@travel/types";
 
 type AuthMode = "login" | "signup";
 
 type AuthExperienceProps = {
   mode: AuthMode;
+};
+
+type LikeAuthError = {
+  message?: string;
+  status?: number;
+  code?: string;
 };
 
 const HERO_BACKGROUND_IMAGE =
@@ -55,6 +62,11 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
 
   const isLogin = mode === "login";
 
+  function setNormalizedAuthError(error: unknown) {
+    const normalized = normalizeSupabaseAuthError(error as LikeAuthError);
+    setErrorMessage(t(normalized.i18nKey));
+  }
+
   async function handleGoogleAuth() {
     setLoading(true);
     setErrorMessage(null);
@@ -74,15 +86,15 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
         return;
       }
 
       if (data?.url) {
         window.location.assign(data.url);
       }
-    } catch {
-      setErrorMessage(t("google_error"));
+    } catch (error) {
+      setNormalizedAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -104,7 +116,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
         });
 
         if (error) {
-          setErrorMessage(error.message);
+          setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
           return;
         }
 
@@ -125,7 +137,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
         return;
       }
 
@@ -135,9 +147,11 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
         return;
       }
 
-      setSuccessMessage(t("signup_success"));
-    } catch {
-      setErrorMessage(t("error_generic"));
+      // No session means email confirmation is required
+      const params = new URLSearchParams({ email });
+      router.replace(`/verify-email?${params.toString()}`);
+    } catch (error) {
+      setNormalizedAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -161,13 +175,13 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
         return;
       }
 
       setSuccessMessage(t("forgot_sent"));
-    } catch {
-      setErrorMessage(t("error_generic"));
+    } catch (error) {
+      setNormalizedAuthError(error);
     } finally {
       setLoading(false);
     }

@@ -1,12 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
+import {
+  type SupabaseCookieToSet,
+  resolveSupabasePublicConfig,
+  WEB_SUPABASE_PUBLIC_ENV_SPEC,
+} from "@travel/types";
 import { cookies } from "next/headers";
 import { getMockUserFromCookieValue, MOCK_AUTH_COOKIE, MOCK_AUTH_ENABLED } from "./mock-auth";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options: Record<string, unknown>;
-};
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -26,15 +25,20 @@ export async function createClient() {
     };
   }
 
+  const resolved = resolveSupabasePublicConfig(process.env, WEB_SUPABASE_PUBLIC_ENV_SPEC);
+  if (!resolved.ok || !resolved.config) {
+    throw new Error(resolved.errorMessage ?? "Supabase configuration is invalid.");
+  }
+
   return createServerClient(
-    process.env["NEXT_PUBLIC_SUPABASE_URL"]!,
-    process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"]!,
+    resolved.config.url,
+    resolved.config.key,
     {
       cookies: {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet: CookieToSet[]) {
+        setAll(cookiesToSet: SupabaseCookieToSet[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options as Parameters<typeof cookieStore.set>[2]);
           });

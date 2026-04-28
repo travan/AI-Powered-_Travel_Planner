@@ -6,6 +6,18 @@ export interface SelectedCity {
   name: string;
 }
 
+export interface PlannerFormState {
+  cities: SelectedCity[];
+  use_date_range: boolean;
+  num_days: number;
+  start_date: string;
+  end_date: string;
+  budget: string;
+  currency: string;
+  trip_style: string;
+  traveler_count: number;
+}
+
 interface BuildGenerateRequestInput {
   cities: SelectedCity[];
   use_date_range?: boolean;

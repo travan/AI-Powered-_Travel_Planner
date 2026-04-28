@@ -187,17 +187,24 @@ pnpm test:e2e
 # E2E tests for specific platforms
 pnpm test:e2e:web     # Web desktop
 pnpm test:e2e:mobile  # Mobile web
-pnpm test:e2e:auth    # Auth contracts (web + mobile-web)
+pnpm test:e2e:auth    # Auth contracts (flow mode + error-http mode)
+pnpm test:e2e:auth:flow
+pnpm test:e2e:auth:error-http
 
 # Auth-focused E2E contracts
 pnpm exec playwright test e2e/specs/web.auth.contract.spec.ts --project=web-desktop
 pnpm exec playwright test e2e/specs/mobile-web.auth.contract.spec.ts --project=mobile-web
+NEXT_PUBLIC_E2E_FORCE_REAL_AUTH_CLIENT=true pnpm exec playwright test e2e/specs/web.auth.error.contract.spec.ts --project=web-desktop
 ```
 
 ### Auth Test Modes (Playwright)
 
 - Default mode is mock auth (fast and deterministic) for both web and mobile-web projects.
 - This mode validates full login/signup UI flows, protected route redirects, and post-auth navigation without external auth dependencies.
+- Auth contract suite is split into two explicit modes:
+   - `pnpm test:e2e:auth:flow`: mock mode for web/mobile auth flow contracts.
+   - `pnpm test:e2e:auth:error-http`: real HTTP path mode for web error-normalization intercept tests.
+- `pnpm test:e2e:auth` runs both modes sequentially.
 - To force Supabase auth mode in Playwright, override both flags:
 
 ```bash
@@ -256,7 +263,9 @@ We welcome contributions! Please follow these steps:
 | `pnpm test` | Run unit tests |
 | `pnpm test:coverage` | Run unit tests with coverage |
 | `pnpm test:e2e` | Run end-to-end tests |
-| `pnpm test:e2e:auth` | Run auth contract E2E tests (web + mobile-web) |
+| `pnpm test:e2e:auth:flow` | Run auth flow contracts in mock mode (web + mobile-web) |
+| `pnpm test:e2e:auth:error-http` | Run web auth error-normalization contracts via HTTP intercept mode |
+| `pnpm test:e2e:auth` | Run both auth contract modes |
 | `pnpm supabase:seed-demo` | Seed demo data |
 | `pnpm supabase:query-demo` | Query demo data |
 

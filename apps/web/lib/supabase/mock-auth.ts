@@ -1,78 +1,11 @@
-type MockUser = {
-  id: string;
-  email: string;
-  user_metadata: Record<string, unknown>;
-};
-
-type MockSession = {
-  access_token: string;
-  refresh_token: string;
-  token_type: "bearer";
-  expires_in: number;
-  expires_at: number;
-  user: MockUser;
-};
-
-type MockAuthChangeEvent = "INITIAL_SESSION" | "SIGNED_IN" | "SIGNED_OUT" | "PASSWORD_RECOVERY" | "USER_UPDATED";
-
-type MockAuthResponse = {
-  data: {
-    user: MockUser | null;
-    session: MockSession | null;
-  };
-  error: Error | null;
-};
-
-type MockSessionResponse = {
-  data: {
-    session: MockSession | null;
-  };
-  error: Error | null;
-};
-
-type MockUserResponse = {
-  data: {
-    user: MockUser | null;
-  };
-  error: Error | null;
-};
-
-type MockSubscription = {
-  unsubscribe: () => void;
-};
-
-type MockAuthClient = {
-  auth: {
-    getSession: () => Promise<MockSessionResponse>;
-    getUser: () => Promise<MockUserResponse>;
-    signUp: (credentials: {
-      email: string;
-      password: string;
-      options?: { data?: Record<string, unknown> };
-    }) => Promise<MockAuthResponse>;
-    signInWithPassword: (credentials: {
-      email: string;
-      password: string;
-    }) => Promise<MockAuthResponse>;
-    signInWithOAuth: (credentials: {
-      provider: string;
-      options?: { redirectTo?: string };
-    }) => Promise<{ data: { provider: string; url: string | null }; error: Error | null }>;
-    resetPasswordForEmail: (_email: string, _options?: { redirectTo?: string }) => Promise<{ data: object; error: Error | null }>;
-    updateUser: (attributes: { password?: string; data?: Record<string, unknown> }) => Promise<MockUserResponse>;
-    signOut: () => Promise<{ error: Error | null }>;
-    onAuthStateChange: (callback: (event: MockAuthChangeEvent, session: MockSession | null) => void) => {
-      data: { subscription: MockSubscription };
-    };
-  };
-};
-
-type StoredMockUser = {
-  id: string;
-  email: string;
-  password: string;
-  user_metadata: Record<string, unknown>;
-};
+import type {
+  MockAuthChangeEvent,
+  MockAuthClient,
+  MockAuthResponse,
+  MockSession,
+  MockUser,
+  StoredMockUser,
+} from "@travel/types";
 
 const USERS_STORAGE_KEY = "horizon.mock.auth.users";
 const SESSION_STORAGE_KEY = "horizon.mock.auth.session";
@@ -211,14 +144,31 @@ function successResponse(session: MockSession | null): MockAuthResponse {
   };
 }
 
-function errorResponse(message: string): MockAuthResponse {
+function errorResponse(message: string, code?: string): MockAuthResponse {
+  const err = new Error(message) as Error & { code?: string };
+  if (code) err.code = code;
   return {
     data: {
       session: null,
       user: null,
     },
-    error: new Error(message),
+    error: err,
   };
+}
+
+const E2E_SIGNUP_ERROR_KEY = "horizon.e2e.signup.force_error";
+
+/** Read and consume the injected error scenario (set by E2E test setup). */
+function consumeInjectedSignUpError(): { message: string; code: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(E2E_SIGNUP_ERROR_KEY);
+    if (!raw) return null;
+    window.localStorage.removeItem(E2E_SIGNUP_ERROR_KEY);
+    return JSON.parse(raw) as { message: string; code: string };
+  } catch {
+    return null;
+  }
 }
 
 export function getMockUserFromCookieValue(cookieValue: string | undefined) {
@@ -235,6 +185,12 @@ export function createMockBrowserClient(): MockAuthClient {
         return { data: { user: getStoredSession()?.user ?? null }, error: null };
       },
       async signUp({ email, password, options }) {
+        // Allow E2E tests to inject a specific error scenario via localStorage.
+        const injected = consumeInjectedSignUpError();
+        if (injected) {
+          return errorResponse(injected.message, injected.code);
+        }
+
         const normalizedEmail = normalizeEmail(email);
         const users = getStoredUsers();
         const existingUser = users.find((entry) => entry.email === normalizedEmail);
@@ -296,6 +252,10 @@ export function createMockBrowserClient(): MockAuthClient {
       },
       async resetPasswordForEmail() {
         emitAuthChange("PASSWORD_RECOVERY", getStoredSession());
+        return { data: {}, error: null };
+      },
+      async resend() {
+        // Mock: no-op, just return success
         return { data: {}, error: null };
       },
       async updateUser(attributes) {

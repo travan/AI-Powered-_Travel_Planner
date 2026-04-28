@@ -1,12 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
+import {
+  type SupabaseCookieToSet,
+  resolveSupabasePublicConfig,
+  WEB_SUPABASE_PUBLIC_ENV_SPEC,
+} from "@travel/types";
 import { NextResponse, type NextRequest } from "next/server";
 import { getMockUserFromCookieValue, MOCK_AUTH_COOKIE, MOCK_AUTH_ENABLED } from "./lib/supabase/mock-auth";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options: Record<string, unknown>;
-};
 
 export async function middleware(request: NextRequest) {
   if (MOCK_AUTH_ENABLED) {
@@ -27,21 +26,17 @@ export async function middleware(request: NextRequest) {
   }
 
   // In dev without real Supabase credentials, skip auth middleware gracefully
-  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"] ?? "";
-  const supabaseKey = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"] ?? "";
-  const isPlaceholder =
-    !supabaseUrl || supabaseUrl.includes("placeholder") || !supabaseKey || supabaseKey.includes("placeholder");
-
-  if (isPlaceholder) return NextResponse.next({ request });
+  const resolved = resolveSupabasePublicConfig(process.env, WEB_SUPABASE_PUBLIC_ENV_SPEC);
+  if (!resolved.ok || !resolved.config) return NextResponse.next({ request });
 
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+  const supabase = createServerClient(resolved.config.url, resolved.config.key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet: CookieToSet[]) {
+      setAll(cookiesToSet: SupabaseCookieToSet[]) {
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value)
         );
