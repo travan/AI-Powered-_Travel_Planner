@@ -21,6 +21,28 @@ import {
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 import { getPendingSearchIntent } from "../../lib/pending-search-intent";
+import { normalizeSupabaseAuthError } from "@travel/types";
+
+/** Translate normalized auth error code → human-readable English message for mobile. */
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  email_exists: "This email is already registered. Try signing in instead.",
+  invalid_email: "Please enter a valid email address.",
+  invalid_credentials: "Email or password is incorrect.",
+  weak_password: "Password must be at least 6 characters.",
+  session_expired: "Your session expired. Please sign in again.",
+  rate_limited: "Too many attempts. Please wait a moment and try again.",
+  oauth_error: "Could not sign in with Google. Please try again.",
+  config_missing: "Auth is not configured. Please contact support.",
+  unknown: "Authentication failed. Please try again.",
+};
+
+function getMobileAuthErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && ("message" in error || "code" in error || "status" in error)) {
+    const normalized = normalizeSupabaseAuthError(error as { message?: string; code?: string; status?: number });
+    return AUTH_ERROR_MESSAGES[normalized.code] ?? AUTH_ERROR_MESSAGES["unknown"] ?? "Authentication failed. Please try again.";
+  }
+  return AUTH_ERROR_MESSAGES["unknown"] ?? "Authentication failed. Please try again.";
+}
 
 type Mode = "login" | "signup";
 
@@ -117,7 +139,7 @@ export function AuthMobileExperience({ mode }: Props) {
         await completeAuthFlow();
       }
     } catch (error) {
-      Alert.alert("Auth error", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert("Auth error", getMobileAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -144,7 +166,7 @@ export function AuthMobileExperience({ mode }: Props) {
       if (error) throw error;
       Alert.alert("Reset sent", "Password reset instructions were sent to your email.");
     } catch (error) {
-      Alert.alert("Reset error", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert("Reset error", getMobileAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -161,7 +183,7 @@ export function AuthMobileExperience({ mode }: Props) {
       await signInWithGoogleOnMobile();
       await completeAuthFlow();
     } catch (error) {
-      Alert.alert("Google sign-in error", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert("Google sign-in error", getMobileAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }

@@ -29,3 +29,12 @@ export interface SavedTrip {
   itinerary_id: string;
   created_at: string;
 }
+
+export interface AuthenticatedSessionUser {
+  email?: string;
+  user_metadata?: {
+    avatar_url?: string;
+    full_name?: string;
+    [key: string]: unknown;
+  };
+}

@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicat
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
+import type { AuthenticatedSessionUser } from "@travel/types";
 import {
   isSupabaseConfigured,
   requireSupabase,
@@ -10,17 +11,9 @@ import {
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 
-type AuthenticatedUser = {
-  email?: string;
-  user_metadata?: {
-    avatar_url?: string;
-    full_name?: string;
-  };
-};
-
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [user, setUser] = useState<AuthenticatedSessionUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

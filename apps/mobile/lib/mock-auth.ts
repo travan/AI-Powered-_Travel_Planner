@@ -1,28 +1,10 @@
-type MockUser = {
-  id: string;
-  email: string;
-  user_metadata: Record<string, unknown>;
-};
-
-type MockSession = {
-  access_token: string;
-  refresh_token: string;
-  token_type: "bearer";
-  expires_in: number;
-  expires_at: number;
-  user: MockUser;
-};
-
-type StoredMockUser = {
-  id: string;
-  email: string;
-  password: string;
-  user_metadata: Record<string, unknown>;
-};
-
-type AuthChangeEvent = "INITIAL_SESSION" | "SIGNED_IN" | "SIGNED_OUT" | "PASSWORD_RECOVERY" | "USER_UPDATED";
-
-type AuthCallback = (event: AuthChangeEvent, session: MockSession | null) => void;
+import type {
+  MockAuthCallback as AuthCallback,
+  MockAuthChangeEvent as AuthChangeEvent,
+  MockSession,
+  MockUser,
+  StoredMockUser,
+} from "@travel/types";
 
 const USERS_KEY = "horizon.mobile.mock.users";
 const SESSION_KEY = "horizon.mobile.mock.session";

@@ -96,6 +96,33 @@ test.describe("web auth contract flows", () => {
     await expectItineraryPage(page, cachedScenario.itineraryId, cachedScenario.itinerary.itineraries[0].title);
   });
 
+  test("verify-email page renders email and resend button", async ({ page }) => {
+    const email = "traveler@horizon.mock";
+    await page.goto(`/verify-email?email=${encodeURIComponent(email)}`);
+
+    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByRole("button", { name: /resend/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /back to sign in/i })).toHaveAttribute(
+      "href",
+      "/login"
+    );
+  });
+
+  test("sign out from account menu redirects to login", async ({ page }) => {
+    const identity = createAuthIdentity();
+
+    await page.goto("/signup");
+    await signUpOnWeb(page, identity);
+    await expect(page).toHaveURL(/\/plan$/);
+
+    // Open account menu and sign out
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await expect(page.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
+    await page.getByRole("menuitem", { name: /sign out/i }).click();
+
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("login continues into the itinerary generation flow", async ({ page }) => {
     const identity = createAuthIdentity();
 
