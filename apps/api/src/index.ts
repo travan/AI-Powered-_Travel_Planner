@@ -5,6 +5,7 @@ import { processOverview } from "./workers/overview.worker.js";
 import { processDetail } from "./workers/detail.worker.js";
 import { redis } from "./db/redis.js";
 import { closeDb } from "./db/mongodb.js";
+import { closePostgres } from "./db/postgres.js";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import next from "next";
@@ -74,6 +75,7 @@ async function main() {
     await detailWorker.close();
     await redis.quit();
     await closeDb();
+    await closePostgres();
     await app.close();
     process.exit(0);
   };

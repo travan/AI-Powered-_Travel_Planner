@@ -64,6 +64,19 @@ export async function generateRoutes(fastify: FastifyInstance) {
       });
     }
 
+    const userId = resolveUserIdFromAuthorizationHeader(
+      request.server.jwt,
+      authorizationHeader
+    );
+
+    if (!userId) {
+      return reply.status(401).send({
+        statusCode: 401,
+        error: "Unauthorized",
+        message: "Invalid authentication token",
+      });
+    }
+
     const rawInput = parsed.data;
     const input: ItineraryInput = {
       cities: rawInput.cities,
@@ -98,25 +111,13 @@ export async function generateRoutes(fastify: FastifyInstance) {
       jobId: "", // will be set below
       input,
       cacheKey,
+      userId,
     });
 
     // Update jobId after creation
-    await job.updateData({ jobId: job.id!, input, cacheKey });
+    await job.updateData({ jobId: job.id!, input, cacheKey, userId });
 
     // 3. Fire-and-forget: save to user prompt history (does not block response)
-    const userId = resolveUserIdFromAuthorizationHeader(
-      request.server.jwt,
-      authorizationHeader
-    );
-
-    if (!userId) {
-      return reply.status(401).send({
-        statusCode: 401,
-        error: "Unauthorized",
-        message: "Invalid authentication token",
-      });
-    }
-
     savePromptHistory({
       userId,
       cacheKey,
