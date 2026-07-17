@@ -1,25 +1,43 @@
-import Fastify from "fastify";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import { Module } from "@nestjs/common";
+import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import type { FastifyRequest } from "fastify";
+import { NestFactory } from "@nestjs/core";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
-import jwt from "@fastify/jwt";
 import { env } from "./env.js";
 import { redis } from "./db/redis.js";
-import { generateRoutes } from "./routes/itinerary/generate.js";
-import { streamRoutes } from "./routes/itinerary/stream.js";
-import { getItineraryRoutes } from "./routes/itinerary/get.js";
-import { citiesRoutes } from "./routes/cities.js";
-import { usersRoutes } from "./routes/users.js";
-import { authRoutes } from "./routes/auth.js";
-import { billRoutes } from "./routes/bills.js";
-import { searchDraftRoutes } from "./routes/search-drafts.js";
-import { tripRoutes } from "./routes/trips.js";
-import { recommendationRoutes } from "./routes/recommendations.js";
+import { HealthController } from "./health.controller.js";
+import { AuthController } from "./modules/auth/interfaces/http/auth.controller.js";
+import { BillsController } from "./modules/bills/interfaces/http/bills.controller.js";
+import { CitiesController } from "./modules/cities/interfaces/http/cities.controller.js";
+import { ItineraryController } from "./modules/itinerary/interfaces/http/itinerary.controller.js";
+import { RecommendationsController } from "./modules/recommendations/interfaces/http/recommendations.controller.js";
+import { SearchDraftsController } from "./modules/search-drafts/interfaces/http/search-drafts.controller.js";
+import { TripsController } from "./modules/trips/interfaces/http/trips.controller.js";
+import { UsersController } from "./modules/users/interfaces/http/users.controller.js";
 
-export async function buildApp() {
-  const app = Fastify({
+@Module({
+  controllers: [
+    HealthController,
+    AuthController,
+    SearchDraftsController,
+    TripsController,
+    BillsController,
+    RecommendationsController,
+    ItineraryController,
+    CitiesController,
+    UsersController,
+  ],
+})
+export class ApiAppModule {}
+
+export async function buildApp(): Promise<NestFastifyApplication> {
+  const adapter = new FastifyAdapter({
     logger: { level: env.NODE_ENV === "production" ? "warn" : "info" },
+  });
+  const app = await NestFactory.create<NestFastifyApplication>(ApiAppModule, adapter, {
+    bufferLogs: true,
   });
 
   const allowedOrigins = new Set<string>([
@@ -29,12 +47,9 @@ export async function buildApp() {
       .filter((origin) => origin.length > 0),
   ]);
 
-  // ─── Plugins ────────────────────────────────────────────────────────────────
-
-  await app.register(helmet, { contentSecurityPolicy: false });
-
-  await app.register(cors, {
-    origin: (origin, cb) => {
+  await app.register(helmet as never, { contentSecurityPolicy: false });
+  await app.register(cors as never, {
+    origin: (origin: string | undefined, cb: (error: Error | null, allow: boolean) => void) => {
       if (!origin || allowedOrigins.has(origin)) {
         cb(null, true);
         return;
@@ -43,54 +58,14 @@ export async function buildApp() {
     },
     credentials: true,
   });
-
-  await app.register(rateLimit, {
+  await app.register(rateLimit as never, {
     global: true,
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
     redis,
-    keyGenerator: (request) =>
+    keyGenerator: (request: FastifyRequest) =>
       (request.headers["x-forwarded-for"] as string) ?? request.ip,
   });
-
-  await app.register(jwt, {
-    secret: env.JWT_SECRET,
-  });
-
-  // ─── Auth decorator ────────────────────────────────────────────────────────
-
-  app.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      await request.jwtVerify();
-    } catch {
-      reply.status(401).send({ statusCode: 401, error: "Unauthorized", message: "Invalid or missing token" });
-    }
-  });
-
-  // Expose redis on app instance for stream route
-  app.decorate("redis", redis);
-
-  // ─── Health check ──────────────────────────────────────────────────────────
-
-  app.get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }));
-
-  // ─── Routes ───────────────────────────────────────────────────────────────
-
-  await app.register(
-    async (api) => {
-      await authRoutes(api);
-      await searchDraftRoutes(api);
-      await tripRoutes(api);
-      await billRoutes(api);
-      await recommendationRoutes(api);
-      await generateRoutes(api);
-      await streamRoutes(api);
-      await getItineraryRoutes(api);
-      await citiesRoutes(api);
-      await usersRoutes(api);
-    },
-    { prefix: "/api" }
-  );
 
   return app;
 }

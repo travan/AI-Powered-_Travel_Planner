@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
 import {
@@ -18,8 +19,9 @@ import { closePostgres } from "./db/postgres.js";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import next from "next";
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
-async function registerWebHandler(app: Awaited<ReturnType<typeof buildApp>>) {
+async function registerWebHandler(app: NestFastifyApplication) {
   if (!env.SERVE_WEB) return;
 
   const webAppDir = path.resolve(process.cwd(), env.WEB_APP_DIR);
@@ -34,35 +36,27 @@ async function registerWebHandler(app: Awaited<ReturnType<typeof buildApp>>) {
 
   await nextApp.prepare();
   const handle = nextApp.getRequestHandler();
+  const fastify = app.getHttpAdapter().getInstance();
 
-  app.all("/*", async (request, reply) => {
+  fastify.setNotFoundHandler(async (request, reply) => {
     await handle(request.raw, reply.raw);
     reply.hijack();
   });
 
-  app.log.info({ webAppDir }, "Next.js handler attached to API server");
+  app.getHttpAdapter().getInstance().log.info({ webAppDir }, "Next.js handler attached to Nest API server");
 }
 
 async function main() {
   const app = await buildApp();
   await registerWebHandler(app);
 
-  // ─── Start BullMQ workers ─────────────────────────────────────────────────
-
   const overviewWorker = createWorker<ItineraryJobData>(OVERVIEW_QUEUE_NAME, async (job) => {
     await processOverview(job);
-    // After overview, immediately enqueue detail job
     const normalizedData = {
       ...job.data,
       jobId: job.data.jobId && job.data.jobId.length > 0 ? job.data.jobId : String(job.id),
     };
 
-    // Store overview for detail worker
-    const overviewRaw = await redis.get(`job:overview:${normalizedData.jobId}`);
-    if (!overviewRaw) {
-      // Overview was published via SSE; re-read from the last published event
-      // In production, the overview worker stores it explicitly
-    }
     await itineraryDetailQueue.add("detail", normalizedData, { jobId: `detail-${normalizedData.jobId}` });
   });
 
@@ -81,8 +75,6 @@ async function main() {
     console.error(`Prompt analysis job ${job?.id} failed:`, err.message);
   });
 
-  // ─── Graceful shutdown ────────────────────────────────────────────────────
-
   const shutdown = async () => {
     console.info("Shutting down...");
     await overviewWorker.close();
@@ -98,17 +90,15 @@ async function main() {
   process.on("SIGTERM", () => void shutdown());
   process.on("SIGINT", () => void shutdown());
 
-  // ─── Start server ─────────────────────────────────────────────────────────
-
-  await app.listen({ port: env.PORT, host: "0.0.0.0" });
+  await app.listen(env.PORT, "0.0.0.0");
   if (env.SERVE_WEB) {
-    console.info(`Unified server (API + Web) running on port ${env.PORT}`);
+    console.info(`Unified Nest server (API + Web) running on port ${env.PORT}`);
   } else {
-    console.info(`API server running on port ${env.PORT}`);
+    console.info(`Nest API server running on port ${env.PORT}`);
   }
 }
 
 main().catch((err) => {
-  console.error("Failed to start server:", err);
+  console.error("Failed to start Nest API server:", err);
   process.exit(1);
 });
