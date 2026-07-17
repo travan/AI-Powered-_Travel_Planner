@@ -12,7 +12,9 @@
     "start:dotenv": "dotenv -e ../../.env -- node dist/index.js",
     "start:unified:dotenv": "SERVE_WEB=true dotenv -e ../../.env -- node dist/index.js",
     "type-check": "tsc --noEmit",
-    "db:local:init": "dotenv -e ../../.env -- node ./scripts/init-local-postgres.mjs"
+    "db:local:init": "dotenv -e ../../.env -- node ./scripts/init-local-postgres.mjs",
+    "db:seed:vietnam-cities": "node ./scripts/seed-vietnam-cities.mjs",
+    "db:seed:demo-system": "node ./scripts/seed-demo-system.mjs"
   },
   "dependencies": {
     "@fastify/auth": "^5.0.1",

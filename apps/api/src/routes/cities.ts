@@ -1,67 +1,31 @@
 import type { FastifyInstance } from "fastify";
-import { getDb } from "../db/mongodb.js";
-import { cacheGet, cacheSet, TTL } from "../db/redis.js";
+import { cityService } from "../modules/cities/application/city.service.js";
+import { citySearchQueryDto, citySlugParamsDto } from "../modules/cities/dto/city.dto.js";
+import { parseDto, sendServiceError } from "../shared/http/validation.js";
 
 export async function citiesRoutes(fastify: FastifyInstance) {
   // ── Search (autocomplete) ──────────────────────────────────────────────────
   fastify.get<{ Querystring: { q: string } }>("/cities/search", async (request, reply) => {
-    const { q } = request.query as { q: string };
-    if (!q || q.length < 2) return reply.send([]);
+    const query = parseDto(citySearchQueryDto, request.query, reply);
+    if (!query) return;
 
-    const cacheKey = `cities:search:${q.toLowerCase()}`;
-    const cached = await cacheGet(cacheKey);
-    if (cached) return reply.send(cached);
-
-    const db = await getDb();
-    const results = await db
-      .collection("cities")
-      .find(
-        { $text: { $search: q } },
-        { projection: { slug: 1, name: 1, country: 1, popular: 1, cover_image: 1 } }
-      )
-      .limit(10)
-      .toArray();
-
-    await cacheSet(cacheKey, results, TTL.CITY_METADATA);
-    return reply.send(results);
+    return reply.send(await cityService.search(query.q));
   });
 
   // ── Popular cities (for trending/homepage) ─────────────────────────────────
-  fastify.get("/cities/popular", async (_request, reply) => {
-    const cacheKey = "cities:popular";
-    const cached = await cacheGet(cacheKey);
-    if (cached) return reply.send(cached);
-
-    const db = await getDb();
-    const results = await db
-      .collection("cities")
-      .find(
-        { popular: true },
-        { projection: { slug: 1, name: 1, country: 1, popular: 1, cover_image: 1 } }
-      )
-      .limit(12)
-      .toArray();
-
-    await cacheSet(cacheKey, results, TTL.CITY_METADATA);
-    return reply.send(results);
-  });
+  fastify.get("/cities/popular", async (_request, reply) => reply.send(await cityService.popular()));
 
   // ── City detail ────────────────────────────────────────────────────────────
   fastify.get<{ Params: { slug: string } }>("/cities/:slug", async (request, reply) => {
-    const { slug } = request.params;
+    const params = parseDto(citySlugParamsDto, request.params, reply);
+    if (!params) return;
+    const { slug } = params;
 
-    const cacheKey = `city:${slug}`;
-    const cached = await cacheGet(cacheKey);
-    if (cached) return reply.send(cached);
-
-    const db = await getDb();
-    const city = await db.collection("cities").findOne({ slug });
-
-    if (!city) {
-      return reply.status(404).send({ statusCode: 404, error: "Not Found", message: "City not found" });
+    const result = await cityService.getDetail(slug);
+    if (!result.ok) {
+      return sendServiceError(reply, result.error);
     }
 
-    await cacheSet(cacheKey, city, TTL.CITY_METADATA);
-    return reply.send(city);
+    return reply.send(result.value);
   });
 }

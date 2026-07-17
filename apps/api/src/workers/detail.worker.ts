@@ -9,12 +9,12 @@ import {
   buildTicketOptions,
   buildSocialLinks,
 } from "@travel/scrapers";
-import { getDb } from "../db/mongodb.js";
 import { redis, cacheSet, TTL } from "../db/redis.js";
 import { itineraryStore } from "../db/itinerary-store.js";
 import { env } from "../env.js";
 import type { PreFetchedCityData } from "@travel/ai";
-import type { ItineraryOverview, CityMetadata } from "@travel/types";
+import type { ItineraryOverview } from "@travel/types";
+import { cityStore } from "../db/city-store.js";
 
 const ai = createAIProvider(env.AI_PROVIDER);
 
@@ -45,14 +45,10 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
     if (!overviewRaw) throw new Error("Overview from Phase 1 not found");
     const overview = JSON.parse(overviewRaw) as ItineraryOverview;
 
-    const db = await getDb();
-
     // Enrich each city in parallel
     const enrichedCityData = await Promise.all(
       cityDataList.map(async (cityData) => {
-        const meta = await db
-          .collection<CityMetadata>("cities")
-          .findOne({ "name.en": new RegExp(cityData.city, "i") });
+        const meta = await cityStore.findBySlugOrName(cityData.city);
 
         if (!meta) return cityData;
 
@@ -91,9 +87,7 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
         let transportOptions: unknown[] = [];
 
         if (nextCity && meta) {
-          const nextMeta = await db
-            .collection<CityMetadata>("cities")
-            .findOne({ "name.en": new RegExp(nextCity.city, "i") });
+          const nextMeta = await cityStore.findBySlugOrName(nextCity.city);
 
           if (nextMeta) {
             const distance = Math.round(

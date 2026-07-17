@@ -2,8 +2,8 @@ import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const ROOT = __dirname;
-const MOCK_API_PORT = process.env.E2E_MOCK_API_PORT ?? "3101";
-const WEB_PORT = process.env.E2E_WEB_PORT ?? "3000";
+const MOCK_API_PORT = process.env.E2E_MOCK_API_PORT ?? "3111";
+const WEB_PORT = process.env.E2E_WEB_PORT ?? "3100";
 const MOBILE_WEB_PORT = process.env.E2E_MOBILE_WEB_PORT ?? "8081";
 const MOCK_API_URL = `http://127.0.0.1:${MOCK_API_PORT}`;
 const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
@@ -44,7 +44,11 @@ export default defineConfig({
       env: {
         ...process.env,
         NEXT_PUBLIC_API_URL: MOCK_API_URL,
+        E2E_NEXT_PUBLIC_API_URL: MOCK_API_URL,
+        E2E_API_PROXY_TARGET: MOCK_API_URL,
         API_PROXY_TARGET: MOCK_API_URL,
+        AUTH_PROVIDER: "supabase",
+        NEXT_PUBLIC_AUTH_PROVIDER: "supabase",
         ENABLE_MOCK_AUTH_SERVER: process.env.ENABLE_MOCK_AUTH_SERVER ?? "true",
         NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
         NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder-anon-key",
@@ -77,7 +81,7 @@ export default defineConfig({
     {
       name: "web-desktop",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.nav.spec.ts"]
+        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.trip-collaboration.spec.ts", "**/web.nav.spec.ts"]
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
@@ -85,6 +89,7 @@ export default defineConfig({
             "**/web.auth.oauth.spec.ts",
             "**/web.share-save.contract.spec.ts",
             "**/web.trips.spec.ts",
+            "**/web.trip-collaboration.spec.ts",
             "**/web.nav.spec.ts",
           ],
       use: {

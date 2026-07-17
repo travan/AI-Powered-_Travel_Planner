@@ -11,6 +11,11 @@ import { streamRoutes } from "./routes/itinerary/stream.js";
 import { getItineraryRoutes } from "./routes/itinerary/get.js";
 import { citiesRoutes } from "./routes/cities.js";
 import { usersRoutes } from "./routes/users.js";
+import { authRoutes } from "./routes/auth.js";
+import { billRoutes } from "./routes/bills.js";
+import { searchDraftRoutes } from "./routes/search-drafts.js";
+import { tripRoutes } from "./routes/trips.js";
+import { recommendationRoutes } from "./routes/recommendations.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -73,6 +78,11 @@ export async function buildApp() {
 
   await app.register(
     async (api) => {
+      await authRoutes(api);
+      await searchDraftRoutes(api);
+      await tripRoutes(api);
+      await billRoutes(api);
+      await recommendationRoutes(api);
       await generateRoutes(api);
       await streamRoutes(api);
       await getItineraryRoutes(api);

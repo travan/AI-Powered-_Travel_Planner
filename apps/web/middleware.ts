@@ -5,11 +5,29 @@ import {
   WEB_SUPABASE_PUBLIC_ENV_SPEC,
 } from "@travel/types";
 import { NextResponse, type NextRequest } from "next/server";
+import { getLocalUserFromCookieValue, LOCAL_AUTH_COOKIE, LOCAL_AUTH_ENABLED } from "./lib/supabase/local-auth";
 import { getMockUserFromCookieValue, MOCK_AUTH_COOKIE, MOCK_AUTH_ENABLED } from "./lib/supabase/mock-auth";
 
 export async function middleware(request: NextRequest) {
+  if (LOCAL_AUTH_ENABLED) {
+    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
+    const isProtected = protectedPaths.some((p) =>
+      request.nextUrl.pathname.startsWith(p)
+    );
+    const user = getLocalUserFromCookieValue(request.cookies.get(LOCAL_AUTH_COOKIE)?.value);
+
+    if (isProtected && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("redirectTo", request.nextUrl.pathname);
+      return NextResponse.redirect(url);
+    }
+
+    return NextResponse.next({ request });
+  }
+
   if (MOCK_AUTH_ENABLED) {
-    const protectedPaths = ["/dashboard", "/saved"];
+    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
     const isProtected = protectedPaths.some((p) =>
       request.nextUrl.pathname.startsWith(p)
     );
@@ -50,7 +68,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const protectedPaths = ["/dashboard", "/saved"];
+  const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
   const isProtected = protectedPaths.some((p) =>
     request.nextUrl.pathname.startsWith(p)
   );

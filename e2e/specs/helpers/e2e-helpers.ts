@@ -1,6 +1,6 @@
 import { expect, Page, APIRequestContext } from "@playwright/test";
 
-export const API_BASE_URL = "http://127.0.0.1:3101";
+export const API_BASE_URL = `http://127.0.0.1:${process.env.E2E_MOCK_API_PORT ?? "3111"}`;
 export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
@@ -38,6 +38,8 @@ export async function clearWebMockAuthSession(page: Page) {
   await page.context().clearCookies();
   await page.evaluate(() => {
     window.localStorage.removeItem("horizon.mock.auth.session");
+    window.localStorage.removeItem("horizon.local.auth.session");
+    window.localStorage.removeItem("horizon.e2e.signup.force_error");
   });
 }
 
@@ -88,7 +90,7 @@ export async function triggerGoogleOAuthOnWeb(
 }
 
 export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-user") {
-  await page.evaluate((uid) => {
+  const session = await page.evaluate((uid) => {
     const session = {
       access_token: `mock-access-mock-${uid}`,
       refresh_token: `mock-refresh-mock-${uid}`,
@@ -102,7 +104,19 @@ export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-u
       },
     };
     window.localStorage.setItem("horizon.mock.auth.session", JSON.stringify(session));
+    window.localStorage.removeItem("horizon.local.auth.session");
+    document.cookie = `horizon_mock_auth=${encodeURIComponent(JSON.stringify(session))}; Path=/; Max-Age=86400; SameSite=Lax`;
+    document.cookie = "horizon_local_auth=; Path=/; Max-Age=0; SameSite=Lax";
+    return session;
   }, userId);
+  await page.context().addCookies([
+    {
+      name: "horizon_mock_auth",
+      value: encodeURIComponent(JSON.stringify(session)),
+      url: new URL(page.url()).origin,
+      sameSite: "Lax",
+    },
+  ]);
 }
 
 export async function clearMobileWebMockAuthSession(page: Page) {

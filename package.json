@@ -25,6 +25,8 @@
     "db:local:up": "docker compose -f deploy/docker/docker-compose.local-data.yml up -d",
     "db:local:down": "docker compose -f deploy/docker/docker-compose.local-data.yml down",
     "db:local:init": "pnpm --dir apps/api db:local:init",
+    "db:seed:vietnam-cities": "pnpm --dir apps/api db:seed:vietnam-cities",
+    "db:seed:demo-system": "pnpm --dir apps/api db:seed:vietnam-cities && pnpm --dir apps/api db:seed:demo-system",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "clean": "turbo clean",

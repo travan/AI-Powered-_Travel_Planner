@@ -4,12 +4,17 @@ import type { ItineraryInput } from "@travel/types";
 
 export const OVERVIEW_QUEUE_NAME = "itinerary_overview";
 export const DETAIL_QUEUE_NAME = "itinerary_detail";
+export const PROMPT_ANALYSIS_QUEUE_NAME = "prompt_analysis";
 
 export interface ItineraryJobData {
   jobId: string;
   input: ItineraryInput;
   cacheKey: string;
   userId?: string;
+}
+
+export interface PromptAnalysisJobData {
+  promptEventId: string;
 }
 
 // Shared queue instance (used by API to enqueue)
@@ -33,11 +38,21 @@ export const itineraryDetailQueue = new Queue<ItineraryJobData>(DETAIL_QUEUE_NAM
   },
 });
 
-export function createWorker(
+export const promptAnalysisQueue = new Queue<PromptAnalysisJobData>(PROMPT_ANALYSIS_QUEUE_NAME, {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 1000 },
+    removeOnComplete: { age: 3600 },
+    removeOnFail: { age: 86400 },
+  },
+});
+
+export function createWorker<TData>(
   queueName: string,
-  processor: (job: Job<ItineraryJobData>) => Promise<unknown>
-): Worker<ItineraryJobData> {
-  return new Worker<ItineraryJobData>(queueName, processor, {
+  processor: (job: Job<TData>) => Promise<unknown>
+): Worker<TData> {
+  return new Worker<TData>(queueName, processor, {
     connection: redis,
     concurrency: 10,
   });

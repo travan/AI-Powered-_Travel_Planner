@@ -1,8 +1,17 @@
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
-import { createWorker, itineraryDetailQueue, OVERVIEW_QUEUE_NAME, DETAIL_QUEUE_NAME } from "./lib/queue.js";
+import {
+  createWorker,
+  itineraryDetailQueue,
+  type ItineraryJobData,
+  type PromptAnalysisJobData,
+  OVERVIEW_QUEUE_NAME,
+  DETAIL_QUEUE_NAME,
+  PROMPT_ANALYSIS_QUEUE_NAME,
+} from "./lib/queue.js";
 import { processOverview } from "./workers/overview.worker.js";
 import { processDetail } from "./workers/detail.worker.js";
+import { processPromptAnalysis } from "./workers/prompt-analysis.worker.js";
 import { redis } from "./db/redis.js";
 import { closeDb } from "./db/mongodb.js";
 import { closePostgres } from "./db/postgres.js";
@@ -40,7 +49,7 @@ async function main() {
 
   // ─── Start BullMQ workers ─────────────────────────────────────────────────
 
-  const overviewWorker = createWorker(OVERVIEW_QUEUE_NAME, async (job) => {
+  const overviewWorker = createWorker<ItineraryJobData>(OVERVIEW_QUEUE_NAME, async (job) => {
     await processOverview(job);
     // After overview, immediately enqueue detail job
     const normalizedData = {
@@ -57,7 +66,8 @@ async function main() {
     await itineraryDetailQueue.add("detail", normalizedData, { jobId: `detail-${normalizedData.jobId}` });
   });
 
-  const detailWorker = createWorker(DETAIL_QUEUE_NAME, processDetail);
+  const detailWorker = createWorker<ItineraryJobData>(DETAIL_QUEUE_NAME, processDetail);
+  const promptAnalysisWorker = createWorker<PromptAnalysisJobData>(PROMPT_ANALYSIS_QUEUE_NAME, processPromptAnalysis);
 
   overviewWorker.on("failed", (job, err) => {
     console.error(`Overview job ${job?.id} failed:`, err.message);
@@ -67,12 +77,17 @@ async function main() {
     console.error(`Detail job ${job?.id} failed:`, err.message);
   });
 
+  promptAnalysisWorker.on("failed", (job, err) => {
+    console.error(`Prompt analysis job ${job?.id} failed:`, err.message);
+  });
+
   // ─── Graceful shutdown ────────────────────────────────────────────────────
 
   const shutdown = async () => {
     console.info("Shutting down...");
     await overviewWorker.close();
     await detailWorker.close();
+    await promptAnalysisWorker.close();
     await redis.quit();
     await closeDb();
     await closePostgres();

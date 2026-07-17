@@ -5,10 +5,26 @@ import {
   WEB_SUPABASE_PUBLIC_ENV_SPEC,
 } from "@travel/types";
 import { cookies } from "next/headers";
+import { getLocalUserFromCookieValue, LOCAL_AUTH_COOKIE, LOCAL_AUTH_ENABLED } from "./local-auth";
 import { getMockUserFromCookieValue, MOCK_AUTH_COOKIE, MOCK_AUTH_ENABLED } from "./mock-auth";
 
 export async function createClient() {
   const cookieStore = await cookies();
+
+  if (LOCAL_AUTH_ENABLED) {
+    return {
+      auth: {
+        async getUser() {
+          return {
+            data: {
+              user: getLocalUserFromCookieValue(cookieStore.get(LOCAL_AUTH_COOKIE)?.value),
+            },
+            error: null,
+          };
+        },
+      },
+    };
+  }
 
   if (MOCK_AUTH_ENABLED) {
     return {

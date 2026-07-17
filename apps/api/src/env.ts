@@ -12,6 +12,28 @@ function envBoolean(defaultValue: boolean) {
   }, z.boolean());
 }
 
+function splitCsv(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function unique(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+const postgresUrls = unique([
+  process.env.POSTGRES_URL,
+  process.env.DATABASE_URL,
+  ...splitCsv(process.env.POSTGRES_URLS),
+  ...splitCsv(process.env.DATABASE_URLS),
+]);
+const mongoUris = unique([
+  process.env.MONGODB_URI,
+  ...splitCsv(process.env.MONGODB_URIS),
+]);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(3001),
@@ -27,12 +49,17 @@ const envSchema = z.object({
   // Database
   DATABASE_PROVIDER: z.enum(["postgres", "supabase"]).default("postgres"),
   POSTGRES_URL: z.string().optional(),
+  POSTGRES_URLS: z.string().optional(),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_KEY: z.string().optional(),
 
   // MongoDB
   MONGODB_URI: z.string().min(1),
+  MONGODB_URIS: z.string().optional(),
   MONGODB_DB_NAME: z.string().default("travel_planner"),
+  MONGODB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
 
   // Redis
   REDIS_URL: z.string(),
@@ -80,7 +107,13 @@ const envSchema = z.object({
   }
 });
 
-const parsed = envSchema.safeParse(process.env);
+const parsed = envSchema.safeParse({
+  ...process.env,
+  POSTGRES_URL: postgresUrls[0],
+  POSTGRES_URLS: postgresUrls.join(","),
+  MONGODB_URI: mongoUris[0],
+  MONGODB_URIS: mongoUris.join(","),
+});
 
 if (!parsed.success) {
   console.error("Invalid environment variables:");

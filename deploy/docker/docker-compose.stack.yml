@@ -10,6 +10,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ai_travel_planner_postgres:/var/lib/postgresql/data
+      - ../../apps/api/db/local-postgres.sql:/docker-entrypoint-initdb.d/001-local-postgres.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -61,8 +62,13 @@ services:
       SERVE_WEB: "false"
       DATABASE_PROVIDER: postgres
       POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-travel_planner}
+      POSTGRES_URLS: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-travel_planner},${POSTGRES_FALLBACK_URLS:-}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-5000}
+      DB_QUERY_TIMEOUT_MS: ${DB_QUERY_TIMEOUT_MS:-15000}
       MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URIS: mongodb://mongodb:27017,${MONGODB_FALLBACK_URIS:-}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-travel_planner}
+      MONGODB_CONNECT_TIMEOUT_MS: ${MONGODB_CONNECT_TIMEOUT_MS:-5000}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or shell}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
@@ -88,6 +94,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    command: >
+      sh -c "pnpm --dir apps/api db:local:init &&
+             pnpm --dir apps/api db:seed:vietnam-cities &&
+             pnpm --dir apps/api db:seed:demo-system &&
+             pnpm --dir apps/api exec tsx src/index.ts"
     restart: unless-stopped
 
   ui:
@@ -96,6 +107,8 @@ services:
       dockerfile: deploy/docker/Dockerfile.ui
       args:
         API_PROXY_TARGET: http://server:3001
+        NEXT_PUBLIC_AUTH_PROVIDER: ${NEXT_PUBLIC_AUTH_PROVIDER:-local}
+        AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
         ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-false}
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
@@ -106,7 +119,9 @@ services:
       PORT: 3000
       API_PROXY_TARGET: http://server:3001
       NEXT_PUBLIC_API_URL: ""
-      ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-true}
+      NEXT_PUBLIC_AUTH_PROVIDER: ${NEXT_PUBLIC_AUTH_PROVIDER:-local}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-false}
       NEXT_PUBLIC_APP_URL: http://localhost:${UI_PORT:-3000}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}

@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { Itinerary, SSEEventType } from "@travel/types";
+import type { Itinerary, SSEEventType, TripSummary } from "@travel/types";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { OverviewCard } from "../../../components/itinerary/OverviewCard";
-import { getItinerary } from "../../../lib/api";
+import { getItinerary, getMyTrips } from "../../../lib/api";
+import { createClient } from "../../../lib/supabase/client";
 import { useSSE } from "../../../hooks/useSSE";
 
 type LoadState = "idle" | "waiting" | "loading" | "ready" | "error";
@@ -21,9 +22,11 @@ export default function TripsPage() {
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [itineraryId, setItineraryId] = useState<string | null>(null);
   const [steps, setSteps] = useState<SSEEventType[]>([]);
+  const [myTrips, setMyTrips] = useState<TripSummary[]>([]);
   const previousContextRef = useRef<string | null>(null);
 
   const isQueued = source === "queued" && Boolean(id);
+  const hasGeneratedContext = Boolean(source || id);
 
   const appendStep = (step: SSEEventType) => {
     setSteps((prev) => (prev.includes(step) ? prev : [...prev, step]));
@@ -52,6 +55,8 @@ export default function TripsPage() {
   });
 
   useEffect(() => {
+    if (!hasGeneratedContext) return;
+
     const contextKey = `${source ?? ""}:${id ?? ""}`;
     if (previousContextRef.current !== contextKey) {
       setItinerary(null);
@@ -104,7 +109,42 @@ export default function TripsPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, isQueued, itineraryId, source]);
+  }, [hasGeneratedContext, id, isQueued, itineraryId, source]);
+
+  useEffect(() => {
+    if (hasGeneratedContext) return;
+
+    let cancelled = false;
+    setState("loading");
+    setError(null);
+
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          setState("idle");
+          return;
+        }
+
+        const trips = await getMyTrips(session.access_token);
+        if (cancelled) return;
+        setMyTrips(trips);
+        setState("ready");
+      } catch {
+        if (cancelled) return;
+        setError("Unable to load your trips.");
+        setState("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasGeneratedContext]);
 
   const progressLabel = useMemo(() => {
     if (!steps.length) return "Preparing your itinerary...";
@@ -134,14 +174,29 @@ export default function TripsPage() {
 
       <main className="mx-auto max-w-4xl px-4 py-10 space-y-6" data-testid="web-trips-screen">
         <header className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">Generated Results</p>
-          <h1 className="text-3xl font-headline font-extrabold">Pick your itinerary</h1>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">
+            {hasGeneratedContext ? "Generated Results" : "Trip Workspace"}
+          </p>
+          <h1 className="text-3xl font-headline font-extrabold">
+            {hasGeneratedContext ? "Pick your itinerary" : "Your trips"}
+          </h1>
           <p className="text-sm text-on-surface-variant">
-            Overview first, details next. Choose a result to open the full schedule.
+            {hasGeneratedContext
+              ? "Overview first, details next. Choose a result to open the full schedule."
+              : "Track planning, bookings, activities, bills, and group expenses in one place."}
           </p>
         </header>
 
-        {state === "idle" && (
+        {state === "idle" && !hasGeneratedContext && (
+          <section className="rounded-xl border border-outline-variant/30 bg-surface p-6">
+            <p className="text-sm text-on-surface-variant">Sign in to see your trips.</p>
+            <Link href="/plan" className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline">
+              Plan a trip
+            </Link>
+          </section>
+        )}
+
+        {state === "idle" && hasGeneratedContext && (
           <section className="rounded-xl border border-outline-variant/30 bg-surface p-6">
             <p className="text-sm text-on-surface-variant">No generated result in context.</p>
             <Link href="/plan" className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline">
@@ -168,7 +223,56 @@ export default function TripsPage() {
           </section>
         )}
 
-        {state === "ready" && itinerary && (
+        {state === "ready" && !hasGeneratedContext && (
+          <section className="grid gap-4 md:grid-cols-2" data-testid="web-trip-list">
+            {myTrips.length === 0 ? (
+              <div className="rounded-xl border border-outline-variant/30 bg-surface p-6 md:col-span-2">
+                <p className="text-sm text-on-surface-variant">No trips yet.</p>
+                <Link href="/plan" className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline">
+                  Plan your first trip
+                </Link>
+              </div>
+            ) : (
+              myTrips.map((trip) => (
+                <Link
+                  key={trip.id}
+                  href={`/trips/${trip.id}`}
+                  className="rounded-2xl border border-outline-variant/30 bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  data-testid="web-trip-card"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{trip.role}</p>
+                      <h2 className="mt-2 font-headline text-xl font-bold text-on-surface">{trip.title}</h2>
+                      <p className="mt-1 text-sm text-on-surface-variant">
+                        {trip.start_date ?? "Flexible"} - {trip.end_date ?? "TBD"}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-primary-fixed px-3 py-1 text-xs font-bold text-on-primary-fixed-variant">
+                      {trip.status}
+                    </span>
+                  </div>
+                  <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-xl bg-surface-container-low p-3">
+                      <p className="text-lg font-bold">{trip.activity_count}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-outline">activities</p>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low p-3">
+                      <p className="text-lg font-bold">{trip.checklist_done}/{trip.checklist_total}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-outline">tasks</p>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low p-3">
+                      <p className="text-lg font-bold">{Math.round(trip.expense_total / 1000000)}m</p>
+                      <p className="text-[11px] uppercase tracking-wide text-outline">{trip.currency}</p>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
+          </section>
+        )}
+
+        {state === "ready" && hasGeneratedContext && itinerary && (
           <section className="space-y-4">
             <OverviewCard itinerary={itinerary} />
             <div className="flex justify-end">

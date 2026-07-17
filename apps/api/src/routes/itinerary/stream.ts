@@ -1,12 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import { itineraryQueue } from "../../lib/queue.js";
 import { initSSE, sendSSEEvent, closeSSE, sendHeartbeat } from "../../lib/sse.js";
+import { itineraryJobParamsDto } from "../../modules/itinerary/dto/itinerary.dto.js";
 
 export async function streamRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { jobId: string } }>(
     "/itinerary/stream/:jobId",
     async (request, reply) => {
-      const { jobId } = request.params;
+      const parsed = itineraryJobParamsDto.safeParse(request.params);
+      if (!parsed.success) {
+        initSSE(reply);
+        sendSSEEvent(reply, "error", { message: "Invalid job id", code: "BAD_REQUEST" });
+        closeSSE(reply);
+        return;
+      }
+      const { jobId } = parsed.data;
 
       initSSE(reply);
 
