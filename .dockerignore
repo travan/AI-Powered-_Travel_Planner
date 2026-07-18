@@ -1,5 +1,9 @@
 node_modules
 .pnpm-store
+**/node_modules
+**/.next
+**/dist
+**/.turbo
 .git
 .github
 .vscode
@@ -7,6 +11,7 @@ node_modules
 coverage
 playwright-report
 test-results
+legacy-archives
 apps/mobile
 mockup_design
 library-guidelines

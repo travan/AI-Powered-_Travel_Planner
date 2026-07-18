@@ -1,42 +1,146 @@
-x-app-common: &app-common
+name: ai-travel-planner
+
+x-app-image: &app-image
   build:
     context: ../..
     dockerfile: deploy/docker/Dockerfile.unified
-  image: ai-travel-planner:unified
-  environment:
-    NODE_ENV: production
-    PORT: 3001
-    SERVE_WEB: "true"
-    WEB_APP_DIR: ../web
-  healthcheck:
-    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
-    interval: 30s
-    timeout: 5s
-    retries: 3
-    start_period: 20s
-  stop_grace_period: 20s
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "5"
-  restart: unless-stopped
+    args:
+      API_PROXY_TARGET: http://server:3001
+      NEXT_PUBLIC_API_URL: ""
+  image: ai-travel-planner:server-web
+
+x-server-env: &server-env
+  NODE_ENV: production
+  PORT: 3001
+  SERVE_WEB: "false"
+  DATABASE_PROVIDER: postgres
+  POSTGRES_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
+  DATABASE_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
+  MONGODB_URI: mongodb://mongo:27017/travel_planner
+  MONGODB_DB_NAME: travel_planner
 
 services:
-  app-staging:
-    <<: *app-common
-    container_name: ai-travel-planner-staging
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["staging", "production"]
+    environment:
+      POSTGRES_USER: travel_planner
+      POSTGRES_PASSWORD: travel_planner
+      POSTGRES_DB: travel_planner
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../../apps/server/src/database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travel_planner -d travel_planner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    profiles: ["staging", "production"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  server-staging:
+    <<: *app-image
     profiles: ["staging"]
+    container_name: travel-planner-server-staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     env_file:
-      - ../../.env.staging
+      - path: ../../.env.staging
+        required: false
+    environment:
+      <<: *server-env
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+      CORS_ORIGINS: http://localhost:3100
     ports:
       - "3101:3001"
+    command: ["pnpm", "--dir", "apps/server", "start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
-  app-prod:
-    <<: *app-common
-    container_name: ai-travel-planner-prod
+  web-staging:
+    <<: *app-image
+    profiles: ["staging"]
+    container_name: travel-planner-web-staging
+    depends_on:
+      server-staging:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PROXY_TARGET: http://server-staging:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+      NEXT_PUBLIC_API_URL: ""
+    ports:
+      - "3100:3000"
+    command: ["pnpm", "--dir", "apps/web", "start", "--hostname", "0.0.0.0", "--port", "3000"]
+    restart: unless-stopped
+
+  server-prod:
+    <<: *app-image
     profiles: ["production"]
+    container_name: travel-planner-server-prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     env_file:
-      - ../../.env.production
+      - path: ../../.env.production
+        required: false
+    environment:
+      <<: *server-env
     ports:
       - "3001:3001"
+    command: ["pnpm", "--dir", "apps/server", "start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  web-prod:
+    <<: *app-image
+    profiles: ["production"]
+    container_name: travel-planner-web-prod
+    depends_on:
+      server-prod:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PROXY_TARGET: http://server-prod:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: ""
+    ports:
+      - "3000:3000"
+    command: ["pnpm", "--dir", "apps/web", "start", "--hostname", "0.0.0.0", "--port", "3000"]
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  mongo-data:

@@ -1,3 +1,5 @@
+import * as tripBusiness from "./trip-business.mjs";
+
 export {
   cachedScenario,
   queuedScenario,
@@ -13,3 +15,4 @@ export {
   removeShareToken,
   getSharedItinerary,
 } from "./share-save.mjs";
+export { tripBusiness };

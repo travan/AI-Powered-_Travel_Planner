@@ -7,6 +7,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@travel/types': path.resolve(__dirname, 'packages/types/src/index.ts'),
+      '@supabase/supabase-js': path.resolve(__dirname, 'apps/mobile/node_modules/@supabase/supabase-js'),
+      'expo-linking': path.resolve(__dirname, 'apps/mobile/node_modules/expo-linking'),
+      'expo-secure-store': path.resolve(__dirname, 'apps/mobile/node_modules/expo-secure-store'),
+      'expo-web-browser': path.resolve(__dirname, 'apps/mobile/node_modules/expo-web-browser'),
+      axios: path.resolve(__dirname, 'packages/scrapers/node_modules/axios'),
       react: path.resolve(__dirname, 'apps/web/node_modules/react'),
       'react-dom': path.resolve(__dirname, 'apps/web/node_modules/react-dom'),
     },
@@ -14,10 +20,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'packages/**/*.test.{ts,tsx}',
-      'packages/**/*.spec.{ts,tsx}',
-      'apps/**/*.test.{ts,tsx}',
-      'apps/**/*.spec.{ts,tsx}',
+      'tests/unit/**/*.{test,spec}.{ts,tsx,js,jsx}',
+    ],
+    setupFiles: [
+      'tests/unit/setup-env.ts',
     ],
     exclude: [
       '**/node_modules/**',
@@ -25,6 +31,7 @@ export default defineConfig({
       'playwright-report/**',
       'test-results/**',
       'e2e/**',
+      'tests/unit/apps/api/**',
       '**/*.d.ts',
       '**/*.config.*',
     ],
@@ -49,6 +56,7 @@ export default defineConfig({
         'playwright-report/**',
         'test-results/**',
         'e2e/**',
+        'tests/unit/**',
         'packages/types/**',
         'packages/config/**',
         'packages/ai/src/providers/**',

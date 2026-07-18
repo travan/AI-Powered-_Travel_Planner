@@ -1,0 +1,2784 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { SiteHeader } from "../layout/SiteHeader";
+import { createClient } from "../../lib/supabase/client";
+import {
+  analyzeBillUpload,
+  createBillUpload,
+  createExpense,
+  createTransportBooking,
+  createTripActivity,
+  createTripInvite,
+  listDataQualitySignals,
+  listTransportBookings,
+  listExpenses,
+  listPlaceRecommendations,
+  listReviewQueue,
+  listTransportPriceRecommendations,
+  listTripActivities,
+  listTripAuditLogs,
+  listTripMembers,
+  reviewSubmission,
+  searchActivityCatalog,
+  type ActivityCatalogItem,
+  type BillUpload,
+  type BillNormalizationResult,
+  type CreateBillInput,
+  type CreateExpenseInput,
+  type CreateTransportBookingInput,
+  type CreateTripActivityInput,
+  type DataQualitySignal,
+  type Expense,
+  type ExpenseSplit,
+  type ExpenseSplitStatus,
+  type PlaceRecommendation,
+  type ReviewQueueItem,
+  type TransportBooking,
+  type TransportMode,
+  type TransportPriceRecommendation,
+  type TripAuditLog,
+  type TripActivity,
+  type TripActivityParticipant,
+  type TripInvite,
+  type TripMember,
+  type TripMemberRole,
+  type TripMemberStatus,
+  type TripShareLink,
+  updateActivityParticipant,
+  updateBillUpload,
+  updateExpense,
+  updateExpenseSplitStatus,
+  updateTransportBooking,
+  updateTripActivity,
+  updateTripMember,
+  updateTripShareLink,
+} from "../../lib/workspace-api";
+
+type WorkspaceTab = "overview" | "members" | "schedule" | "transport" | "bills" | "review" | "insights" | "audit";
+type LoadState = "loading" | "ready" | "unauthenticated" | "error";
+type WorkspaceSession = {
+  accessToken: string;
+  userId: string;
+  email: string | null;
+};
+type ActivityFormState = {
+  title: string;
+  category: string;
+  scheduledAt: string;
+  locationName: string;
+  address: string;
+  estimatedCost: string;
+};
+type ActivityDraftState = ActivityFormState;
+type TransportFormState = {
+  activityId: string;
+  mode: TransportMode;
+  providerName: string;
+  bookingReference: string;
+  originName: string;
+  destinationName: string;
+  departureAt: string;
+  arrivalAt: string;
+  price: string;
+  bookingStatus: string;
+  notes: string;
+  participantUserIds: string[];
+};
+type BillFormState = {
+  activityId: string;
+  merchantName: string;
+  totalAmount: string;
+  rawText: string;
+  storageUrl: string;
+  billIssuedAt: string;
+};
+type BillDraftState = {
+  activityId: string;
+  merchantName: string;
+  totalAmount: string;
+  currency: string;
+  rawText: string;
+};
+type ExpenseFormState = {
+  title: string;
+  description: string;
+  amount: string;
+  paidByUserId: string;
+  activityId: string;
+  billUploadId: string;
+  splitStrategy: "equal" | "custom";
+};
+
+const ROLE_OPTIONS: TripMemberRole[] = ["host", "admin", "editor", "viewer"];
+const STATUS_OPTIONS: TripMemberStatus[] = ["active", "left", "removed"];
+const ACTIVITY_STATUS_OPTIONS = ["approved", "pending_review", "scheduled", "done", "cancelled", "rejected"];
+const TRANSPORT_MODES: TransportMode[] = [
+  "flight",
+  "train",
+  "bus",
+  "ferry",
+  "car",
+  "motorbike",
+  "bicycle",
+  "walking",
+  "other",
+];
+const TRANSPORT_STATUS_OPTIONS = ["planned", "reserved", "ticketed", "completed", "cancelled"];
+const BILL_STATUS_OPTIONS = ["draft", "uploaded", "ocr_pending", "ocr_processed", "approved", "rejected"];
+const EXPENSE_STATUS_OPTIONS = ["pending_review", "approved", "rejected", "void"];
+const AUDIT_ENTITY_FILTERS = [
+  "all",
+  "trip",
+  "trip_member",
+  "trip_invite",
+  "trip_share_link",
+  "trip_activity",
+  "transport_booking",
+  "bill_upload",
+  "expense",
+  "expense_split",
+];
+
+const TABS: Array<{ id: WorkspaceTab; label: string; ready: boolean }> = [
+  { id: "overview", label: "Overview", ready: true },
+  { id: "members", label: "Members & share", ready: true },
+  { id: "schedule", label: "Schedule", ready: true },
+  { id: "transport", label: "Transport", ready: true },
+  { id: "bills", label: "Bills & split", ready: true },
+  { id: "review", label: "Host review", ready: true },
+  { id: "insights", label: "Insights", ready: true },
+  { id: "audit", label: "Audit", ready: true },
+];
+
+export function TripWorkspace({ tripId }: { tripId: string }) {
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
+  const [state, setState] = useState<LoadState>("loading");
+  const [session, setSession] = useState<WorkspaceSession | null>(null);
+  const [members, setMembers] = useState<TripMember[]>([]);
+  const [auditLogs, setAuditLogs] = useState<TripAuditLog[]>([]);
+  const [activities, setActivities] = useState<TripActivity[]>([]);
+  const [activityCatalog, setActivityCatalog] = useState<ActivityCatalogItem[]>([]);
+  const [transportBookings, setTransportBookings] = useState<TransportBooking[]>([]);
+  const [billUploads, setBillUploads] = useState<BillUpload[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<ReviewQueueItem[]>([]);
+  const [billNormalization, setBillNormalization] = useState<BillNormalizationResult | null>(null);
+  const [placeRecommendations, setPlaceRecommendations] = useState<PlaceRecommendation[]>([]);
+  const [transportPriceRecommendations, setTransportPriceRecommendations] = useState<TransportPriceRecommendation[]>([]);
+  const [dataQualitySignals, setDataQualitySignals] = useState<DataQualitySignal[]>([]);
+  const [invite, setInvite] = useState<TripInvite | null>(null);
+  const [shareLink, setShareLink] = useState<TripShareLink | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<TripMemberRole>("viewer");
+  const [shareRole, setShareRole] = useState<TripMemberRole>("viewer");
+  const [catalogQuery, setCatalogQuery] = useState("Hoi An");
+  const [activityForm, setActivityForm] = useState({
+    title: "",
+    category: "activity",
+    scheduledAt: "",
+    locationName: "",
+    address: "",
+    estimatedCost: "",
+  });
+  const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraftState>>({});
+  const [transportForm, setTransportForm] = useState<TransportFormState>({
+    activityId: "",
+    mode: "train",
+    providerName: "",
+    bookingReference: "",
+    originName: "",
+    destinationName: "",
+    departureAt: "",
+    arrivalAt: "",
+    price: "",
+    bookingStatus: "planned",
+    notes: "",
+    participantUserIds: [],
+  });
+  const [billForm, setBillForm] = useState<BillFormState>({
+    activityId: "",
+    merchantName: "",
+    totalAmount: "",
+    rawText: "",
+    storageUrl: "",
+    billIssuedAt: "",
+  });
+  const [expenseForm, setExpenseForm] = useState<ExpenseFormState>({
+    title: "",
+    description: "",
+    amount: "",
+    paidByUserId: "",
+    activityId: "",
+    billUploadId: "",
+    splitStrategy: "equal",
+  });
+  const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
+  const [transportPriceDrafts, setTransportPriceDrafts] = useState<Record<string, string>>({});
+  const [billDrafts, setBillDrafts] = useState<Record<string, BillDraftState>>({});
+  const [memberDrafts, setMemberDrafts] = useState<Record<string, Pick<TripMember, "role" | "status">>>({});
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const activeMember = session ? members.find((member) => member.userId === session.userId) : null;
+  const canManage = activeMember ? ["host", "admin"].includes(activeMember.role) : false;
+  const visibleAuditLogs = auditLogs.slice(0, activeTab === "audit" ? 10 : 4);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkspace() {
+      setState("loading");
+      setMessage(null);
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { session: auth },
+        } = await supabase.auth.getSession();
+
+        if (!auth?.access_token || !auth.user?.id) {
+          setSession(null);
+          setState("unauthenticated");
+          return;
+        }
+
+        const authSession = {
+          accessToken: auth.access_token,
+          userId: auth.user.id,
+          email: auth.user.email ?? null,
+        } satisfies WorkspaceSession;
+        setSession(authSession);
+
+        const [
+          nextMembers,
+          nextAuditLogs,
+          nextActivities,
+          nextCatalog,
+          nextTransportBookings,
+          nextExpenses,
+          nextReviewQueue,
+          nextPlaceRecommendations,
+          nextTransportPriceRecommendations,
+          nextDataQualitySignals,
+        ] = await Promise.all([
+          listTripMembers(tripId, authSession.accessToken),
+          listTripAuditLogs(tripId, authSession.accessToken, 10).catch(() => []),
+          listTripActivities(tripId, authSession.accessToken),
+          searchActivityCatalog({ limit: 8 }),
+          listTransportBookings(tripId, authSession.accessToken),
+          listExpenses(tripId, authSession.accessToken),
+          listReviewQueue(tripId, authSession.accessToken).catch(() => []),
+          listPlaceRecommendations({ citySlug: "hoi-an", limit: 6 }),
+          listTransportPriceRecommendations({ limit: 6 }),
+          listDataQualitySignals(tripId, authSession.accessToken).catch(() => []),
+        ]);
+
+        if (cancelled) return;
+        setMembers(nextMembers);
+        setAuditLogs(nextAuditLogs);
+        setActivities(nextActivities);
+        setActivityDrafts(buildActivityDrafts(nextActivities));
+        setActivityCatalog(nextCatalog);
+        setTransportBookings(nextTransportBookings);
+        setTransportPriceDrafts(buildTransportPriceDrafts(nextTransportBookings));
+        setExpenses(nextExpenses);
+        setReviewQueue(nextReviewQueue);
+        setPlaceRecommendations(nextPlaceRecommendations);
+        setTransportPriceRecommendations(nextTransportPriceRecommendations);
+        setDataQualitySignals(nextDataQualitySignals);
+        setExpenseForm((current) => ({
+          ...current,
+          paidByUserId: current.paidByUserId || authSession.userId,
+        }));
+        setMemberDrafts(
+          Object.fromEntries(nextMembers.map((member) => [member.userId, { role: member.role, status: member.status }]))
+        );
+        setState("ready");
+      } catch (error) {
+        if (cancelled) return;
+        setMessage(error instanceof Error ? error.message : "Unable to load workspace.");
+        setState("error");
+      }
+    }
+
+    void loadWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  async function refreshAuditLogs(authToken = session?.accessToken) {
+    if (!authToken) return;
+    const nextAuditLogs = await listTripAuditLogs(tripId, authToken, 10).catch(() => []);
+    setAuditLogs(nextAuditLogs);
+  }
+
+  async function refreshActivities(authToken = session?.accessToken) {
+    if (!authToken) return;
+    const nextActivities = await listTripActivities(tripId, authToken);
+    setActivities(nextActivities);
+    setActivityDrafts(buildActivityDrafts(nextActivities));
+  }
+
+  async function refreshTransportBookings(authToken = session?.accessToken) {
+    if (!authToken) return;
+    const nextBookings = await listTransportBookings(tripId, authToken);
+    setTransportBookings(nextBookings);
+    setTransportPriceDrafts(buildTransportPriceDrafts(nextBookings));
+  }
+
+  async function refreshExpenses(authToken = session?.accessToken) {
+    if (!authToken) return;
+    setExpenses(await listExpenses(tripId, authToken));
+  }
+
+  async function refreshReviewQueue(authToken = session?.accessToken) {
+    if (!authToken) return;
+    setReviewQueue(await listReviewQueue(tripId, authToken).catch(() => []));
+  }
+
+  async function refreshInsights(authToken = session?.accessToken) {
+    if (!authToken) return;
+    const [nextPlaces, nextTransportPrices, nextSignals] = await Promise.all([
+      listPlaceRecommendations({ citySlug: "hoi-an", limit: 6 }),
+      listTransportPriceRecommendations({ limit: 6 }),
+      listDataQualitySignals(tripId, authToken).catch(() => []),
+    ]);
+    setPlaceRecommendations(nextPlaces);
+    setTransportPriceRecommendations(nextTransportPrices);
+    setDataQualitySignals(nextSignals);
+  }
+
+  async function refreshActivityCatalog(query = catalogQuery) {
+    setActivityCatalog(await searchActivityCatalog({ q: query.trim() || undefined, limit: 8 }));
+  }
+
+  async function handleCreateInvite() {
+    if (!session) return;
+    setBusyAction("invite");
+    setMessage(null);
+
+    try {
+      const created = await createTripInvite(tripId, session.accessToken, {
+        email: inviteEmail.trim() || undefined,
+        role: inviteRole,
+        expiresInDays: 14,
+      });
+      setInvite(created);
+      setInviteEmail("");
+      setMessage("Invite created. Send this token or link to your travel mate.");
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create invite.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleEnableShareLink() {
+    if (!session) return;
+    setBusyAction("share");
+    setMessage(null);
+
+    try {
+      const nextShareLink = await updateTripShareLink(tripId, session.accessToken, {
+        enabled: true,
+        role: shareRole,
+      });
+      setShareLink(nextShareLink);
+      setMessage("Share link enabled for this trip.");
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to enable share link.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateMember(member: TripMember) {
+    if (!session) return;
+    const draft = memberDrafts[member.userId];
+    if (!draft) return;
+
+    setBusyAction(`member:${member.userId}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateTripMember(tripId, member.userId, session.accessToken, draft);
+      const nextMembers = members.map((entry) => (entry.userId === updated.userId ? updated : entry));
+      setMembers(nextMembers);
+      setMemberDrafts(
+        Object.fromEntries(nextMembers.map((entry) => [entry.userId, { role: entry.role, status: entry.status }]))
+      );
+      setMessage(`${updated.userId} updated.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update member.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleAddCatalogActivity(item: ActivityCatalogItem) {
+    await createActivity({
+      activity_catalog_id: item.id,
+      title: item.canonicalName,
+      category: item.category,
+      location_name: item.canonicalName,
+      address: item.address ?? undefined,
+    });
+  }
+
+  async function handleCreateCustomActivity() {
+    await createActivity({
+      title: activityForm.title,
+      category: activityForm.category || "activity",
+      scheduled_at: activityForm.scheduledAt ? new Date(activityForm.scheduledAt).toISOString() : undefined,
+      location_name: activityForm.locationName || undefined,
+      address: activityForm.address || undefined,
+      estimated_cost: activityForm.estimatedCost ? Number(activityForm.estimatedCost) : undefined,
+      currency: "VND",
+    });
+  }
+
+  async function createActivity(input: CreateTripActivityInput) {
+    if (!session || !input.title.trim()) return;
+    setBusyAction("activity:create");
+    setMessage(null);
+
+    try {
+      const created = await createTripActivity(tripId, session.accessToken, input);
+      setActivities((current) => [created, ...current]);
+      setActivityDrafts((current) => ({ [created.id]: buildActivityDraft(created), ...current }));
+      setActivityForm({
+        title: "",
+        category: "activity",
+        scheduledAt: "",
+        locationName: "",
+        address: "",
+        estimatedCost: "",
+      });
+      setMessage(`Activity "${created.title}" added to this trip.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to add activity.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateActivityStatus(activity: TripActivity, status: string) {
+    if (!session) return;
+    setBusyAction(`activity:${activity.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateTripActivity(tripId, activity.id, session.accessToken, { status });
+      setActivities((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setMessage(`Activity "${updated.title}" moved to ${updated.status}.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update activity.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateActivityDetails(activity: TripActivity) {
+    if (!session) return;
+    const draft = activityDrafts[activity.id];
+    if (!draft?.title.trim()) return;
+    setBusyAction(`activity-details:${activity.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateTripActivity(tripId, activity.id, session.accessToken, {
+        title: draft.title,
+        category: draft.category || "activity",
+        scheduled_at: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : undefined,
+        location_name: draft.locationName || undefined,
+        address: draft.address || undefined,
+        estimated_cost: draft.estimatedCost ? Number(draft.estimatedCost) : undefined,
+        currency: "VND",
+      });
+      setActivities((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setActivityDrafts((current) => ({ ...current, [updated.id]: buildActivityDraft(updated) }));
+      setMessage(`Activity "${updated.title}" details updated.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update activity details.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateParticipation(activity: TripActivity, status: TripActivityParticipant["status"]) {
+    if (!session) return;
+    setBusyAction(`participant:${activity.id}`);
+    setMessage(null);
+
+    try {
+      const participant = await updateActivityParticipant(
+        tripId,
+        activity.id,
+        session.userId,
+        session.accessToken,
+        status
+      );
+      setActivities((current) =>
+        current.map((entry) => {
+          if (entry.id !== activity.id) return entry;
+          return {
+            ...entry,
+            participants: [...entry.participants.filter((item) => item.userId !== participant.userId), participant],
+          };
+        })
+      );
+      setMessage(`Your RSVP is now ${participant.status}.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update RSVP.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleCreateTransportBooking() {
+    if (!session || !transportForm.originName.trim() || !transportForm.destinationName.trim()) return;
+    setBusyAction("transport:create");
+    setMessage(null);
+
+    const input: CreateTransportBookingInput = {
+      activity_id: transportForm.activityId || undefined,
+      mode: transportForm.mode,
+      provider_name: transportForm.providerName || undefined,
+      booking_reference: transportForm.bookingReference || undefined,
+      origin_name: transportForm.originName,
+      destination_name: transportForm.destinationName,
+      departure_at: transportForm.departureAt ? new Date(transportForm.departureAt).toISOString() : undefined,
+      arrival_at: transportForm.arrivalAt ? new Date(transportForm.arrivalAt).toISOString() : undefined,
+      price: transportForm.price ? Number(transportForm.price) : undefined,
+      currency: "VND",
+      booking_status: transportForm.bookingStatus,
+      notes: transportForm.notes || undefined,
+      participant_user_ids: transportForm.participantUserIds.length > 0 ? transportForm.participantUserIds : undefined,
+    };
+
+    try {
+      const created = await createTransportBooking(tripId, session.accessToken, input);
+      setTransportBookings((current) => [created, ...current]);
+      setTransportPriceDrafts((current) => ({ [created.id]: created.price === null ? "" : String(created.price), ...current }));
+      setTransportForm({
+        activityId: "",
+        mode: "train",
+        providerName: "",
+        bookingReference: "",
+        originName: "",
+        destinationName: "",
+        departureAt: "",
+        arrivalAt: "",
+        price: "",
+        bookingStatus: "planned",
+        notes: "",
+        participantUserIds: [],
+      });
+      setMessage(`${created.mode} booking from ${created.originName} to ${created.destinationName} added.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to add transport booking.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateTransportStatus(booking: TransportBooking, bookingStatus: string) {
+    if (!session) return;
+    setBusyAction(`transport:${booking.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateTransportBooking(tripId, booking.id, session.accessToken, { booking_status: bookingStatus });
+      setTransportBookings((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setMessage(`Transport booking moved to ${updated.bookingStatus}.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update transport booking.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateTransportPrice(booking: TransportBooking) {
+    if (!session) return;
+    const price = transportPriceDrafts[booking.id];
+    if (!price?.trim()) return;
+    setBusyAction(`transport-price:${booking.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateTransportBooking(tripId, booking.id, session.accessToken, { price: Number(price) });
+      setTransportBookings((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setTransportPriceDrafts((current) => ({ ...current, [updated.id]: updated.price === null ? "" : String(updated.price) }));
+      setMessage(`Transport price updated to ${formatMoney(updated.price, updated.currency)}.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update transport price.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleCreateBillUpload() {
+    if (!session || (!billForm.rawText.trim() && !billForm.storageUrl.trim() && !billForm.totalAmount.trim())) return;
+    setBusyAction("bill:create");
+    setMessage(null);
+
+    const input: CreateBillInput = {
+      activity_id: billForm.activityId || undefined,
+      storage_url: billForm.storageUrl || undefined,
+      raw_text: billForm.rawText || undefined,
+      total_amount: billForm.totalAmount ? Number(billForm.totalAmount) : undefined,
+      currency: "VND",
+      merchant_name: billForm.merchantName || undefined,
+      bill_issued_at: billForm.billIssuedAt ? new Date(billForm.billIssuedAt).toISOString() : undefined,
+    };
+
+    try {
+      const created = await createBillUpload(tripId, session.accessToken, input);
+      setBillUploads((current) => [created, ...current]);
+      setBillDrafts((current) => ({ ...current, [created.id]: buildBillDraft(created) }));
+      setBillForm({
+        activityId: "",
+        merchantName: "",
+        totalAmount: "",
+        rawText: "",
+        storageUrl: "",
+        billIssuedAt: "",
+      });
+      setExpenseForm((current) => ({
+        ...current,
+        billUploadId: created.id,
+        activityId: created.activityId ?? current.activityId,
+        amount: created.totalAmount ? String(created.totalAmount) : current.amount,
+        title: current.title || `${created.merchantName ?? "Trip"} payment`,
+      }));
+      setMessage("Bill captured. You can now create an expense from it.");
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create bill.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateBillStatus(bill: BillUpload, status: string) {
+    if (!session) return;
+    setBusyAction(`bill:${bill.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateBillUpload(bill.id, session.accessToken, { status });
+      setBillUploads((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setBillDrafts((current) => ({ ...current, [updated.id]: buildBillDraft(updated) }));
+      setMessage(`Bill status moved to ${updated.status}.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+      await refreshInsights(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update bill.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateBillDetails(bill: BillUpload) {
+    if (!session) return;
+    const draft = billDrafts[bill.id];
+    if (!draft) return;
+    setBusyAction(`bill-details:${bill.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateBillUpload(bill.id, session.accessToken, {
+        activity_id: draft.activityId || undefined,
+        merchant_name: draft.merchantName || undefined,
+        total_amount: draft.totalAmount ? Number(draft.totalAmount) : undefined,
+        currency: draft.currency || "VND",
+        raw_text: draft.rawText || undefined,
+      });
+      setBillUploads((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setBillDrafts((current) => ({ ...current, [updated.id]: buildBillDraft(updated) }));
+      setMessage(`Bill "${updated.merchantName ?? updated.id}" updated.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+      await refreshInsights(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update bill details.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleCreateExpense() {
+    if (!session || !expenseForm.title.trim() || !expenseForm.amount.trim()) return;
+    setBusyAction("expense:create");
+    setMessage(null);
+
+    const amount = Number(expenseForm.amount);
+    const input: CreateExpenseInput = {
+      title: expenseForm.title,
+      description: expenseForm.description || undefined,
+      amount,
+      currency: "VND",
+      paid_by_user_id: expenseForm.paidByUserId || session.userId,
+      activity_id: expenseForm.activityId || undefined,
+      bill_upload_id: expenseForm.billUploadId || undefined,
+      split_strategy: expenseForm.splitStrategy,
+      splits:
+        expenseForm.splitStrategy === "custom"
+          ? members
+              .filter((member) => member.status === "active")
+              .map((member) => ({ user_id: member.userId, amount: Number(customSplits[member.userId] || 0) }))
+              .filter((split) => split.amount > 0)
+          : undefined,
+    };
+
+    try {
+      const created = await createExpense(tripId, session.accessToken, input);
+      setExpenses((current) => [created, ...current]);
+      setExpenseForm({
+        title: "",
+        description: "",
+        amount: "",
+        paidByUserId: session.userId,
+        activityId: "",
+        billUploadId: "",
+        splitStrategy: "equal",
+      });
+      setCustomSplits({});
+      setMessage(`Expense "${created.title}" created with ${created.splits.length} splits.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create expense.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateExpenseStatus(expense: Expense, status: string) {
+    if (!session) return;
+    setBusyAction(`expense:${expense.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateExpense(tripId, expense.id, session.accessToken, { status });
+      setExpenses((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setMessage(`Expense moved to ${updated.status}.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update expense.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleUpdateSplitStatus(expense: Expense, split: ExpenseSplit, status: ExpenseSplitStatus) {
+    if (!session) return;
+    setBusyAction(`split:${split.id}`);
+    setMessage(null);
+
+    try {
+      const updated = await updateExpenseSplitStatus(tripId, expense.id, split.id, session.accessToken, status);
+      setExpenses((current) =>
+        current.map((entry) => {
+          if (entry.id !== expense.id) return entry;
+          return {
+            ...entry,
+            splits: entry.splits.map((item) => (item.id === updated.id ? updated : item)),
+          };
+        })
+      );
+      setMessage(`${updated.userId} split is now ${updated.status}.`);
+      await refreshAuditLogs(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update split.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleAnalyzeBillUpload(bill: BillUpload) {
+    if (!session) return;
+    setBusyAction(`bill-analyze:${bill.id}`);
+    setMessage(null);
+
+    try {
+      const result = await analyzeBillUpload(bill.id, session.accessToken);
+      setBillNormalization(result);
+      setBillUploads((current) => current.map((entry) => (entry.id === result.bill.id ? result.bill : entry)));
+      setBillDrafts((current) => ({ ...current, [result.bill.id]: buildBillDraft(result.bill) }));
+      setExpenseForm((current) => ({
+        ...current,
+        billUploadId: result.bill.id,
+        activityId: result.suggestedExpense.activityId ?? current.activityId,
+        amount: result.suggestedExpense.amount ? String(result.suggestedExpense.amount) : current.amount,
+        title: result.suggestedExpense.title,
+        splitStrategy: result.suggestedExpense.splitStrategy,
+      }));
+      setMessage("OCR worker normalized this bill and prepared a suggested expense.");
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+      await refreshInsights(session.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to analyze bill.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleReviewSubmission(item: ReviewQueueItem, decision: "approved" | "rejected") {
+    if (!session) return;
+    setBusyAction(`review:${item.id}:${decision}`);
+    setMessage(null);
+
+    try {
+      const nextQueue = await reviewSubmission(tripId, session.accessToken, {
+        entity_type: item.entityType,
+        entity_id: item.entityId,
+        decision,
+      });
+      setReviewQueue(nextQueue);
+      await Promise.all([
+        refreshActivities(session.accessToken),
+        refreshExpenses(session.accessToken),
+        refreshAuditLogs(session.accessToken),
+        refreshInsights(session.accessToken),
+      ]);
+      setMessage(`${item.title} ${decision}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to review submission.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function setMemberDraft(userId: string, patch: Partial<Pick<TripMember, "role" | "status">>) {
+    setMemberDrafts((current) => ({
+      ...current,
+      [userId]: {
+        role: patch.role ?? current[userId]?.role ?? "viewer",
+        status: patch.status ?? current[userId]?.status ?? "active",
+      },
+    }));
+  }
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d8f1ff_0,#f8f9fa_32%,#fff7ed_100%)] pb-24 text-on-surface">
+      <SiteHeader />
+
+      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8" data-testid="web-trip-workspace">
+        <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-surface-container-lowest/85 shadow-[0_24px_80px_rgba(0,93,144,0.12)] backdrop-blur">
+          <div className="grid gap-6 p-6 md:grid-cols-[1.5fr_0.8fr] md:p-8">
+            <div className="space-y-4">
+              <Link href="/trips" className="text-sm font-bold text-primary hover:underline">
+                Back to trips
+              </Link>
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-secondary">Trip workspace</p>
+                <h1 className="mt-2 text-3xl font-black tracking-tight text-on-surface md:text-5xl">
+                  Plan together without losing the source of truth.
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant md:text-base">
+                  Invite friends, plan activities, track transport, capture bills, settle splits, and keep every
+                  important change traceable.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-primary p-5 text-on-primary shadow-xl">
+              <p className="text-xs font-bold uppercase tracking-widest opacity-80">Current trip</p>
+              <p className="mt-3 break-all font-mono text-sm" data-testid="web-workspace-trip-id">
+                {tripId}
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <StatCard label="Members" value={members.length.toString()} />
+                <StatCard label="Your role" value={activeMember?.role ?? "guest"} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {state === "unauthenticated" && (
+          <section className="rounded-3xl border border-outline-variant/40 bg-surface p-6 shadow-sm">
+            <h2 className="font-headline text-2xl font-black">Sign in to manage this trip</h2>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Workspace actions need an account so every invite, edit, and split can be traced clearly.
+            </p>
+            <Link
+              href={`/login?redirectTo=/trips/${tripId}/workspace`}
+              className="mt-5 inline-flex rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
+              data-testid="web-workspace-signin"
+            >
+              Sign in
+            </Link>
+          </section>
+        )}
+
+        {state === "loading" && (
+          <section className="rounded-3xl border border-outline-variant/40 bg-surface p-6 shadow-sm">
+            <p className="text-sm font-bold text-on-surface">Loading trip workspace...</p>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container-high">
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+            </div>
+          </section>
+        )}
+
+        {state === "error" && (
+          <section className="rounded-3xl border border-error/30 bg-error-container p-6 text-on-error-container">
+            <h2 className="font-headline text-xl font-black">Workspace unavailable</h2>
+            <p className="mt-2 text-sm">{message ?? "Unable to load this trip."}</p>
+          </section>
+        )}
+
+        {state === "ready" && (
+          <section className="grid gap-5 lg:grid-cols-[240px_1fr]">
+            <nav className="flex gap-2 overflow-x-auto rounded-3xl border border-outline-variant/30 bg-surface/90 p-2 shadow-sm lg:flex-col">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition ${
+                    activeTab === tab.id
+                      ? "bg-primary text-on-primary shadow-md"
+                      : "text-on-surface-variant hover:bg-surface-container-high"
+                  }`}
+                  data-testid={`web-workspace-tab-${tab.id}`}
+                >
+                  {tab.label}
+                  {!tab.ready && <span className="ml-2 text-[10px] uppercase opacity-70">soon</span>}
+                </button>
+              ))}
+            </nav>
+
+            <div className="min-w-0">
+              {message && (
+                <p
+                  className="mb-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-sm font-semibold text-on-surface-variant"
+                  data-testid="web-workspace-message"
+                >
+                  {message}
+                </p>
+              )}
+
+              {activeTab === "overview" && (
+                <OverviewPanel
+                  members={members}
+                  canManage={canManage}
+                  onOpenMembers={() => setActiveTab("members")}
+                />
+              )}
+
+              {activeTab === "members" && (
+                <MembersPanel
+                  canManage={canManage}
+                  members={members}
+                  memberDrafts={memberDrafts}
+                  invite={invite}
+                  inviteEmail={inviteEmail}
+                  inviteRole={inviteRole}
+                  shareLink={shareLink}
+                  shareRole={shareRole}
+                  busyAction={busyAction}
+                  tripId={tripId}
+                  onCreateInvite={handleCreateInvite}
+                  onEnableShareLink={handleEnableShareLink}
+                  onInviteEmailChange={setInviteEmail}
+                  onInviteRoleChange={setInviteRole}
+                  onShareRoleChange={setShareRole}
+                  onMemberDraftChange={setMemberDraft}
+                  onUpdateMember={handleUpdateMember}
+                />
+              )}
+
+              {activeTab === "audit" && <AuditPanel logs={visibleAuditLogs} canManage={canManage} />}
+
+              {activeTab === "schedule" && session && (
+                <ActivityPlannerPanel
+                  activities={activities}
+                  catalog={activityCatalog}
+                  catalogQuery={catalogQuery}
+                  form={activityForm}
+                  drafts={activityDrafts}
+                  busyAction={busyAction}
+                  currentUserId={session.userId}
+                  canManage={canManage}
+                  onCatalogQueryChange={setCatalogQuery}
+                  onSearchCatalog={() => void refreshActivityCatalog()}
+                  onAddCatalogActivity={(item) => void handleAddCatalogActivity(item)}
+                  onFormChange={(patch) => setActivityForm((current) => ({ ...current, ...patch }))}
+                  onDraftChange={(activityId, patch) =>
+                    setActivityDrafts((current) => ({
+                      ...current,
+                      [activityId]: { ...(current[activityId] ?? emptyActivityDraft()), ...patch },
+                    }))
+                  }
+                  onCreateCustomActivity={() => void handleCreateCustomActivity()}
+                  onUpdateDetails={(activity) => void handleUpdateActivityDetails(activity)}
+                  onUpdateStatus={(activity, status) => void handleUpdateActivityStatus(activity, status)}
+                  onUpdateParticipation={(activity, status) => void handleUpdateParticipation(activity, status)}
+                  onRefresh={() => void refreshActivities()}
+                />
+              )}
+
+              {activeTab === "transport" && (
+                <TransportPanel
+                  bookings={transportBookings}
+                  form={transportForm}
+                  members={members}
+                  activities={activities}
+                  priceDrafts={transportPriceDrafts}
+                  busyAction={busyAction}
+                  canManage={canManage}
+                  onFormChange={(patch) => setTransportForm((current) => ({ ...current, ...patch }))}
+                  onPriceDraftChange={(bookingId, value) =>
+                    setTransportPriceDrafts((current) => ({ ...current, [bookingId]: value }))
+                  }
+                  onCreateBooking={() => void handleCreateTransportBooking()}
+                  onUpdateStatus={(booking, status) => void handleUpdateTransportStatus(booking, status)}
+                  onUpdatePrice={(booking) => void handleUpdateTransportPrice(booking)}
+                  onRefresh={() => void refreshTransportBookings()}
+                />
+              )}
+
+              {activeTab === "bills" && session && (
+                <BillsPanel
+                  activities={activities}
+                  billUploads={billUploads}
+                  billDrafts={billDrafts}
+                  billForm={billForm}
+                  expenses={expenses}
+                  expenseForm={expenseForm}
+                  customSplits={customSplits}
+                  members={members}
+                  busyAction={busyAction}
+                  canManage={canManage}
+                  currentUserId={session.userId}
+                  onBillFormChange={(patch) => setBillForm((current) => ({ ...current, ...patch }))}
+                  onBillDraftChange={(billId, patch) =>
+                    setBillDrafts((current) => ({
+                      ...current,
+                      [billId]: { ...(current[billId] ?? emptyBillDraft()), ...patch },
+                    }))
+                  }
+                  onExpenseFormChange={(patch) => setExpenseForm((current) => ({ ...current, ...patch }))}
+                  onCustomSplitChange={(userId, value) => setCustomSplits((current) => ({ ...current, [userId]: value }))}
+                  onCreateBill={() => void handleCreateBillUpload()}
+                  onAnalyzeBill={(bill) => void handleAnalyzeBillUpload(bill)}
+                  onUpdateBillDetails={(bill) => void handleUpdateBillDetails(bill)}
+                  onUpdateBillStatus={(bill, status) => void handleUpdateBillStatus(bill, status)}
+                  onCreateExpense={() => void handleCreateExpense()}
+                  onUpdateExpenseStatus={(expense, status) => void handleUpdateExpenseStatus(expense, status)}
+                  onUpdateSplitStatus={(expense, split, status) => void handleUpdateSplitStatus(expense, split, status)}
+                  onRefreshExpenses={() => void refreshExpenses()}
+                />
+              )}
+
+              {activeTab === "review" && (
+                <ReviewPanel
+                  items={reviewQueue}
+                  canManage={canManage}
+                  busyAction={busyAction}
+                  onRefresh={() => void refreshReviewQueue()}
+                  onReview={(item, decision) => void handleReviewSubmission(item, decision)}
+                />
+              )}
+
+              {activeTab === "insights" && (
+                <InsightsPanel
+                  places={placeRecommendations}
+                  transportPrices={transportPriceRecommendations}
+                  dataQualitySignals={dataQualitySignals}
+                  billNormalization={billNormalization}
+                  onRefresh={() => void refreshInsights()}
+                />
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ActivityPlannerPanel(props: {
+  activities: TripActivity[];
+  catalog: ActivityCatalogItem[];
+  catalogQuery: string;
+  form: ActivityFormState;
+  drafts: Record<string, ActivityDraftState>;
+  busyAction: string | null;
+  currentUserId: string;
+  canManage: boolean;
+  onCatalogQueryChange: (value: string) => void;
+  onSearchCatalog: () => void;
+  onAddCatalogActivity: (item: ActivityCatalogItem) => void;
+  onFormChange: (patch: Partial<ActivityFormState>) => void;
+  onDraftChange: (activityId: string, patch: Partial<ActivityDraftState>) => void;
+  onCreateCustomActivity: () => void;
+  onUpdateDetails: (activity: TripActivity) => void;
+  onUpdateStatus: (activity: TripActivity, status: string) => void;
+  onUpdateParticipation: (activity: TripActivity, status: TripActivityParticipant["status"]) => void;
+  onRefresh: () => void;
+}) {
+  const groupedActivities = groupActivitiesByDay(props.activities);
+
+  return (
+    <section className="space-y-5" data-testid="web-activity-planner">
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-headline text-xl font-black">Activity catalog</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Reuse verified places and activities so recommendations get smarter over time.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={props.onRefresh}
+              className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <input
+              value={props.catalogQuery}
+              onChange={(event) => props.onCatalogQueryChange(event.target.value)}
+              placeholder="Search cafe, food, workshop..."
+              className="min-w-0 flex-1 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-activity-catalog-search"
+            />
+            <button
+              type="button"
+              onClick={props.onSearchCatalog}
+              className="rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
+              data-testid="web-activity-catalog-submit"
+            >
+              Search
+            </button>
+          </div>
+
+          <div className="mt-5 space-y-3" data-testid="web-activity-catalog-list">
+            {props.catalog.length === 0 && <p className="text-sm text-on-surface-variant">No catalog matches yet.</p>}
+            {props.catalog.map((item) => (
+              <article key={item.id} className="rounded-2xl bg-surface-container-low p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-bold text-on-surface">{item.canonicalName}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      {item.category} · {item.citySlug ?? "unknown city"} · quality {item.qualityScore}
+                    </p>
+                    {item.address && <p className="mt-1 text-xs text-on-surface-variant">{item.address}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => props.onAddCatalogActivity(item)}
+                    disabled={props.busyAction === "activity:create"}
+                    className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:opacity-50"
+                    data-testid={`web-add-catalog-activity-${item.id}`}
+                  >
+                    Add
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Add custom activity</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            User-entered activities can later be normalized back into the shared catalog.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <input
+              value={props.form.title}
+              onChange={(event) => props.onFormChange({ title: event.target.value })}
+              placeholder="Activity title"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-custom-activity-title"
+            />
+            <input
+              value={props.form.category}
+              onChange={(event) => props.onFormChange({ category: event.target.value })}
+              placeholder="Category"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-custom-activity-category"
+            />
+            <input
+              value={props.form.scheduledAt}
+              onChange={(event) => props.onFormChange({ scheduledAt: event.target.value })}
+              type="datetime-local"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-custom-activity-time"
+            />
+            <input
+              value={props.form.locationName}
+              onChange={(event) => props.onFormChange({ locationName: event.target.value })}
+              placeholder="Location name"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-custom-activity-location"
+            />
+            <input
+              value={props.form.estimatedCost}
+              onChange={(event) => props.onFormChange({ estimatedCost: event.target.value })}
+              inputMode="numeric"
+              placeholder="Estimated cost"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-custom-activity-cost"
+            />
+            <input
+              value={props.form.address}
+              onChange={(event) => props.onFormChange({ address: event.target.value })}
+              placeholder="Address"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-custom-activity-address"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={props.onCreateCustomActivity}
+            disabled={!props.form.title.trim() || props.busyAction === "activity:create"}
+            className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="web-create-custom-activity"
+          >
+            Add custom activity
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <h2 className="font-headline text-xl font-black">Trip schedule</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Track suggestions, host review status, timing, and participant RSVP.
+        </p>
+        <div className="mt-5 space-y-4" data-testid="web-trip-activities-list">
+          {props.activities.length === 0 && (
+            <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+              No activities yet. Add one from the catalog or create a custom entry.
+            </p>
+          )}
+          {groupedActivities.map((group) => (
+            <div key={group.key} className="space-y-3" data-testid={`web-activity-day-${group.key}`}>
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-outline-variant/50" />
+                <p className="rounded-full bg-primary-container px-3 py-1 text-xs font-black uppercase tracking-widest text-on-primary-container">
+                  {group.label}
+                </p>
+                <span className="h-px flex-1 bg-outline-variant/50" />
+              </div>
+              {group.activities.map((activity) => {
+                const myParticipation = activity.participants.find((item) => item.userId === props.currentUserId);
+                const draft = props.drafts[activity.id] ?? buildActivityDraft(activity);
+                const canEdit = props.canManage || activity.createdByUserId === props.currentUserId;
+                const isSavingDetails = props.busyAction === `activity-details:${activity.id}`;
+
+                return (
+                  <article key={activity.id} className="rounded-2xl bg-surface-container-low p-4">
+                    <div className="grid gap-4 lg:grid-cols-[1fr_180px_240px] lg:items-center">
+                      <div>
+                        <p className="font-bold text-on-surface">{activity.title}</p>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          {activity.category} · {activity.status} · {formatMoney(activity.estimatedCost, activity.currency)}
+                        </p>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          {activity.locationName ?? "No location"} {activity.address ? `· ${activity.address}` : ""}
+                        </p>
+                        {activity.scheduledAt && (
+                          <p className="mt-1 text-xs font-bold text-primary">{formatDateTime(activity.scheduledAt)}</p>
+                        )}
+                        <p
+                          className="mt-2 text-xs font-bold text-secondary"
+                          data-testid={`web-activity-participation-${activity.id}`}
+                        >
+                          Your RSVP: {myParticipation?.status ?? "not set"}
+                        </p>
+                      </div>
+
+                      <select
+                        value={activity.status}
+                        disabled={!props.canManage || props.busyAction === `activity:${activity.id}`}
+                        onChange={(event) => props.onUpdateStatus(activity, event.target.value)}
+                        className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-activity-status-${activity.id}`}
+                      >
+                        {ACTIVITY_STATUS_OPTIONS.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="flex flex-wrap gap-2">
+                        {(["joined", "maybe", "declined"] as const).map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() => props.onUpdateParticipation(activity, status)}
+                            disabled={props.busyAction === `participant:${activity.id}`}
+                            className={`rounded-full px-3 py-2 text-xs font-bold ${
+                              myParticipation?.status === status
+                                ? "bg-primary text-on-primary"
+                                : "border border-outline-variant text-on-surface-variant"
+                            }`}
+                            data-testid={`web-activity-rsvp-${activity.id}-${status}`}
+                          >
+                            {status}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 rounded-2xl bg-surface-container-lowest p-4 md:grid-cols-2">
+                      <input
+                        value={draft.title}
+                        onChange={(event) => props.onDraftChange(activity.id, { title: event.target.value })}
+                        disabled={!canEdit}
+                        className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60 md:col-span-2"
+                        data-testid={`web-activity-edit-title-${activity.id}`}
+                      />
+                      <input
+                        value={draft.scheduledAt}
+                        onChange={(event) => props.onDraftChange(activity.id, { scheduledAt: event.target.value })}
+                        disabled={!canEdit}
+                        type="datetime-local"
+                        className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-activity-edit-time-${activity.id}`}
+                      />
+                      <input
+                        value={draft.estimatedCost}
+                        onChange={(event) => props.onDraftChange(activity.id, { estimatedCost: event.target.value })}
+                        disabled={!canEdit}
+                        inputMode="numeric"
+                        placeholder="Estimated cost"
+                        className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-activity-edit-cost-${activity.id}`}
+                      />
+                      <input
+                        value={draft.locationName}
+                        onChange={(event) => props.onDraftChange(activity.id, { locationName: event.target.value })}
+                        disabled={!canEdit}
+                        placeholder="Location"
+                        className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-activity-edit-location-${activity.id}`}
+                      />
+                      <input
+                        value={draft.address}
+                        onChange={(event) => props.onDraftChange(activity.id, { address: event.target.value })}
+                        disabled={!canEdit}
+                        placeholder="Address"
+                        className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-activity-edit-address-${activity.id}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => props.onUpdateDetails(activity)}
+                        disabled={!canEdit || isSavingDetails || !draft.title.trim()}
+                        className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2"
+                        data-testid={`web-activity-save-details-${activity.id}`}
+                      >
+                        {isSavingDetails ? "Saving details..." : canEdit ? "Save activity details" : "Only host or creator can edit"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TransportPanel(props: {
+  bookings: TransportBooking[];
+  form: TransportFormState;
+  members: TripMember[];
+  activities: TripActivity[];
+  priceDrafts: Record<string, string>;
+  busyAction: string | null;
+  canManage: boolean;
+  onFormChange: (patch: Partial<TransportFormState>) => void;
+  onPriceDraftChange: (bookingId: string, value: string) => void;
+  onCreateBooking: () => void;
+  onUpdateStatus: (booking: TransportBooking, status: string) => void;
+  onUpdatePrice: (booking: TransportBooking) => void;
+  onRefresh: () => void;
+}) {
+  const activeMembers = props.members.filter((member) => member.status === "active");
+
+  function toggleParticipant(userId: string) {
+    const selected = props.form.participantUserIds.includes(userId);
+    props.onFormChange({
+      participantUserIds: selected
+        ? props.form.participantUserIds.filter((entry) => entry !== userId)
+        : [...props.form.participantUserIds, userId],
+    });
+  }
+
+  return (
+    <section className="space-y-5" data-testid="web-transport-panel">
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Add transport</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Track every movement, from flights and trains to ferry, car, motorbike, bicycle, or walking segments.
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <select
+              value={props.form.activityId}
+              onChange={(event) => props.onFormChange({ activityId: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-transport-activity"
+            >
+              <option value="">Whole trip transport</option>
+              {props.activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.title}
+                </option>
+              ))}
+            </select>
+            <select
+              value={props.form.mode}
+              onChange={(event) => props.onFormChange({ mode: event.target.value as TransportMode })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-transport-mode"
+            >
+              {TRANSPORT_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {transportModeLabel(mode)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={props.form.bookingStatus}
+              onChange={(event) => props.onFormChange({ bookingStatus: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-transport-status"
+            >
+              {TRANSPORT_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            <input
+              value={props.form.providerName}
+              onChange={(event) => props.onFormChange({ providerName: event.target.value })}
+              placeholder="Provider: Vietnam Airlines, VNR, Grab..."
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-provider"
+            />
+            <input
+              value={props.form.bookingReference}
+              onChange={(event) => props.onFormChange({ bookingReference: event.target.value })}
+              placeholder="Booking/ticket ref"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-reference"
+            />
+            <input
+              value={props.form.originName}
+              onChange={(event) => props.onFormChange({ originName: event.target.value })}
+              placeholder="From"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-origin"
+            />
+            <input
+              value={props.form.destinationName}
+              onChange={(event) => props.onFormChange({ destinationName: event.target.value })}
+              placeholder="To"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-destination"
+            />
+            <input
+              value={props.form.departureAt}
+              onChange={(event) => props.onFormChange({ departureAt: event.target.value })}
+              type="datetime-local"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-departure"
+            />
+            <input
+              value={props.form.arrivalAt}
+              onChange={(event) => props.onFormChange({ arrivalAt: event.target.value })}
+              type="datetime-local"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-arrival"
+            />
+            <input
+              value={props.form.price}
+              onChange={(event) => props.onFormChange({ price: event.target.value })}
+              inputMode="numeric"
+              placeholder="Price in VND"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-price"
+            />
+            <input
+              value={props.form.notes}
+              onChange={(event) => props.onFormChange({ notes: event.target.value })}
+              placeholder="Notes: platform, seat, cabin, pickup point..."
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-transport-notes"
+            />
+          </div>
+
+          <div className="mt-4 rounded-2xl bg-surface-container-low p-4" data-testid="web-transport-participant-picker">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-primary">Participants</p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Leave everyone unchecked to include all active members automatically.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {activeMembers.map((member) => {
+                const checked = props.form.participantUserIds.includes(member.userId);
+                return (
+                  <label
+                    key={member.userId}
+                    className={`cursor-pointer rounded-full px-3 py-2 text-xs font-bold ${
+                      checked ? "bg-primary text-on-primary" : "border border-outline-variant text-on-surface-variant"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleParticipant(member.userId)}
+                      className="sr-only"
+                      data-testid={`web-transport-participant-${member.userId}`}
+                    />
+                    {member.userId}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={props.onCreateBooking}
+            disabled={
+              props.busyAction === "transport:create" ||
+              !props.form.originName.trim() ||
+              !props.form.destinationName.trim()
+            }
+            className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="web-create-transport"
+          >
+            {props.busyAction === "transport:create" ? "Adding..." : "Add transport"}
+          </button>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-headline text-xl font-black">Participant scope</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Leave the picker empty for an all-member booking, or choose only the people included in this segment.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={props.onRefresh}
+              className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {activeMembers.map((member) => (
+                <span key={member.userId} className="rounded-full bg-surface-container-high px-3 py-2 text-xs font-bold">
+                  {member.userId} · {member.role}
+                </span>
+              ))}
+          </div>
+          <div className="mt-6 rounded-2xl bg-surface-container-low p-4">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-secondary">Why this matters</p>
+            <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+              Keeping mode, route, provider, price, and ticket status normalized lets the app later compare transport
+              experience and recommend cheaper timing for similar routes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <h2 className="font-headline text-xl font-black">Transport bookings</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Follow each segment from planning to reserved, ticketed, completed, or cancelled.
+        </p>
+        <div className="mt-5 space-y-3" data-testid="web-transport-list">
+          {props.bookings.length === 0 && (
+            <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+              No transport bookings yet.
+            </p>
+          )}
+          {props.bookings.map((booking) => (
+            <article key={booking.id} className="rounded-2xl bg-surface-container-low p-4">
+              <div className="grid gap-4 lg:grid-cols-[1fr_180px] lg:items-center">
+                <div>
+                  {booking.activityId && (
+                    <p className="mb-2 text-xs font-extrabold uppercase tracking-widest text-primary">
+                      Linked activity: {props.activities.find((activity) => activity.id === booking.activityId)?.title ?? booking.activityId}
+                    </p>
+                  )}
+                  <p className="font-bold text-on-surface">
+                    {transportModeLabel(booking.mode)} · {booking.originName} to {booking.destinationName}
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {booking.providerName ?? "No provider"} · {booking.bookingReference ?? "No reference"} ·{" "}
+                    {formatMoney(booking.price, booking.currency)}
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {booking.departureAt ? formatDateTime(booking.departureAt) : "Departure TBD"}
+                    {booking.arrivalAt ? ` -> ${formatDateTime(booking.arrivalAt)}` : ""}
+                  </p>
+                  <p className="mt-2 text-xs font-bold text-secondary" data-testid={`web-transport-participants-${booking.id}`}>
+                    Participants: {booking.participantUserIds.length}
+                  </p>
+                  {booking.notes && <p className="mt-1 text-xs text-on-surface-variant">{booking.notes}</p>}
+                </div>
+                <select
+                  value={booking.bookingStatus}
+                  disabled={!props.canManage || props.busyAction === `transport:${booking.id}`}
+                  onChange={(event) => props.onUpdateStatus(booking, event.target.value)}
+                  className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                  data-testid={`web-transport-booking-status-${booking.id}`}
+                >
+                  {TRANSPORT_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-4 grid gap-2 rounded-2xl bg-surface-container-lowest p-3 sm:grid-cols-[1fr_140px]">
+                <input
+                  value={props.priceDrafts[booking.id] ?? ""}
+                  onChange={(event) => props.onPriceDraftChange(booking.id, event.target.value)}
+                  disabled={!props.canManage || props.busyAction === `transport-price:${booking.id}`}
+                  inputMode="numeric"
+                  placeholder="Updated price"
+                  className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
+                  data-testid={`web-transport-price-draft-${booking.id}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => props.onUpdatePrice(booking)}
+                  disabled={!props.canManage || props.busyAction === `transport-price:${booking.id}`}
+                  className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid={`web-transport-save-price-${booking.id}`}
+                >
+                  Save price
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BillsPanel(props: {
+  activities: TripActivity[];
+  billUploads: BillUpload[];
+  billDrafts: Record<string, BillDraftState>;
+  billForm: BillFormState;
+  expenses: Expense[];
+  expenseForm: ExpenseFormState;
+  customSplits: Record<string, string>;
+  members: TripMember[];
+  busyAction: string | null;
+  canManage: boolean;
+  currentUserId: string;
+  onBillFormChange: (patch: Partial<BillFormState>) => void;
+  onBillDraftChange: (billId: string, patch: Partial<BillDraftState>) => void;
+  onExpenseFormChange: (patch: Partial<ExpenseFormState>) => void;
+  onCustomSplitChange: (userId: string, value: string) => void;
+  onCreateBill: () => void;
+  onAnalyzeBill: (bill: BillUpload) => void;
+  onUpdateBillDetails: (bill: BillUpload) => void;
+  onUpdateBillStatus: (bill: BillUpload, status: string) => void;
+  onCreateExpense: () => void;
+  onUpdateExpenseStatus: (expense: Expense, status: string) => void;
+  onUpdateSplitStatus: (expense: Expense, split: ExpenseSplit, status: ExpenseSplitStatus) => void;
+  onRefreshExpenses: () => void;
+}) {
+  const activeMembers = props.members.filter((member) => member.status === "active");
+  const customSplitTotal = activeMembers.reduce((sum, member) => sum + Number(props.customSplits[member.userId] || 0), 0);
+  const expenseAmount = Number(props.expenseForm.amount || 0);
+  const customSplitDelta = Math.round((expenseAmount - customSplitTotal) * 100) / 100;
+
+  return (
+    <section className="space-y-5" data-testid="web-bills-panel">
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Capture bill</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Paste OCR text, bill URL, or manual amount now; photo upload can later feed the same bill contract.
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <select
+              value={props.billForm.activityId}
+              onChange={(event) => props.onBillFormChange({ activityId: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-bill-activity"
+            >
+              <option value="">No linked activity</option>
+              {props.activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.title}
+                </option>
+              ))}
+            </select>
+            <input
+              value={props.billForm.merchantName}
+              onChange={(event) => props.onBillFormChange({ merchantName: event.target.value })}
+              placeholder="Merchant: cafe, hotel, restaurant..."
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-bill-merchant"
+            />
+            <input
+              value={props.billForm.totalAmount}
+              onChange={(event) => props.onBillFormChange({ totalAmount: event.target.value })}
+              inputMode="numeric"
+              placeholder="Total amount"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-bill-total"
+            />
+            <input
+              value={props.billForm.billIssuedAt}
+              onChange={(event) => props.onBillFormChange({ billIssuedAt: event.target.value })}
+              type="datetime-local"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-bill-issued-at"
+            />
+            <input
+              value={props.billForm.storageUrl}
+              onChange={(event) => props.onBillFormChange({ storageUrl: event.target.value })}
+              placeholder="Bill image/storage URL"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-bill-storage-url"
+            />
+            <textarea
+              value={props.billForm.rawText}
+              onChange={(event) => props.onBillFormChange({ rawText: event.target.value })}
+              placeholder="Raw OCR or copied bill text"
+              className="min-h-28 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-bill-raw-text"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={props.onCreateBill}
+            disabled={
+              props.busyAction === "bill:create" ||
+              (!props.billForm.rawText.trim() && !props.billForm.storageUrl.trim() && !props.billForm.totalAmount.trim())
+            }
+            className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="web-create-bill"
+          >
+            {props.busyAction === "bill:create" ? "Capturing..." : "Capture bill"}
+          </button>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-headline text-xl font-black">Create expense</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Create a payable record from a bill or manual entry, then track who owes what.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={props.onRefreshExpenses}
+              className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <input
+              value={props.expenseForm.title}
+              onChange={(event) => props.onExpenseFormChange({ title: event.target.value })}
+              placeholder="Expense title"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-expense-title"
+            />
+            <input
+              value={props.expenseForm.amount}
+              onChange={(event) => props.onExpenseFormChange({ amount: event.target.value })}
+              inputMode="numeric"
+              placeholder="Amount"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-expense-amount"
+            />
+            <select
+              value={props.expenseForm.paidByUserId}
+              onChange={(event) => props.onExpenseFormChange({ paidByUserId: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-expense-paid-by"
+            >
+              <option value={props.currentUserId}>Paid by me</option>
+              {activeMembers
+                .filter((member) => member.userId !== props.currentUserId)
+                .map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.userId}
+                  </option>
+                ))}
+            </select>
+            <select
+              value={props.expenseForm.activityId}
+              onChange={(event) => props.onExpenseFormChange({ activityId: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-expense-activity"
+            >
+              <option value="">No activity</option>
+              {props.activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.title}
+                </option>
+              ))}
+            </select>
+            <select
+              value={props.expenseForm.billUploadId}
+              onChange={(event) => props.onExpenseFormChange({ billUploadId: event.target.value })}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-expense-bill"
+            >
+              <option value="">No bill</option>
+              {props.billUploads.map((bill) => (
+                <option key={bill.id} value={bill.id}>
+                  {bill.merchantName ?? bill.id} · {formatMoney(bill.totalAmount, bill.currency)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={props.expenseForm.splitStrategy}
+              onChange={(event) =>
+                props.onExpenseFormChange({ splitStrategy: event.target.value as ExpenseFormState["splitStrategy"] })
+              }
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-expense-split-strategy"
+            >
+              <option value="equal">Equal split</option>
+              <option value="custom">Custom split</option>
+            </select>
+            <input
+              value={props.expenseForm.description}
+              onChange={(event) => props.onExpenseFormChange({ description: event.target.value })}
+              placeholder="Description"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
+              data-testid="web-expense-description"
+            />
+          </div>
+
+          {props.expenseForm.splitStrategy === "custom" && (
+            <div className="mt-4 rounded-2xl bg-surface-container-low p-4" data-testid="web-custom-splits">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-primary">Custom split amounts</p>
+              <p className="mt-2 text-xs font-bold text-on-surface-variant" data-testid="web-custom-split-summary">
+                Split total {formatMoney(customSplitTotal, "VND")} · expense {formatMoney(expenseAmount, "VND")} · remaining{" "}
+                {formatMoney(customSplitDelta, "VND")}
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {activeMembers.map((member) => (
+                  <label key={member.userId} className="block">
+                    <span className="text-xs font-bold text-on-surface-variant">{member.userId}</span>
+                    <input
+                      value={props.customSplits[member.userId] ?? ""}
+                      onChange={(event) => props.onCustomSplitChange(member.userId, event.target.value)}
+                      inputMode="numeric"
+                      placeholder="0"
+                      className="mt-1 w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+                      data-testid={`web-custom-split-${member.userId}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={props.onCreateExpense}
+            disabled={!props.expenseForm.title.trim() || !props.expenseForm.amount.trim() || props.busyAction === "expense:create"}
+            className="mt-4 rounded-full bg-secondary px-5 py-3 text-sm font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="web-create-expense"
+          >
+            {props.busyAction === "expense:create" ? "Creating..." : "Create expense"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Captured bills</h2>
+          <div className="mt-5 space-y-3" data-testid="web-bill-list">
+            {props.billUploads.length === 0 && (
+              <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+                No bills captured in this workspace session yet.
+              </p>
+            )}
+            {props.billUploads.map((bill) => (
+              <article key={bill.id} className="rounded-2xl bg-surface-container-low p-4">
+                <p className="font-bold text-on-surface">{bill.merchantName ?? "Unnamed bill"}</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {formatMoney(bill.totalAmount, bill.currency)} · Activity: {activityTitle(props.activities, bill.activityId)}
+                </p>
+                {bill.rawText && (
+                  <p className="mt-2 line-clamp-2 text-xs text-on-surface-variant">{bill.rawText}</p>
+                )}
+                <div className="mt-3 grid gap-2 rounded-2xl bg-surface-container-lowest p-3">
+                  <select
+                    value={props.billDrafts[bill.id]?.activityId ?? ""}
+                    onChange={(event) => props.onBillDraftChange(bill.id, { activityId: event.target.value })}
+                    className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm font-bold outline-none focus:border-primary"
+                    data-testid={`web-bill-edit-activity-${bill.id}`}
+                  >
+                    <option value="">No linked activity</option>
+                    {props.activities.map((activity) => (
+                      <option key={activity.id} value={activity.id}>
+                        {activity.title}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={props.billDrafts[bill.id]?.merchantName ?? ""}
+                    onChange={(event) => props.onBillDraftChange(bill.id, { merchantName: event.target.value })}
+                    placeholder="Merchant"
+                    className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                    data-testid={`web-bill-edit-merchant-${bill.id}`}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
+                    <input
+                      value={props.billDrafts[bill.id]?.totalAmount ?? ""}
+                      onChange={(event) => props.onBillDraftChange(bill.id, { totalAmount: event.target.value })}
+                      inputMode="numeric"
+                      placeholder="Total"
+                      className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                      data-testid={`web-bill-edit-total-${bill.id}`}
+                    />
+                    <input
+                      value={props.billDrafts[bill.id]?.currency ?? "VND"}
+                      onChange={(event) => props.onBillDraftChange(bill.id, { currency: event.target.value.toUpperCase() })}
+                      className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm font-bold outline-none focus:border-primary"
+                      data-testid={`web-bill-edit-currency-${bill.id}`}
+                    />
+                  </div>
+                  <textarea
+                    value={props.billDrafts[bill.id]?.rawText ?? ""}
+                    onChange={(event) => props.onBillDraftChange(bill.id, { rawText: event.target.value })}
+                    placeholder="Raw OCR text"
+                    className="min-h-20 rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                    data-testid={`web-bill-edit-raw-${bill.id}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => props.onUpdateBillDetails(bill)}
+                    disabled={props.busyAction === `bill-details:${bill.id}`}
+                    className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid={`web-bill-save-details-${bill.id}`}
+                  >
+                    {props.busyAction === `bill-details:${bill.id}` ? "Saving..." : "Save bill details"}
+                  </button>
+                </div>
+                <select
+                  value={bill.status}
+                  onChange={(event) => props.onUpdateBillStatus(bill, event.target.value)}
+                  disabled={props.busyAction === `bill:${bill.id}`}
+                  className="mt-3 w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                  data-testid={`web-bill-status-${bill.id}`}
+                >
+                  {BILL_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => props.onAnalyzeBill(bill)}
+                  disabled={props.busyAction === `bill-analyze:${bill.id}`}
+                  className="mt-3 w-full rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid={`web-bill-analyze-${bill.id}`}
+                >
+                  {props.busyAction === `bill-analyze:${bill.id}` ? "Analyzing..." : "Run OCR worker"}
+                </button>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Expenses & splits</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Hosts can approve expense records; each participant can settle their split transparently.
+          </p>
+          <div className="mt-5 space-y-3" data-testid="web-expense-list">
+            {props.expenses.length === 0 && (
+              <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+                No expenses yet.
+              </p>
+            )}
+            {props.expenses.map((expense) => (
+              <article key={expense.id} className="rounded-2xl bg-surface-container-low p-4">
+                <div className="grid gap-3 lg:grid-cols-[1fr_160px] lg:items-center">
+                  <div>
+                    <p className="font-bold text-on-surface">{expense.title}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      {formatMoney(expense.amount, expense.currency)} · paid by {expense.paidByUserId} · {expense.status}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-primary" data-testid={`web-expense-activity-${expense.id}`}>
+                      Activity: {activityTitle(props.activities, expense.activityId)}
+                    </p>
+                  </div>
+                  <select
+                    value={expense.status}
+                    onChange={(event) => props.onUpdateExpenseStatus(expense, event.target.value)}
+                    disabled={!props.canManage || props.busyAction === `expense:${expense.id}`}
+                    className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                    data-testid={`web-expense-status-${expense.id}`}
+                  >
+                    {EXPENSE_STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mt-4 grid gap-2" data-testid={`web-expense-splits-${expense.id}`}>
+                  {expense.splits.map((split) => (
+                    <div
+                      key={split.id}
+                      className="grid gap-2 rounded-2xl bg-surface-container-lowest p-3 sm:grid-cols-[1fr_130px_130px] sm:items-center"
+                    >
+                      <p className="break-all text-sm font-bold text-on-surface">{split.userId}</p>
+                      <p className="text-sm text-on-surface-variant">{formatMoney(split.amount, expense.currency)}</p>
+                      <select
+                        value={split.status}
+                        onChange={(event) =>
+                          props.onUpdateSplitStatus(expense, split, event.target.value as ExpenseSplitStatus)
+                        }
+                        disabled={
+                          props.busyAction === `split:${split.id}` ||
+                          (!props.canManage && split.userId !== props.currentUserId)
+                        }
+                        className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                        data-testid={`web-expense-split-status-${split.id}`}
+                      >
+                        {(["owed", "settled", "waived"] as ExpenseSplitStatus[]).map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReviewPanel(props: {
+  items: ReviewQueueItem[];
+  canManage: boolean;
+  busyAction: string | null;
+  onRefresh: () => void;
+  onReview: (item: ReviewQueueItem, decision: "approved" | "rejected") => void;
+}) {
+  return (
+    <section className="space-y-5" data-testid="web-review-panel">
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-headline text-xl font-black">Host review queue</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Host/admin reviews activity, bill, expense, and place signals before they become trusted trip data.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={props.onRefresh}
+            className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
+            data-testid="web-review-refresh"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-3" data-testid="web-review-list">
+          {props.items.length === 0 && (
+            <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+              Review queue is clear.
+            </p>
+          )}
+          {props.items.map((item) => (
+            <article key={item.id} className="rounded-2xl bg-surface-container-low p-4">
+              <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-center">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
+                    {item.entityType.replace("_", " ")} · {item.status}
+                  </p>
+                  <p className="mt-2 font-bold text-on-surface">{item.title}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    Submitted by {item.submittedByUserId ?? "system"} · {formatMoney(item.amount, item.currency ?? "VND")}
+                  </p>
+                  {item.subtitle && <p className="mt-1 text-xs text-on-surface-variant">{item.subtitle}</p>}
+                  {item.linkedActivityId && (
+                    <p className="mt-1 break-all text-xs font-bold text-secondary">Activity: {item.linkedActivityId}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => props.onReview(item, "approved")}
+                    disabled={!props.canManage || props.busyAction === `review:${item.id}:approved`}
+                    className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid={`web-review-approve-${item.entityType}-${item.entityId}`}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.onReview(item, "rejected")}
+                    disabled={!props.canManage || props.busyAction === `review:${item.id}:rejected`}
+                    className="rounded-full border border-error px-4 py-2 text-xs font-bold text-error disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid={`web-review-reject-${item.entityType}-${item.entityId}`}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function InsightsPanel(props: {
+  places: PlaceRecommendation[];
+  transportPrices: TransportPriceRecommendation[];
+  dataQualitySignals: DataQualitySignal[];
+  billNormalization: BillNormalizationResult | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <section className="space-y-5" data-testid="web-insights-panel">
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-headline text-xl font-black">Recommendation & data quality</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              OCR evidence and user submissions become reusable signals only after quality checks catch price changes,
+              renamed places, moved venues, and outdated records.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={props.onRefresh}
+            className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
+            data-testid="web-insights-refresh"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {props.billNormalization && (
+        <div className="rounded-3xl border border-primary/20 bg-primary-container p-5 text-on-primary-container shadow-sm">
+          <p className="text-xs font-extrabold uppercase tracking-widest">Last OCR normalization</p>
+          <h3 className="mt-2 font-headline text-xl font-black" data-testid="web-ocr-merchant">
+            {props.billNormalization.extracted.merchantName ?? "Unknown merchant"}
+          </h3>
+          <p className="mt-1 text-sm">
+            Suggested expense: {props.billNormalization.suggestedExpense.title} ·{" "}
+            {formatMoney(props.billNormalization.suggestedExpense.amount, props.billNormalization.suggestedExpense.currency)}
+          </p>
+          <div className="mt-4 grid gap-2" data-testid="web-ocr-line-items">
+            {props.billNormalization.extracted.lineItems.map((item) => (
+              <p key={`${item.name}-${item.amount}`} className="rounded-2xl bg-white/35 px-3 py-2 text-sm font-bold">
+                {item.name} · {formatMoney(item.amount, props.billNormalization?.extracted.currency ?? "VND")} ·{" "}
+                {item.category ?? "uncategorized"}
+              </p>
+            ))}
+          </div>
+          <p className="mt-4 text-sm" data-testid="web-ocr-place-signal">
+            Place signal: {props.billNormalization.placeSignal.action} · {props.billNormalization.placeSignal.reason}
+          </p>
+        </div>
+      )}
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h3 className="font-headline text-xl font-black">Trusted places</h3>
+          <div className="mt-5 space-y-3" data-testid="web-place-recommendations">
+            {props.places.map((place) => (
+              <article key={place.id} className="rounded-2xl bg-surface-container-low p-4">
+                <p className="font-bold text-on-surface">{place.name}</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {place.category} · {place.citySlug ?? "unknown"} · {place.priceLevel ?? "price unknown"}
+                </p>
+                <p className="mt-1 text-xs font-bold text-secondary">Quality {place.qualityScore}</p>
+                {place.address && <p className="mt-1 text-xs text-on-surface-variant">{place.address}</p>}
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h3 className="font-headline text-xl font-black">Transport price timing</h3>
+          <div className="mt-5 space-y-3" data-testid="web-transport-price-insights">
+            {props.transportPrices.map((price) => (
+              <article key={price.id} className="rounded-2xl bg-surface-container-low p-4">
+                <p className="font-bold text-on-surface">
+                  {transportModeLabel(price.mode)} · {price.originCity ?? "origin"} to {price.destinationCity ?? "destination"}
+                </p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {price.providerName ?? "Any provider"} · low {formatMoney(price.minPrice, price.currency)} · median{" "}
+                  {formatMoney(price.medianPrice, price.currency)}
+                </p>
+                <p className="mt-1 text-xs font-bold text-secondary">
+                  Best observed {price.bestObservedAt ? formatDate(price.bestObservedAt) : "unknown"}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <h3 className="font-headline text-xl font-black">Data quality signals</h3>
+        <div className="mt-5 space-y-3" data-testid="web-data-quality-signals">
+          {props.dataQualitySignals.length === 0 && (
+            <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+              No open quality signals yet.
+            </p>
+          )}
+          {props.dataQualitySignals.map((signal) => (
+            <article key={signal.id} className="rounded-2xl bg-surface-container-low p-4">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
+                {signal.signalType.split("_").join(" ")} · {signal.severity}
+              </p>
+              <p className="mt-2 font-bold text-on-surface">{signal.title}</p>
+              <p className="mt-1 text-sm text-on-surface-variant">{signal.detail}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/15 p-4">
+      <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">{label}</p>
+      <p className="mt-2 text-lg font-black capitalize">{value}</p>
+    </div>
+  );
+}
+
+function OverviewPanel({
+  members,
+  canManage,
+  onOpenMembers,
+}: {
+  members: TripMember[];
+  canManage: boolean;
+  onOpenMembers: () => void;
+}) {
+  const activeMembers = members.filter((member) => member.status === "active");
+
+  return (
+    <section className="grid gap-4 md:grid-cols-3">
+      <InfoCard
+        title="People"
+        value={`${activeMembers.length} active`}
+        description="Host, admins, editors, and viewers are tracked per trip."
+      />
+      <InfoCard
+        title="Permissions"
+        value={canManage ? "Manage" : "Contribute"}
+        description={canManage ? "You can invite and update roles." : "You can view and add new trip data."}
+      />
+      <InfoCard
+        title="Next phases"
+        value="Ready"
+        description="Schedule, transport, bills, and review tabs are reserved in this workspace."
+      />
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-6 md:col-span-3">
+        <h2 className="font-headline text-2xl font-black">Workspace foundation</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+          This page is now the user-facing home for collaboration flows. The backend already records audit events,
+          and each UI action here goes through the same API contract used by E2E tests.
+        </p>
+        <button
+          type="button"
+          onClick={onOpenMembers}
+          className="mt-5 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
+        >
+          Manage members
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function InfoCard({ title, value, description }: { title: string; value: string; description: string }) {
+  return (
+    <article className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+      <p className="text-xs font-extrabold uppercase tracking-widest text-primary">{title}</p>
+      <p className="mt-3 text-2xl font-black">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-on-surface-variant">{description}</p>
+    </article>
+  );
+}
+
+function MembersPanel(props: {
+  canManage: boolean;
+  members: TripMember[];
+  memberDrafts: Record<string, Pick<TripMember, "role" | "status">>;
+  invite: TripInvite | null;
+  inviteEmail: string;
+  inviteRole: TripMemberRole;
+  shareLink: TripShareLink | null;
+  shareRole: TripMemberRole;
+  busyAction: string | null;
+  tripId: string;
+  onCreateInvite: () => void;
+  onEnableShareLink: () => void;
+  onInviteEmailChange: (value: string) => void;
+  onInviteRoleChange: (value: TripMemberRole) => void;
+  onShareRoleChange: (value: TripMemberRole) => void;
+  onMemberDraftChange: (userId: string, patch: Partial<Pick<TripMember, "role" | "status">>) => void;
+  onUpdateMember: (member: TripMember) => void;
+}) {
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
+  const inviteJoinUrl = props.invite ? `${getBrowserOrigin()}/trips/join?token=${props.invite.token}&type=invite` : "";
+  const shareJoinUrl = props.shareLink?.shareToken ? `${getBrowserOrigin()}/trips/join?token=${props.shareLink.shareToken}` : "";
+
+  async function copyJoinLink(value: string, label: string) {
+    await copyText(value);
+    setCopiedValue(label);
+    window.setTimeout(() => setCopiedValue(null), 1600);
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Invite by email</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">Host/admin can create an auditable invite token.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_150px]">
+            <input
+              value={props.inviteEmail}
+              onChange={(event) => props.onInviteEmailChange(event.target.value)}
+              disabled={!props.canManage}
+              placeholder="friend@example.com"
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
+              data-testid="web-invite-email"
+            />
+            <select
+              value={props.inviteRole}
+              onChange={(event) => props.onInviteRoleChange(event.target.value as TripMemberRole)}
+              disabled={!props.canManage}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-invite-role"
+            >
+              {ROLE_OPTIONS.filter((role) => role !== "host").map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={props.onCreateInvite}
+            disabled={!props.canManage || props.busyAction === "invite"}
+            className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="web-create-invite"
+          >
+            {props.busyAction === "invite" ? "Creating..." : "Create invite"}
+          </button>
+          {props.invite && (
+            <div className="mt-4 rounded-2xl bg-surface-container-low p-4 text-sm">
+              <p className="font-bold text-on-surface">Invite token</p>
+              <p className="mt-1 break-all font-mono text-primary" data-testid="web-invite-token">
+                {props.invite.token}
+              </p>
+              <p className="mt-2 break-all text-xs text-on-surface-variant" data-testid="web-invite-link">
+                {inviteJoinUrl}
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyJoinLink(inviteJoinUrl, "invite")}
+                className="mt-3 rounded-full border border-primary px-4 py-2 text-xs font-bold text-primary"
+                data-testid="web-copy-invite-link"
+              >
+                {copiedValue === "invite" ? "Copied invite link" : "Copy invite link"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+          <h2 className="font-headline text-xl font-black">Share link</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">Use this when friends can self-join the group.</p>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <select
+              value={props.shareRole}
+              onChange={(event) => props.onShareRoleChange(event.target.value as TripMemberRole)}
+              disabled={!props.canManage}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
+              data-testid="web-share-role"
+            >
+              {ROLE_OPTIONS.filter((role) => role !== "host").map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={props.onEnableShareLink}
+              disabled={!props.canManage || props.busyAction === "share"}
+              className="rounded-full bg-secondary px-5 py-3 text-sm font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="web-enable-share"
+            >
+              {props.busyAction === "share" ? "Enabling..." : "Enable share"}
+            </button>
+          </div>
+          {props.shareLink?.shareToken && (
+            <div className="mt-4 rounded-2xl bg-surface-container-low p-4 text-sm">
+              <p className="font-bold text-on-surface">Share token</p>
+              <p className="mt-1 break-all font-mono text-secondary" data-testid="web-share-token">
+                {props.shareLink.shareToken}
+              </p>
+              <p className="mt-2 break-all text-xs text-on-surface-variant" data-testid="web-share-link">
+                {shareJoinUrl}
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyJoinLink(shareJoinUrl, "share")}
+                className="mt-3 rounded-full border border-secondary px-4 py-2 text-xs font-bold text-secondary"
+                data-testid="web-copy-share-link"
+              >
+                {copiedValue === "share" ? "Copied share link" : "Copy share link"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-headline text-xl font-black">Trip members</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Roles decide who can approve, edit, or only view collaboration data.
+            </p>
+          </div>
+          {!props.canManage && (
+            <span className="rounded-full bg-surface-container-high px-3 py-1 text-xs font-bold text-on-surface-variant">
+              Viewer mode
+            </span>
+          )}
+        </div>
+
+        <div className="mt-5 divide-y divide-outline-variant/30" data-testid="web-members-list">
+          {props.members.map((member) => {
+            const draft = props.memberDrafts[member.userId] ?? { role: member.role, status: member.status };
+            const isSaving = props.busyAction === `member:${member.userId}`;
+            const hasChanges = draft.role !== member.role || draft.status !== member.status;
+
+            return (
+              <div key={member.userId} className="grid gap-3 py-4 md:grid-cols-[1.1fr_140px_140px_120px] md:items-center">
+                <div>
+                  <p className="break-all font-bold text-on-surface">{member.userId}</p>
+                  <p className="text-xs text-on-surface-variant">
+                    Joined {formatDate(member.joinedAt)} via {member.invitedByUserId ?? "direct ownership"}
+                  </p>
+                </div>
+                <select
+                  value={draft.role}
+                  onChange={(event) =>
+                    props.onMemberDraftChange(member.userId, { role: event.target.value as TripMemberRole })
+                  }
+                  disabled={!props.canManage || member.role === "host"}
+                  className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                  data-testid={`web-member-role-${member.userId}`}
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={draft.status}
+                  onChange={(event) =>
+                    props.onMemberDraftChange(member.userId, { status: event.target.value as TripMemberStatus })
+                  }
+                  disabled={!props.canManage || member.role === "host"}
+                  className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary disabled:opacity-60"
+                  data-testid={`web-member-status-${member.userId}`}
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => props.onUpdateMember(member)}
+                  disabled={!props.canManage || !hasChanges || isSaving || member.role === "host"}
+                  className="rounded-full border border-primary px-4 py-2 text-sm font-bold text-primary disabled:cursor-not-allowed disabled:border-outline-variant disabled:text-outline"
+                  data-testid={`web-member-save-${member.userId}`}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AuditPanel({ logs, canManage }: { logs: TripAuditLog[]; canManage: boolean }) {
+  const [entityFilter, setEntityFilter] = useState("all");
+  const filteredLogs = entityFilter === "all" ? logs : logs.filter((log) => log.entityType === entityFilter);
+
+  if (!canManage) {
+    return (
+      <section className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm" data-testid="web-audit-forbidden">
+        <p className="text-xs font-extrabold uppercase tracking-widest text-error">Restricted audit</p>
+        <h2 className="mt-2 font-headline text-xl font-black">Host/admin only</h2>
+        <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+          Audit logs include sensitive actor and change history, so viewers can keep using the trip without seeing
+          management history.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+      <div className="grid gap-3 sm:grid-cols-[1fr_220px] sm:items-end">
+        <div>
+          <h2 className="font-headline text-xl font-black">Audit trail</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">Every collaboration change records actor, target, and time.</p>
+        </div>
+        <label className="block">
+          <span className="text-xs font-extrabold uppercase tracking-widest text-primary">Entity filter</span>
+          <select
+            value={entityFilter}
+            onChange={(event) => setEntityFilter(event.target.value)}
+            className="mt-1 w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm font-bold outline-none focus:border-primary"
+            data-testid="web-audit-filter"
+          >
+            {AUDIT_ENTITY_FILTERS.map((entityType) => (
+              <option key={entityType} value={entityType}>
+                {entityType === "all" ? "All entities" : entityType}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-5 space-y-3" data-testid="web-audit-list">
+        {filteredLogs.length === 0 && <p className="text-sm text-on-surface-variant">No audit events for this filter.</p>}
+        {filteredLogs.map((log) => (
+          <article key={log.id} className="rounded-2xl bg-surface-container-low p-4">
+            <p className="text-sm font-black text-on-surface">
+              {log.action} <span className="text-on-surface-variant">on</span> {log.entityType}
+            </p>
+            <p className="mt-1 break-all text-xs text-on-surface-variant">
+              Actor {log.actorUserId ?? "system"} at {formatDate(log.createdAt)}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateTimeInput(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
+function formatMoney(value: number | null, currency: string) {
+  if (value === null) return "cost unknown";
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function transportModeLabel(mode: TransportMode) {
+  const labels: Record<TransportMode, string> = {
+    flight: "Flight",
+    train: "Train",
+    bus: "Bus",
+    ferry: "Ferry / boat",
+    car: "Car",
+    motorbike: "Motorbike",
+    bicycle: "Bicycle",
+    walking: "Walking",
+    other: "Other",
+  };
+  return labels[mode];
+}
+
+function emptyActivityDraft(): ActivityDraftState {
+  return {
+    title: "",
+    category: "activity",
+    scheduledAt: "",
+    locationName: "",
+    address: "",
+    estimatedCost: "",
+  };
+}
+
+function buildActivityDraft(activity: TripActivity): ActivityDraftState {
+  return {
+    title: activity.title,
+    category: activity.category,
+    scheduledAt: formatDateTimeInput(activity.scheduledAt),
+    locationName: activity.locationName ?? "",
+    address: activity.address ?? "",
+    estimatedCost: activity.estimatedCost === null ? "" : String(activity.estimatedCost),
+  };
+}
+
+function buildActivityDrafts(activities: TripActivity[]) {
+  return Object.fromEntries(activities.map((activity) => [activity.id, buildActivityDraft(activity)]));
+}
+
+function buildTransportPriceDrafts(bookings: TransportBooking[]) {
+  return Object.fromEntries(bookings.map((booking) => [booking.id, booking.price === null ? "" : String(booking.price)]));
+}
+
+function emptyBillDraft(): BillDraftState {
+  return {
+    activityId: "",
+    merchantName: "",
+    totalAmount: "",
+    currency: "VND",
+    rawText: "",
+  };
+}
+
+function buildBillDraft(bill: BillUpload): BillDraftState {
+  return {
+    activityId: bill.activityId ?? "",
+    merchantName: bill.merchantName ?? "",
+    totalAmount: bill.totalAmount === null ? "" : String(bill.totalAmount),
+    currency: bill.currency,
+    rawText: bill.rawText ?? "",
+  };
+}
+
+function activityTitle(activities: TripActivity[], activityId: string | null) {
+  if (!activityId) return "No linked activity";
+  return activities.find((activity) => activity.id === activityId)?.title ?? activityId;
+}
+
+function groupActivitiesByDay(activities: TripActivity[]) {
+  const groups = new Map<string, { key: string; label: string; activities: TripActivity[] }>();
+
+  for (const activity of activities) {
+    const date = activity.scheduledAt ? new Date(activity.scheduledAt) : null;
+    const key = date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : "unscheduled";
+    const label =
+      key === "unscheduled"
+        ? "Unscheduled"
+        : date!.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    const group = groups.get(key) ?? { key, label, activities: [] };
+    group.activities.push(activity);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values()).sort((left, right) => {
+    if (left.key === "unscheduled") return 1;
+    if (right.key === "unscheduled") return -1;
+    return left.key.localeCompare(right.key);
+  });
+}
+
+function getBrowserOrigin() {
+  return typeof window === "undefined" ? "" : window.location.origin;
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const input = document.createElement("input");
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+  }
+}

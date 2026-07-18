@@ -10,7 +10,10 @@ export default defineConfig({
   testDir: path.join(ROOT, "e2e/specs"),
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // The mock API server keeps business fixtures in memory, so E2E specs that
+  // mutate trip collaboration state must run serially until fixtures are scoped
+  // per test id.
+  workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     trace: "on-first-retry",
@@ -72,13 +75,24 @@ export default defineConfig({
     {
       name: "web-desktop",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.nav.spec.ts"]
+        ? [
+            "**/web.contract.spec.ts",
+            "**/web.share-save.contract.spec.ts",
+            "**/web.trip-business.contract.spec.ts",
+            "**/web.full-flow.screenshots.spec.ts",
+            "**/web.trip-workspace.ui.spec.ts",
+            "**/web.trips.spec.ts",
+            "**/web.nav.spec.ts",
+          ]
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
             "**/web.auth.error.contract.spec.ts",
             "**/web.auth.oauth.spec.ts",
             "**/web.share-save.contract.spec.ts",
+            "**/web.trip-business.contract.spec.ts",
+            "**/web.full-flow.screenshots.spec.ts",
+            "**/web.trip-workspace.ui.spec.ts",
             "**/web.trips.spec.ts",
             "**/web.nav.spec.ts",
           ],
@@ -88,12 +102,21 @@ export default defineConfig({
       },
     },
     {
+      name: "web-mobile-responsive",
+      testMatch: ["**/web.trip-workspace.ui.spec.ts"],
+      use: {
+        ...devices["Pixel 5"],
+        baseURL: "http://127.0.0.1:3000",
+      },
+    },
+    {
       name: "mobile-web",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/mobile-web.contract.spec.ts", "**/mobile-web.trips.spec.ts"]
+        ? ["**/mobile-web.contract.spec.ts", "**/mobile-web.full-flow.screenshots.spec.ts", "**/mobile-web.trips.spec.ts"]
         : [
             "**/mobile-web.contract.spec.ts",
             "**/mobile-web.auth.contract.spec.ts",
+            "**/mobile-web.full-flow.screenshots.spec.ts",
             "**/mobile-web.trips.spec.ts",
           ],
       use: {

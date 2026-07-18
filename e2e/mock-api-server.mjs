@@ -10,6 +10,7 @@ import {
   removeShareToken,
   resolveGenerateScenario,
   saveTripForUser,
+  tripBusiness,
 } from "./fixtures/index.mjs";
 
 const port = Number(process.env.PORT ?? 3101);
@@ -41,6 +42,65 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && pathname === "/api/cities/search") {
     const q = url.searchParams.get("q") ?? "";
     return sendJson(res, 200, findCitySuggestions(q));
+  }
+
+  if (req.method === "POST" && pathname === "/__e2e/reset-business-fixtures") {
+    tripBusiness.resetBusinessFixtures();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === "GET" && pathname === "/api/activities/catalog") {
+    return sendJson(res, 200, tripBusiness.searchActivityCatalog({
+      citySlug: url.searchParams.get("citySlug") ?? undefined,
+      category: url.searchParams.get("category") ?? undefined,
+      q: url.searchParams.get("q") ?? undefined,
+    }));
+  }
+
+  if (req.method === "GET" && pathname === "/api/recommendations/places") {
+    return sendJson(res, 200, tripBusiness.listPlaceRecommendations({
+      citySlug: url.searchParams.get("citySlug") ?? undefined,
+      category: url.searchParams.get("category") ?? undefined,
+      limit: Number(url.searchParams.get("limit") ?? 20),
+    }));
+  }
+
+  if (req.method === "GET" && pathname === "/api/recommendations/transport-prices") {
+    return sendJson(res, 200, tripBusiness.listTransportPriceRecommendations({
+      mode: url.searchParams.get("mode") ?? undefined,
+      originCity: url.searchParams.get("originCity") ?? undefined,
+      destinationCity: url.searchParams.get("destinationCity") ?? undefined,
+      limit: Number(url.searchParams.get("limit") ?? 20),
+    }));
+  }
+
+  if (pathname.startsWith("/api/trips/")) {
+    const routed = await routeTripBusiness(req, pathname);
+    if (routed) return sendJson(res, routed.status, routed.body);
+  }
+
+  if (req.method === "GET" && pathname.match(/^\/api\/bills\/[^/]+$/)) {
+    const userId = getUserIdFromAuth(req.headers.authorization);
+    if (!userId) return unauthorized(res);
+    const billId = pathname.split("/")[3];
+    const result = tripBusiness.getBill({ billId, actorUserId: userId });
+    return sendJson(res, result.status, result.body);
+  }
+
+  if (req.method === "PATCH" && pathname.match(/^\/api\/bills\/[^/]+$/)) {
+    const userId = getUserIdFromAuth(req.headers.authorization);
+    if (!userId) return unauthorized(res);
+    const billId = pathname.split("/")[3];
+    const result = tripBusiness.updateBill({ billId, actorUserId: userId, body: await readJsonBody(req) });
+    return sendJson(res, result.status, result.body);
+  }
+
+  if (req.method === "POST" && pathname.match(/^\/api\/bills\/[^/]+\/analyze$/)) {
+    const userId = getUserIdFromAuth(req.headers.authorization);
+    if (!userId) return unauthorized(res);
+    const billId = pathname.split("/")[3];
+    const result = tripBusiness.analyzeBill({ billId, actorUserId: userId });
+    return sendJson(res, result.status, result.body);
   }
 
   if (req.method === "POST" && pathname === "/api/itinerary/generate") {
@@ -188,4 +248,150 @@ function getUserIdFromAuth(authorization) {
   if (!authorization?.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length).trim();
   return token.length > 0 ? token : null;
+}
+
+async function routeTripBusiness(req, pathname) {
+  const userId = getUserIdFromAuth(req.headers.authorization);
+  if (!userId) {
+    return {
+      status: 401,
+      body: { statusCode: 401, error: "Unauthorized", message: "Invalid or missing token" },
+    };
+  }
+
+  const parts = pathname.split("/").filter(Boolean);
+  const tripId = parts[2];
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "members") {
+    const members = tripBusiness.listMembers(tripId);
+    return members
+      ? { status: 200, body: members }
+      : { status: 404, body: { message: "Trip not found" } };
+  }
+
+  if (req.method === "POST" && parts.length === 4 && parts[3] === "invites") {
+    return tripBusiness.createInvite({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "POST" && pathname === "/api/trips/join/invite") {
+    return tripBusiness.joinInvite({ actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "PATCH" && parts.length === 4 && parts[3] === "share-link") {
+    return tripBusiness.setShareLink({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "POST" && pathname === "/api/trips/join/share-link") {
+    return tripBusiness.joinShareLink({ actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "members") {
+    return tripBusiness.updateMember({
+      tripId,
+      targetUserId: parts[4],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "audit-logs") {
+    return tripBusiness.listAuditLogs({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "review-queue") {
+    return tripBusiness.listReviewQueue({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "PATCH" && parts.length === 4 && parts[3] === "review-submissions") {
+    return tripBusiness.reviewSubmission({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "data-quality-signals") {
+    return tripBusiness.listDataQualitySignals({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "activities") {
+    return tripBusiness.listActivities({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "POST" && parts.length === 4 && parts[3] === "activities") {
+    return tripBusiness.createActivity({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "activities") {
+    return tripBusiness.updateActivity({
+      tripId,
+      activityId: parts[4],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  if (req.method === "PATCH" && parts.length === 7 && parts[3] === "activities" && parts[5] === "participants") {
+    return tripBusiness.updateActivityParticipant({
+      tripId,
+      activityId: parts[4],
+      targetUserId: parts[6],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "transport-bookings") {
+    return tripBusiness.listTransport({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "POST" && parts.length === 4 && parts[3] === "transport-bookings") {
+    return tripBusiness.createTransport({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "transport-bookings") {
+    return tripBusiness.updateTransport({
+      tripId,
+      bookingId: parts[4],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  if (req.method === "POST" && parts.length === 4 && parts[3] === "bills") {
+    return tripBusiness.createBill({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "expenses") {
+    return tripBusiness.listExpenses({ tripId, actorUserId: userId });
+  }
+
+  if (req.method === "POST" && parts.length === 4 && parts[3] === "expenses") {
+    return tripBusiness.createExpense({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  }
+
+  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "expenses") {
+    return tripBusiness.updateExpense({
+      tripId,
+      expenseId: parts[4],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  if (req.method === "PATCH" && parts.length === 7 && parts[3] === "expenses" && parts[5] === "splits") {
+    return tripBusiness.updateExpenseSplit({
+      tripId,
+      expenseId: parts[4],
+      splitId: parts[6],
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
+  }
+
+  return null;
+}
+
+function unauthorized(res) {
+  return sendJson(res, 401, {
+    statusCode: 401,
+    error: "Unauthorized",
+    message: "Invalid or missing token",
+  });
 }
