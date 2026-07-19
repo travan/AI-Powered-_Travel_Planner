@@ -32,21 +32,23 @@ async function capture(page: Page, fileName: string) {
 async function setMockSession(page: Page, userId: string, email: string, fullName: string) {
   await page.evaluate(
     ({ userId, email, fullName }) => {
+      const session = {
+        access_token: userId,
+        refresh_token: `screenshot-refresh-${userId}`,
+        token_type: "bearer",
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: userId,
+          email,
+          user_metadata: { full_name: fullName },
+        },
+      };
       window.localStorage.setItem(
         "horizon.mock.auth.session",
-        JSON.stringify({
-          access_token: userId,
-          refresh_token: `screenshot-refresh-${userId}`,
-          token_type: "bearer",
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          user: {
-            id: userId,
-            email,
-            user_metadata: { full_name: fullName },
-          },
-        })
+        JSON.stringify(session)
       );
+      document.cookie = `horizon_mock_auth=${encodeURIComponent(JSON.stringify(session))}; Path=/; Max-Age=86400; SameSite=Lax`;
     },
     { userId, email, fullName }
   );

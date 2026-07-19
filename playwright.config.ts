@@ -2,7 +2,8 @@ import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const ROOT = __dirname;
-const MOCK_API_URL = "http://127.0.0.1:3101";
+const MOCK_API_PORT = process.env.E2E_MOCK_API_PORT ?? "3101";
+const MOCK_API_URL = `http://127.0.0.1:${MOCK_API_PORT}`;
 const SKIP_AUTH_CONTRACTS = process.env.SKIP_AUTH_CONTRACTS === "true";
 
 export default defineConfig({
@@ -28,7 +29,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
-        PORT: "3101",
+        PORT: MOCK_API_PORT,
       },
       stdout: "pipe",
       stderr: "pipe",
