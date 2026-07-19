@@ -60,16 +60,9 @@
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"
   },
-  "packageManager": "pnpm@9.15.0",
-  "pnpm": {
-    "overrides": {
-      "@babel/core": "7.29.0",
-      "react": "19.0.0",
-      "react-dom": "19.0.0"
-    }
-  },
+  "packageManager": "pnpm@10.15.0",
   "engines": {
     "node": "22.x",
-    "pnpm": "9.15.0"
+    "pnpm": "10.15.0"
   }
 }
