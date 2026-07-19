@@ -15,7 +15,13 @@ export type TransportMode =
   | "car"
   | "self_drive"
   | "taxi"
-  | "motorbike";
+  | "motorbike"
+  | "bicycle"
+  | "boat"
+  | "ferry"
+  | "cruise"
+  | "walk"
+  | "other";
 export type TransportType =
   | "train"
   | "flight"
@@ -23,7 +29,13 @@ export type TransportType =
   | "car_rental"
   | "self_drive"
   | "motorbike_rental"
-  | "taxi";
+  | "taxi"
+  | "bicycle"
+  | "boat"
+  | "ferry"
+  | "cruise"
+  | "walk"
+  | "other";
 export type TicketPlatform =
   | "Klook"
   | "Traveloka"

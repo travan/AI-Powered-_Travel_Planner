@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/config/package.json ./packages/config/package.json
+COPY packages/hooks/package.json ./packages/hooks/package.json
+COPY packages/scrapers/package.json ./packages/scrapers/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/ui/package.json ./packages/ui/package.json
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+  pnpm install --frozen-lockfile --filter @travel/web...
+
+FROM deps AS builder
+WORKDIR /app
+
+ARG API_PROXY_TARGET=http://server:3001
+ARG NEXT_PUBLIC_AUTH_PROVIDER=local
+ARG AUTH_PROVIDER=local
+ARG ENABLE_MOCK_AUTH_SERVER=true
+ARG NEXT_PUBLIC_SUPABASE_URL=
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
+ENV NEXT_PUBLIC_AUTH_PROVIDER=$NEXT_PUBLIC_AUTH_PROVIDER
+ENV AUTH_PROVIDER=$AUTH_PROVIDER
+ENV ENABLE_MOCK_AUTH_SERVER=$ENABLE_MOCK_AUTH_SERVER
+ENV NEXT_PUBLIC_API_URL=
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+COPY apps/web ./apps/web
+COPY packages ./packages
+
+RUN pnpm --dir apps/web build
+RUN pnpm prune --prod
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+RUN corepack enable
+
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json ./
+COPY --from=builder /app/apps/web ./apps/web
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/node_modules ./node_modules
+
+RUN useradd --create-home --uid 1001 appuser && chown -R appuser:appuser /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+EXPOSE 3000
+
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"
+
+CMD ["pnpm", "--dir", "apps/web", "exec", "next", "start", "--hostname", "0.0.0.0", "--port", "3000"]

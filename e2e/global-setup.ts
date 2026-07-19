@@ -10,6 +10,12 @@ export default async function globalSetup() {
 
   const seedScript = path.join(__dirname, "../apps/api/scripts/seed-demo-itineraries.mjs");
   const apiDir = path.join(__dirname, "../apps/api");
+  const databaseProvider = process.env.DATABASE_PROVIDER ?? "postgres";
+
+  if (databaseProvider !== "supabase") {
+    console.log(`Skipping Supabase demo seed: DATABASE_PROVIDER=${databaseProvider}.`);
+    return;
+  }
 
   if (!existsSync(seedScript)) {
     console.log("Skipping Supabase demo seed: script not found in this checkout.");
