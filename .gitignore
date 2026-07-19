@@ -8,6 +8,11 @@ dist
 out
 .expo
 .expo-shared
+apps/api/src/**/*.js
+apps/api/src/**/*.d.ts
+apps/api/src/**/*.js.map
+apps/api/src/**/*.d.ts.map
+!apps/api/src/types/**/*.d.ts
 
 # Environment files
 .env
@@ -47,6 +52,7 @@ agents
 .agents
 
 # API Scripts (contains sensitive demo data)
-apps/api/scripts/*
-!apps/api/scripts/init-local-postgres.mjs
-!apps/api/scripts/seed-vietnam-cities.mjs
+apps/api/scripts/
+
+# UI capture 
+ui-captures

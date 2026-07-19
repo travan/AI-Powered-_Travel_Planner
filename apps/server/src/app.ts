@@ -1,0 +1,48 @@
+import { NestFactory } from "@nestjs/core";
+import { ValidationPipe } from "@nestjs/common";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import type { Request } from "express";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
+import { AppModule } from "./app.module.js";
+import { AppConfigService } from "./config/app-config.service.js";
+
+export async function buildApp(): Promise<NestExpressApplication> {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
+  const config = app.get(AppConfigService);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    })
+  );
+
+  app.use(helmet({ contentSecurityPolicy: false }));
+  app.enableCors({
+    origin: (origin: string | undefined, cb: (error: Error | null, allow: boolean) => void) => {
+      if (!origin || config.allowedOrigins.has(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error("Origin not allowed"), false);
+    },
+    credentials: true,
+  });
+  app.use(
+    rateLimit({
+      max: config.rateLimit.max,
+      windowMs: config.rateLimit.windowMs,
+      keyGenerator: (request: Request) =>
+        (request.headers["x-forwarded-for"] as string | undefined) ?? request.ip ?? "unknown",
+    })
+  );
+
+  return app;
+}
