@@ -244,12 +244,15 @@ test("host can capture bills, create custom expense splits, and settle balances"
   await page.getByTestId("web-custom-split-e2e-user-1").fill("100000");
   await page.getByTestId("web-custom-split-e2e-user-2").fill("100000");
   await expect(page.getByTestId("web-custom-split-summary")).toContainText("remaining");
-  await page.getByTestId("web-create-expense").click();
+  const createExpenseButton = page.getByTestId("web-create-expense");
+  await createExpenseButton.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await createExpenseButton.click();
   await expect(page.getByTestId("web-workspace-message")).toContainText("Custom split total must equal expense amount");
 
   await page.getByTestId("web-custom-split-e2e-user-1").fill("300000");
   await page.getByTestId("web-custom-split-e2e-user-2").fill("300000");
-  await page.getByTestId("web-create-expense").click();
+  await createExpenseButton.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await createExpenseButton.click();
   await expect(page.getByTestId("web-expense-list")).toContainText("Hoi An Lantern Studio Updated payment");
   await expect(page.locator("[data-testid^='web-expense-activity-']").first()).toContainText("Hoi An lantern workshop");
 
