@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { TripWorkspace } from "../../../../../components/trips/TripWorkspace";
 
 interface PageProps {
-  params: Promise<{ tripId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export const metadata: Metadata = {
@@ -10,6 +10,6 @@ export const metadata: Metadata = {
 };
 
 export default async function TripWorkspacePage({ params }: PageProps) {
-  const { tripId } = await params;
-  return <TripWorkspace tripId={tripId} />;
+  const { id } = await params;
+  return <TripWorkspace tripId={id} />;
 }
