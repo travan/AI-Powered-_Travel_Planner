@@ -9,12 +9,12 @@ import {
   buildTicketOptions,
   buildSocialLinks,
 } from "@travel/scrapers";
-import { getDb } from "../db/mongodb.js";
 import { redis, cacheSet, TTL } from "../db/redis.js";
-import { supabase } from "../db/supabase.js";
+import { itineraryStore } from "../db/itinerary-store.js";
 import { env } from "../env.js";
 import type { PreFetchedCityData } from "@travel/ai";
-import type { ItineraryOverview, CityMetadata } from "@travel/types";
+import type { ItineraryOverview } from "@travel/types";
+import { cityStore } from "../db/city-store.js";
 
 const ai = createAIProvider(env.AI_PROVIDER);
 
@@ -45,14 +45,10 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
     if (!overviewRaw) throw new Error("Overview from Phase 1 not found");
     const overview = JSON.parse(overviewRaw) as ItineraryOverview;
 
-    const db = await getDb();
-
     // Enrich each city in parallel
     const enrichedCityData = await Promise.all(
       cityDataList.map(async (cityData) => {
-        const meta = await db
-          .collection<CityMetadata>("cities")
-          .findOne({ "name.en": new RegExp(cityData.city, "i") });
+        const meta = await cityStore.findBySlugOrName(cityData.city);
 
         if (!meta) return cityData;
 
@@ -91,9 +87,7 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
         let transportOptions: unknown[] = [];
 
         if (nextCity && meta) {
-          const nextMeta = await db
-            .collection<CityMetadata>("cities")
-            .findOne({ "name.en": new RegExp(nextCity.city, "i") });
+          const nextMeta = await cityStore.findBySlugOrName(nextCity.city);
 
           if (nextMeta) {
             const distance = Math.round(
@@ -129,33 +123,29 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
 
     let itineraryId: string;
 
-    // Save to Supabase; in local dev, fall back to Redis-only persistence.
-    const { data: saved, error } = await supabase
-      .from("itineraries")
-      .insert({
-        job_id: sourceJobId,
-        cities: input.cities,
-        countries: enrichedCityData.map((c) => c.country),
-        start_date: input.start_date,
-        end_date: input.end_date,
-        num_days: overview.total_days,
-        budget: input.budget,
-        currency: input.currency,
-        trip_style: input.trip_style,
-        status: "complete",
-        result: itinerary,
-      })
-      .select("id")
-      .single();
+    // Persist through the configured database provider; in local dev, fall back to Redis-only.
+    let saveError: unknown;
+    const savedId = await itineraryStore.create({
+      userId: job.data.userId,
+      jobId: sourceJobId,
+      input,
+      countries: enrichedCityData.map((c) => c.country),
+      numDays: overview.total_days,
+      result: itinerary,
+    }).catch((error: unknown) => {
+      saveError = error;
+      return null;
+    });
 
-    if (error || !saved?.id) {
+    if (!savedId) {
       if (env.NODE_ENV === "production") {
-        throw new Error(`Failed to save itinerary: ${error?.message ?? "unknown error"}`);
+        const message = saveError instanceof Error ? saveError.message : "unknown error";
+        throw new Error(`Failed to save itinerary: ${message}`);
       }
       itineraryId = `local-${sourceJobId}`;
       await cacheSet(`itinerary:${itineraryId}`, itinerary, TTL.ITINERARY_RESULT);
     } else {
-      itineraryId = saved.id;
+      itineraryId = savedId;
     }
 
     // Cache result in Redis
@@ -176,11 +166,7 @@ export async function processDetail(job: Job<ItineraryJobData>): Promise<{ itine
     const message = err instanceof Error ? err.message : "Unknown error";
     await publish("error", { message, code: "DETAIL_FAILED" });
 
-    // Mark itinerary as failed in Supabase
-    await supabase
-      .from("itineraries")
-      .update({ status: "failed" })
-      .eq("job_id", sourceJobId);
+    await itineraryStore.markFailed(sourceJobId).catch(() => undefined);
 
     throw err;
   }

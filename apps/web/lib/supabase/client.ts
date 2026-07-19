@@ -1,12 +1,16 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { resolveSupabasePublicConfig, WEB_SUPABASE_PUBLIC_ENV_SPEC } from "@travel/types";
+import { createLocalBrowserClient, LOCAL_AUTH_ENABLED } from "./local-auth";
 import { createMockBrowserClient, MOCK_AUTH_ENABLED } from "./mock-auth";
 
 export function createClient() {
-  const isProductionRuntime = process.env.NODE_ENV === "production";
   const forceRealAuthClientForE2E = process.env.NEXT_PUBLIC_E2E_FORCE_REAL_AUTH_CLIENT === "true";
 
-  if (MOCK_AUTH_ENABLED && !isProductionRuntime && !forceRealAuthClientForE2E) {
+  if (LOCAL_AUTH_ENABLED && !forceRealAuthClientForE2E) {
+    return createLocalBrowserClient();
+  }
+
+  if (MOCK_AUTH_ENABLED && !forceRealAuthClientForE2E) {
     return createMockBrowserClient();
   }
 

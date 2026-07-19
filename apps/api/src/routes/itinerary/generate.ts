@@ -1,46 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { z } from "zod";
-import type { ItineraryInput, TripStyle } from "@travel/types";
+import type { ItineraryInput } from "@travel/types";
 import { itineraryQueue } from "../../lib/queue.js";
 import { buildCacheKey } from "../../lib/cache-key.js";
 import { cacheDel, cacheGet } from "../../db/redis.js";
 import { savePromptHistory } from "../users.js";
-
-const generateSchema = z.object({
-  cities: z.array(z.string().min(1)).min(1).max(10),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  num_days: z.number().int().min(1).max(30).optional(),
-  budget: z.number().positive().optional(),
-  currency: z.string().length(3).default("USD"),
-  trip_style: z.enum(["adventure", "relax", "culture", "food", "mixed", "budget", "mid_range", "luxury", "family", "romantic", "cultural"]).default("mixed"),
-  locale: z.string().default("en"),
-  num_travelers: z.number().int().min(1).max(20).default(2),
-  // Optional: human-readable city names for display (e.g. ["Tokyo", "Kyoto"])
-  city_names: z.array(z.string()).optional(),
-}).refine(
-  (d) => d.start_date || d.num_days,
-  { message: "Either start_date+end_date or num_days is required" }
-);
-
-type GenerateInput = z.infer<typeof generateSchema>;
-
-function normalizeTripStyle(style: GenerateInput["trip_style"]): TripStyle {
-  switch (style) {
-    case "budget":
-    case "mid_range":
-    case "luxury":
-      return "mixed";
-    case "family":
-      return "relax";
-    case "romantic":
-      return "food";
-    case "cultural":
-      return "culture";
-    default:
-      return style;
-  }
-}
+import { generateItineraryDto, normalizeTripStyle } from "../../modules/itinerary/dto/itinerary.dto.js";
+import { parseDto } from "../../shared/http/validation.js";
 
 export async function generateRoutes(fastify: FastifyInstance) {
   fastify.post("/itinerary/generate", {
@@ -55,16 +20,22 @@ export async function generateRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const parsed = generateSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({
-        statusCode: 400,
-        error: "Bad Request",
-        message: parsed.error.flatten().fieldErrors,
+    const rawInput = parseDto(generateItineraryDto, request.body, reply);
+    if (!rawInput) return;
+
+    const userId = resolveUserIdFromAuthorizationHeader(
+      request.server.jwt,
+      authorizationHeader
+    );
+
+    if (!userId) {
+      return reply.status(401).send({
+        statusCode: 401,
+        error: "Unauthorized",
+        message: "Invalid authentication token",
       });
     }
 
-    const rawInput = parsed.data;
     const input: ItineraryInput = {
       cities: rawInput.cities,
       start_date: rawInput.start_date,
@@ -98,31 +69,20 @@ export async function generateRoutes(fastify: FastifyInstance) {
       jobId: "", // will be set below
       input,
       cacheKey,
+      userId,
     });
 
     // Update jobId after creation
-    await job.updateData({ jobId: job.id!, input, cacheKey });
+    await job.updateData({ jobId: job.id!, input, cacheKey, userId });
 
     // 3. Fire-and-forget: save to user prompt history (does not block response)
-    const userId = resolveUserIdFromAuthorizationHeader(
-      request.server.jwt,
-      authorizationHeader
-    );
-
-    if (!userId) {
-      return reply.status(401).send({
-        statusCode: 401,
-        error: "Unauthorized",
-        message: "Invalid authentication token",
-      });
-    }
-
     savePromptHistory({
       userId,
       cacheKey,
       cities: input.cities,
       cityNames: rawInput.city_names ?? input.cities,
       input: input as unknown as Record<string, unknown>,
+      rawPromptText: rawInput.prompt_text,
     }).catch(() => {/* non-critical, swallow errors */});
 
     return reply.status(202).send({

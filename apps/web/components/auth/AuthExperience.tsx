@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
+import { checkAccountExists } from "@/lib/api";
 import { normalizeSupabaseAuthError } from "@travel/types";
 
 type AuthMode = "login" | "signup";
@@ -59,6 +60,8 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [accountExists, setAccountExists] = useState<boolean | null>(null);
+  const [checkingAccount, setCheckingAccount] = useState(false);
 
   const isLogin = mode === "login";
 
@@ -154,6 +157,21 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       setNormalizedAuthError(error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleEmailBlur() {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      setAccountExists(null);
+      return;
+    }
+
+    setCheckingAccount(true);
+    try {
+      setAccountExists(await checkAccountExists(normalizedEmail));
+    } finally {
+      setCheckingAccount(false);
     }
   }
 
@@ -291,11 +309,33 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
+                    onBlur={handleEmailBlur}
                     placeholder={t("email_placeholder")}
                     data-testid="web-auth-email"
                     className="w-full rounded-xl bg-surface-container-high py-4 pr-4 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                   />
                 </span>
+                {checkingAccount && (
+                  <p className="ml-1 text-xs font-medium text-outline" data-testid="web-auth-account-checking">
+                    {t("checking_account")}
+                  </p>
+                )}
+                {!checkingAccount && accountExists === true && !isLogin && (
+                  <p className="ml-1 text-xs font-semibold text-primary" data-testid="web-auth-account-exists">
+                    {t("account_exists")}{" "}
+                    <Link href={authTabHref.login} className="underline">
+                      {t("tab_login")}
+                    </Link>
+                  </p>
+                )}
+                {!checkingAccount && accountExists === false && isLogin && (
+                  <p className="ml-1 text-xs font-semibold text-primary" data-testid="web-auth-account-missing">
+                    {t("account_missing")}{" "}
+                    <Link href={authTabHref.signup} className="underline">
+                      {t("tab_signup")}
+                    </Link>
+                  </p>
+                )}
               </label>
 
               <label className="block space-y-1.5">

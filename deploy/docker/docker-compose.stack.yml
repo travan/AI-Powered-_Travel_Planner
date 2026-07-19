@@ -1,0 +1,144 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-travel-planner-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-travel_planner}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ai_travel_planner_postgres:/var/lib/postgresql/data
+      - ../../apps/api/db/local-postgres.sql:/docker-entrypoint-initdb.d/001-local-postgres.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: ai-travel-planner-mongodb
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - ai_travel_planner_mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-travel-planner-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ai_travel_planner_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.server
+    image: ai-travel-planner:server
+    container_name: ai-travel-planner-server
+    environment:
+      NODE_ENV: ${API_NODE_ENV:-development}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PORT: 3001
+      SERVE_WEB: "false"
+      DATABASE_PROVIDER: postgres
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-travel_planner}
+      POSTGRES_URLS: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-travel_planner},${POSTGRES_FALLBACK_URLS:-}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-5000}
+      DB_QUERY_TIMEOUT_MS: ${DB_QUERY_TIMEOUT_MS:-15000}
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URIS: mongodb://mongodb:27017,${MONGODB_FALLBACK_URIS:-}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-travel_planner}
+      MONGODB_CONNECT_TIMEOUT_MS: ${MONGODB_CONNECT_TIMEOUT_MS:-5000}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or shell}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      BOOKING_AFFILIATE_ID: ${BOOKING_AFFILIATE_ID:-}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-60}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      FREE_DAILY_GENERATE_LIMIT: ${FREE_DAILY_GENERATE_LIMIT:-3}
+      NEXT_PUBLIC_APP_URL: http://localhost:${UI_PORT:-3000}
+      CORS_ORIGINS: http://localhost:${UI_PORT:-3000},http://ui:3000
+      TEST_ENABLE_MOCK_TOKENS: ${TEST_ENABLE_MOCK_TOKENS:-true}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: >
+      sh -c "pnpm --dir apps/api db:local:init &&
+             pnpm --dir apps/api db:seed:vietnam-cities &&
+             pnpm --dir apps/api db:seed:demo-system &&
+             pnpm --dir apps/api exec tsx src/index.ts"
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.ui
+      args:
+        API_PROXY_TARGET: http://server:3001
+        NEXT_PUBLIC_AUTH_PROVIDER: ${NEXT_PUBLIC_AUTH_PROVIDER:-local}
+        AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+        ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-false}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    image: ai-travel-planner:ui
+    container_name: ai-travel-planner-ui
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PROXY_TARGET: http://server:3001
+      NEXT_PUBLIC_API_URL: ""
+      NEXT_PUBLIC_AUTH_PROVIDER: ${NEXT_PUBLIC_AUTH_PROVIDER:-local}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-false}
+      NEXT_PUBLIC_APP_URL: http://localhost:${UI_PORT:-3000}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  ai_travel_planner_postgres:
+  ai_travel_planner_mongodb:
+  ai_travel_planner_redis:

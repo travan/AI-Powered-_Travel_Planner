@@ -47,4 +47,6 @@ agents
 .agents
 
 # API Scripts (contains sensitive demo data)
-apps/api/scripts/
+apps/api/scripts/*
+!apps/api/scripts/init-local-postgres.mjs
+!apps/api/scripts/seed-vietnam-cities.mjs

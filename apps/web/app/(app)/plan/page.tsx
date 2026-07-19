@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
-import { generateItinerary } from "../../../lib/api";
+import { claimSearchDraft, createSearchDraft, generateItinerary } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 import { useCitySearch, usePopularCities } from "@travel/hooks";
 import {
@@ -18,12 +18,66 @@ import {
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
 const PENDING_SEARCH_INTENT_KEY = "horizon.search.intent";
+const SEARCH_DRAFT_GUEST_KEY = "horizon.search.guest_key";
 const PENDING_SEARCH_INTENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 type PendingSearchIntent = {
   request: ReturnType<typeof buildGenerateRequest>;
+  draftId?: string;
+  guestKey?: string;
   createdAt: number;
 };
+
+function getOrCreateSearchGuestKey(): string {
+  if (typeof window === "undefined") return "";
+
+  const existing = window.localStorage.getItem(SEARCH_DRAFT_GUEST_KEY);
+  if (existing) return existing;
+
+  const randomPart = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const next = `guest-${randomPart}`;
+  window.localStorage.setItem(SEARCH_DRAFT_GUEST_KEY, next);
+  return next;
+}
+
+function buildPromptText(request: ReturnType<typeof buildGenerateRequest>): string {
+  const cities = request.city_names?.length ? request.city_names : request.cities;
+  const parts = [
+    `Plan a trip to ${cities.join(", ")}`,
+    request.num_days ? `for ${request.num_days} days` : null,
+    request.start_date ? `starting ${request.start_date}` : null,
+    request.budget ? `with budget ${request.budget} ${request.currency}` : null,
+    `style ${request.trip_style}`,
+    `${request.num_travelers} traveler${request.num_travelers === 1 ? "" : "s"}`,
+  ];
+
+  return parts.filter(Boolean).join(", ");
+}
+
+async function createServerBackedIntent(
+  request: ReturnType<typeof buildGenerateRequest>
+): Promise<PendingSearchIntent> {
+  const intent: PendingSearchIntent = {
+    request,
+    guestKey: getOrCreateSearchGuestKey(),
+    createdAt: Date.now(),
+  };
+
+  if (!intent.guestKey) return intent;
+
+  try {
+    const draft = await createSearchDraft({
+      guest_key: intent.guestKey,
+      prompt_text: buildPromptText(request),
+      search_payload: request,
+    });
+    intent.draftId = draft.id;
+  } catch {
+    // Browser storage remains the fallback if the draft API is unavailable.
+  }
+
+  return intent;
+}
 
 function shouldRestorePendingSearchIntent(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -94,19 +148,21 @@ export default function PlanPage() {
     if (params.get("resumeGenerate") !== "1") return;
 
     const rawIntent = window.sessionStorage.getItem(PENDING_SEARCH_INTENT_KEY);
-    if (!rawIntent) return;
+    const draftId = params.get("draftId");
+    if (!rawIntent && !draftId) return;
 
     let parsed: PendingSearchIntent | null = null;
-    try {
-      parsed = JSON.parse(rawIntent) as PendingSearchIntent;
-    } catch {
-      window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
-      return;
+    if (rawIntent) {
+      try {
+        parsed = JSON.parse(rawIntent) as PendingSearchIntent;
+      } catch {
+        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+      }
     }
 
-    if (!parsed || !parsed.request || Date.now() - parsed.createdAt > PENDING_SEARCH_INTENT_MAX_AGE_MS) {
+    if (parsed && (!parsed.request || Date.now() - parsed.createdAt > PENDING_SEARCH_INTENT_MAX_AGE_MS)) {
       window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
-      return;
+      parsed = null;
     }
 
     isResumingRef.current = true;
@@ -123,19 +179,30 @@ export default function PlanPage() {
 
       setLoading(true);
       setError(null);
-      const serializedIntent = JSON.stringify(parsed);
+      const serializedIntent = parsed ? JSON.stringify(parsed) : null;
 
       try {
-        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+        let requestToGenerate = parsed?.request ?? null;
+        const guestKey = parsed?.guestKey ?? window.localStorage.getItem(SEARCH_DRAFT_GUEST_KEY);
 
-        const response = await generateItinerary(parsed.request, session.access_token);
+        if (draftId && guestKey) {
+          const draft = await claimSearchDraft(draftId, guestKey, session.access_token);
+          requestToGenerate = draft.search_payload;
+        }
+
+        if (!requestToGenerate) {
+          throw new Error("No pending search draft was found.");
+        }
+
+        window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+        const response = await generateItinerary(requestToGenerate, session.access_token);
         const target = resolveGenerateNavigationTarget(response);
         if (!target) {
           throw new Error("Generation response is missing the next route target.");
         }
         router.replace(`/trips?source=${target.kind}&id=${target.id}`);
       } catch (e: unknown) {
-        if (shouldRestorePendingSearchIntent(e)) {
+        if (serializedIntent && shouldRestorePendingSearchIntent(e)) {
           window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, serializedIntent);
         }
         setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
@@ -200,6 +267,7 @@ export default function PlanPage() {
       num_travelers: numTravelers,
       locale: "en",
     });
+    requestPayload.prompt_text = buildPromptText(requestPayload);
 
     try {
       const supabase = createClient();
@@ -209,11 +277,18 @@ export default function PlanPage() {
 
       if (!session?.access_token) {
         if (typeof window !== "undefined") {
-          const intent: PendingSearchIntent = {
-            request: requestPayload,
-            createdAt: Date.now(),
-          };
+          const intent = await createServerBackedIntent(requestPayload);
           window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, JSON.stringify(intent));
+
+          const redirectTo = new URL("/plan", window.location.origin);
+          redirectTo.searchParams.set("resumeGenerate", "1");
+          if (intent.draftId) redirectTo.searchParams.set("draftId", intent.draftId);
+
+          const query = new URLSearchParams({
+            redirectTo: `${redirectTo.pathname}${redirectTo.search}`,
+          }).toString();
+          router.push(`/login?${query}`);
+          return;
         }
 
         const query = new URLSearchParams({ redirectTo: "/plan?resumeGenerate=1" }).toString();

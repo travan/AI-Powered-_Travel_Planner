@@ -11,8 +11,7 @@ const USERS_STORAGE_KEY = "horizon.mock.auth.users";
 const SESSION_STORAGE_KEY = "horizon.mock.auth.session";
 const AUTH_CHANGE_EVENT = "horizon:mock-auth-change";
 export const MOCK_AUTH_COOKIE = "horizon_mock_auth";
-export const MOCK_AUTH_ENABLED =
-  process.env["ENABLE_MOCK_AUTH_SERVER"] === "true" && process.env.NODE_ENV !== "production";
+export const MOCK_AUTH_ENABLED = process.env["ENABLE_MOCK_AUTH_SERVER"] === "true";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();

@@ -2,7 +2,12 @@ import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const ROOT = __dirname;
-const MOCK_API_URL = "http://127.0.0.1:3101";
+const MOCK_API_PORT = process.env.E2E_MOCK_API_PORT ?? "3111";
+const WEB_PORT = process.env.E2E_WEB_PORT ?? "3100";
+const MOBILE_WEB_PORT = process.env.E2E_MOBILE_WEB_PORT ?? "8081";
+const MOCK_API_URL = `http://127.0.0.1:${MOCK_API_PORT}`;
+const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
+const MOBILE_WEB_URL = `http://127.0.0.1:${MOBILE_WEB_PORT}`;
 const SKIP_AUTH_CONTRACTS = process.env.SKIP_AUTH_CONTRACTS === "true";
 
 export default defineConfig({
@@ -25,21 +30,25 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
-        PORT: "3101",
+        PORT: MOCK_API_PORT,
       },
       stdout: "pipe",
       stderr: "pipe",
       timeout: 30_000,
     },
     {
-      command: "./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000",
+      command: `./node_modules/.bin/next dev --hostname 127.0.0.1 --port ${WEB_PORT}`,
       cwd: path.join(ROOT, "apps/web"),
-      url: "http://127.0.0.1:3000/plan",
+      url: `${WEB_URL}/plan`,
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
         NEXT_PUBLIC_API_URL: MOCK_API_URL,
+        E2E_NEXT_PUBLIC_API_URL: MOCK_API_URL,
+        E2E_API_PROXY_TARGET: MOCK_API_URL,
         API_PROXY_TARGET: MOCK_API_URL,
+        AUTH_PROVIDER: "supabase",
+        NEXT_PUBLIC_AUTH_PROVIDER: "supabase",
         ENABLE_MOCK_AUTH_SERVER: process.env.ENABLE_MOCK_AUTH_SERVER ?? "true",
         NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
         NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder-anon-key",
@@ -49,9 +58,9 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: "./node_modules/.bin/expo start --web --port 8081",
+      command: `./node_modules/.bin/expo start --web --port ${MOBILE_WEB_PORT}`,
       cwd: path.join(ROOT, "apps/mobile"),
-      url: "http://127.0.0.1:8081",
+      url: MOBILE_WEB_URL,
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
@@ -61,7 +70,7 @@ export default defineConfig({
         EXPO_ROUTER_APP_ROOT: "app",
         EXPO_PUBLIC_API_URL: MOCK_API_URL,
         EXPO_PUBLIC_ENABLE_MOCK_AUTH: process.env.EXPO_PUBLIC_ENABLE_MOCK_AUTH ?? "true",
-        EXPO_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
+        EXPO_PUBLIC_WEB_URL: WEB_URL,
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -72,7 +81,7 @@ export default defineConfig({
     {
       name: "web-desktop",
       testMatch: SKIP_AUTH_CONTRACTS
-        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.nav.spec.ts"]
+        ? ["**/web.contract.spec.ts", "**/web.share-save.contract.spec.ts", "**/web.trips.spec.ts", "**/web.trip-collaboration.spec.ts", "**/web.nav.spec.ts"]
         : [
             "**/web.contract.spec.ts",
             "**/web.auth.contract.spec.ts",
@@ -80,10 +89,11 @@ export default defineConfig({
             "**/web.auth.oauth.spec.ts",
             "**/web.share-save.contract.spec.ts",
             "**/web.trips.spec.ts",
+            "**/web.trip-collaboration.spec.ts",
             "**/web.nav.spec.ts",
           ],
       use: {
-        baseURL: "http://127.0.0.1:3000",
+        baseURL: WEB_URL,
         viewport: { width: 1440, height: 960 },
       },
     },
@@ -98,7 +108,7 @@ export default defineConfig({
           ],
       use: {
         ...devices["Pixel 5"],
-        baseURL: "http://127.0.0.1:8081",
+        baseURL: MOBILE_WEB_URL,
       },
     },
   ],

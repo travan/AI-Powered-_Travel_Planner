@@ -2,11 +2,10 @@ import type { Job } from "bullmq";
 import type { ItineraryJobData } from "../lib/queue.js";
 import { createAIProvider } from "@travel/ai";
 import { getSunriseSunset, getWeatherForecast, buildWeatherNote } from "@travel/scrapers";
-import { getDb } from "../db/mongodb.js";
 import { redis } from "../db/redis.js";
 import { env } from "../env.js";
 import type { PreFetchedCityData } from "@travel/ai";
-import type { CityMetadata } from "@travel/types";
+import { cityStore } from "../db/city-store.js";
 
 const ai = createAIProvider(env.AI_PROVIDER);
 
@@ -40,14 +39,10 @@ export async function processOverview(job: Job<ItineraryJobData>): Promise<void>
   try {
     await publish("processing", { step: "fetching_city_data" });
 
-    const db = await getDb();
-
     // Fetch city metadata for all cities in parallel
     const cityDataList = await Promise.all(
       input.cities.map(async (cityName): Promise<PreFetchedCityData> => {
-        const meta = await db
-          .collection<CityMetadata>("cities")
-          .findOne({ $or: [{ slug: cityName.toLowerCase() }, { "name.en": new RegExp(cityName, "i") }] });
+        const meta = await cityStore.findBySlugOrName(cityName);
 
         const lat = meta?.lat ?? 0;
         const lon = meta?.lon ?? 0;

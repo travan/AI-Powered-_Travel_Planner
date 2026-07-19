@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { getDb } from "../db/mongodb.js";
-
-const PROMPT_HISTORY_TTL_DAYS = 90;
+import { savePromptHistoryToMongo } from "../db/prompt-history-store.js";
+import { userService } from "../modules/users/application/user.service.js";
+import { promptHistoryQueryDto } from "../modules/users/dto/user.dto.js";
+import { parseDto } from "../shared/http/validation.js";
 
 export async function usersRoutes(fastify: FastifyInstance) {
   /**
@@ -14,31 +15,10 @@ export async function usersRoutes(fastify: FastifyInstance) {
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
       const userId = (request.user as { sub: string }).sub;
-      const limit = Math.min(Number(request.query.limit ?? 5), 20);
+      const query = parseDto(promptHistoryQueryDto, request.query, reply);
+      if (!query) return;
 
-      const db = await getDb();
-      const history = await db
-        .collection("user_prompt_history")
-        .find(
-          { user_id: userId },
-          {
-            projection: {
-              _id: 0,
-              id: { $toString: "$_id" },
-              cities: 1,
-              city_names: 1,
-              num_days: 1,
-              budget: 1,
-              currency: 1,
-              trip_style: 1,
-              created_at: 1,
-              itinerary_id: 1,
-            },
-          }
-        )
-        .sort({ created_at: -1 })
-        .limit(limit)
-        .toArray();
+      const history = await userService.getPromptHistory(userId, query.limit);
 
       return reply.send(history);
     }
@@ -55,34 +35,8 @@ export async function savePromptHistory(params: {
   cities: string[];
   cityNames: string[];
   input: Record<string, unknown>;
+  rawPromptText?: string;
   itineraryId?: string;
 }): Promise<void> {
-  const { userId, cacheKey, cities, cityNames, input } = params;
-  if (!userId) {
-    return;
-  }
-
-  const db = await getDb();
-
-  // Upsert by (user_id + cache_key) so repeated identical requests don't bloat the collection
-  const expiresAt = new Date(Date.now() + PROMPT_HISTORY_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-  await db.collection("user_prompt_history").updateOne(
-    { user_id: userId, cache_key: cacheKey },
-    {
-      $set: {
-        user_id: userId,
-        cache_key: cacheKey,
-        cities,
-        city_names: cityNames,
-        num_days: (input.num_days as number | undefined) ?? null,
-        budget: (input.budget as number | undefined) ?? null,
-        currency: (input.currency as string | undefined) ?? "USD",
-        trip_style: (input.trip_style as string | undefined) ?? "mixed",
-        created_at: new Date(),
-        expires_at: expiresAt,
-      },
-    },
-    { upsert: true }
-  );
+  await savePromptHistoryToMongo(params);
 }
