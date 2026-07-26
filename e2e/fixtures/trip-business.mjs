@@ -146,8 +146,55 @@ export function listMembers(tripId) {
   return membersByTrip.get(tripId) ?? null;
 }
 
+export function getMembership({ tripId, actorUserId }) {
+  const member = (membersByTrip.get(tripId) ?? []).find(
+    (entry) => entry.userId === actorUserId && entry.status === "active",
+  );
+  return member
+    ? { status: 200, body: member }
+    : notFound("Trip membership not found");
+}
+
+export function ensureSavedTripMember({ tripId, actorUserId }) {
+  return upsertMember(tripId, actorUserId, "host", null);
+}
+
+export function listTripsForUser(actorUserId) {
+  return Array.from(membersByTrip.entries()).flatMap(([tripId, members]) =>
+    members
+      .filter(
+        (member) =>
+          member.userId === actorUserId && member.status === "active",
+      )
+      .map((member) => ({
+        id: tripId,
+        title: "Cache City Escape",
+        description:
+          "A saved itinerary ready for group planning, bookings, and expenses.",
+        primary_city_slug: "cache-city",
+        start_date: "2026-04-14",
+        end_date: "2026-04-15",
+        status: "planning",
+        visibility: "private",
+        budget: 900,
+        currency: "USD",
+        role: member.role,
+        member_count: members.filter((entry) => entry.status === "active")
+          .length,
+        activity_count: (activitiesByTrip.get(tripId) ?? []).length,
+        checklist_done: 0,
+        checklist_total: 0,
+        expense_total: (expensesByTrip.get(tripId) ?? []).reduce(
+          (sum, expense) => sum + Number(expense.amount ?? 0),
+          0,
+        ),
+        created_at: "2026-07-26T00:00:00.000Z",
+      })),
+  );
+}
+
 export function createInvite({ tripId, actorUserId, body }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can manage this trip");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can manage this trip");
   const invite = {
     id: nextUuid("invite"),
     tripId,
@@ -178,7 +225,7 @@ export function joinInvite({ actorUserId, body }) {
 }
 
 export function setShareLink({ tripId, actorUserId, body }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can manage this trip");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can manage this trip");
   const link = {
     tripId,
     enabled: body.enabled !== false,
@@ -199,7 +246,7 @@ export function joinShareLink({ actorUserId, body }) {
 }
 
 export function updateMember({ tripId, targetUserId, actorUserId, body }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can manage this trip");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can manage this trip");
   const members = membersByTrip.get(tripId) ?? [];
   const member = members.find((entry) => entry.userId === targetUserId);
   if (!member) return notFound("Trip member not found");
@@ -255,7 +302,7 @@ export function updateActivity({ tripId, activityId, actorUserId, body }) {
   const activity = findById(activitiesByTrip, tripId, activityId);
   if (!activity) return notFound("Activity not found");
   if (activity.createdByUserId !== actorUserId && !canManageTrip(tripId, actorUserId)) {
-    return forbidden("Only host/admin or creator can edit this activity");
+    return forbidden("Only host/co-host or creator can edit this activity");
   }
   const before = structuredClone(activity);
   Object.assign(activity, camelizeKeys(body), { updatedByUserId: actorUserId, updatedAt: now() });
@@ -265,7 +312,7 @@ export function updateActivity({ tripId, activityId, actorUserId, body }) {
 
 export function updateActivityParticipant({ tripId, activityId, targetUserId, actorUserId, body }) {
   if (actorUserId !== targetUserId && !canManageTrip(tripId, actorUserId)) {
-    return forbidden("Only host/admin can update another user's activity participation");
+    return forbidden("Only host/co-host can update another user's activity participation");
   }
   const activity = findById(activitiesByTrip, tripId, activityId);
   if (!activity) return notFound("Activity not found");
@@ -320,7 +367,7 @@ export function updateTransport({ tripId, bookingId, actorUserId, body }) {
   const booking = findById(transportByTrip, tripId, bookingId);
   if (!booking) return notFound("Transport booking not found");
   if (booking.createdByUserId !== actorUserId && !canManageTrip(tripId, actorUserId)) {
-    return forbidden("Only host/admin or creator can edit this transport booking");
+    return forbidden("Only host/co-host or creator can edit this transport booking");
   }
   const before = structuredClone(booking);
   Object.assign(booking, camelizeKeys(body), { updatedByUserId: actorUserId, updatedAt: now() });
@@ -365,7 +412,7 @@ export function updateBill({ billId, actorUserId, body }) {
   const bill = billsById.get(billId);
   if (!bill) return notFound("Bill upload not found");
   if (bill.uploadedByUserId !== actorUserId && !canManageTrip(bill.tripId, actorUserId)) {
-    return forbidden("Only host/admin or the uploader can edit this bill");
+    return forbidden("Only host/co-host or the uploader can edit this bill");
   }
   const before = structuredClone(bill);
   Object.assign(bill, camelizeKeys(body), { updatedAt: now() });
@@ -411,7 +458,7 @@ export function updateExpense({ tripId, expenseId, actorUserId, body }) {
   const expense = findById(expensesByTrip, tripId, expenseId);
   if (!expense) return notFound("Expense not found");
   if (expense.createdByUserId !== actorUserId && !canManageTrip(tripId, actorUserId)) {
-    return forbidden("Only host/admin or creator can edit this expense");
+    return forbidden("Only host/co-host or creator can edit this expense");
   }
   const before = structuredClone(expense);
   Object.assign(expense, camelizeKeys(body), { updatedByUserId: actorUserId, updatedAt: now() });
@@ -430,7 +477,7 @@ export function updateExpenseSplit({ tripId, expenseId, splitId, actorUserId, bo
   const split = expense.splits.find((entry) => entry.id === splitId);
   if (!split) return notFound("Expense split not found");
   if (split.userId !== actorUserId && !canManageTrip(tripId, actorUserId)) {
-    return forbidden("Only host/admin or the split owner can update this split");
+    return forbidden("Only host/co-host or the split owner can update this split");
   }
   split.status = body.status;
   split.settledAt = body.status === "settled" ? now() : null;
@@ -439,12 +486,12 @@ export function updateExpenseSplit({ tripId, expenseId, splitId, actorUserId, bo
 }
 
 export function listReviewQueue({ tripId, actorUserId }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can review submissions");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can review submissions");
   return { status: 200, body: buildReviewQueue(tripId) };
 }
 
 export function reviewSubmission({ tripId, actorUserId, body }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can review submissions");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can review submissions");
   const decision = body.decision === "rejected" ? "rejected" : "approved";
   const entityType = body.entity_type;
   let target = null;
@@ -573,7 +620,7 @@ export function listDataQualitySignals({ tripId, actorUserId }) {
 }
 
 export function listAuditLogs({ tripId, actorUserId }) {
-  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or admin can manage this trip");
+  if (!canManageTrip(tripId, actorUserId)) return forbidden("Only host or co-host can manage this trip");
   return { status: 200, body: auditByTrip.get(tripId) ?? [] };
 }
 
@@ -630,19 +677,24 @@ function buildReviewQueue(tripId) {
 }
 
 function buildMember(userId, role) {
+  const profile = profileForUser(userId);
   return {
     tripId: businessTripId,
     userId,
+    displayName: profile.displayName,
+    email: profile.email,
     role,
     status: "active",
     invitedByUserId: null,
+    invitedByDisplayName: null,
+    invitedByEmail: null,
     joinedAt: now(),
   };
 }
 
 function canManageTrip(tripId, userId) {
   const member = (membersByTrip.get(tripId) ?? []).find((entry) => entry.userId === userId);
-  return member?.status === "active" && ["host", "admin"].includes(member.role);
+  return member?.status === "active" && ["host", "co_host"].includes(member.role);
 }
 
 function isActiveMember(tripId, userId) {
@@ -657,7 +709,22 @@ function upsertMember(tripId, userId, role, invitedByUserId) {
     existing.status = "active";
     return existing;
   }
-  const member = { tripId, userId, role, status: "active", invitedByUserId, joinedAt: now() };
+  const profile = profileForUser(userId);
+  const inviterProfile = invitedByUserId
+    ? profileForUser(invitedByUserId)
+    : null;
+  const member = {
+    tripId,
+    userId,
+    displayName: profile.displayName,
+    email: profile.email,
+    role,
+    status: "active",
+    invitedByUserId,
+    invitedByDisplayName: inviterProfile?.displayName ?? null,
+    invitedByEmail: inviterProfile?.email ?? null,
+    joinedAt: now(),
+  };
   members.push(member);
   membersByTrip.set(tripId, members);
   return member;
@@ -671,8 +738,21 @@ function resolveParticipantIds(tripId, requested) {
 }
 
 function resolveSplits(tripId, body) {
+  const participants = resolveParticipantIds(
+    tripId,
+    body.participant_user_ids,
+  );
+  if (!participants.ok) return participants;
+
   if (body.split_strategy === "custom") {
     const splits = body.splits ?? [];
+    const splitUserIds = [...new Set(splits.map((split) => split.user_id))];
+    if (
+      splitUserIds.length !== participants.value.length ||
+      splitUserIds.some((userId) => !participants.value.includes(userId))
+    ) {
+      return badRequest("Custom splits must match the selected participants");
+    }
     const total = Math.round(splits.reduce((sum, split) => sum + split.amount, 0) * 100) / 100;
     if (Math.abs(total - body.amount) > 0.01) return badRequest("Custom split total must equal expense amount");
     return {
@@ -688,7 +768,8 @@ function resolveSplits(tripId, body) {
       })),
     };
   }
-  const users = (membersByTrip.get(tripId) ?? []).filter((member) => member.status === "active").map((member) => member.userId);
+  const users = participants.value;
+  if (users.length === 0) return badRequest("Select at least one expense participant");
   const amount = Math.round((body.amount / users.length) * 100) / 100;
   return {
     ok: true,
@@ -701,6 +782,34 @@ function resolveSplits(tripId, body) {
       status: "owed",
       settledAt: null,
     })),
+  };
+}
+
+function profileForUser(userId) {
+  const knownProfiles = {
+    [hostUserId]: {
+      displayName: "Host Traveler",
+      email: "host@example.com",
+    },
+    [guestUserId]: {
+      displayName: "Viewer Traveler",
+      email: "viewer@example.com",
+    },
+    [friendUserId]: {
+      displayName: "Friend Traveler",
+      email: "friend@example.com",
+    },
+  };
+  if (knownProfiles[userId]) return knownProfiles[userId];
+
+  const readable = userId
+    .replace(/^mock-/, "")
+    .replace(/[-_.]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .trim();
+  return {
+    displayName: readable || "E2E Traveler",
+    email: `${userId}@e2e.local`,
   };
 }
 

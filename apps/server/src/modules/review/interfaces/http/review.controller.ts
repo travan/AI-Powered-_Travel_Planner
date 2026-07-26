@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -8,7 +8,7 @@ import { ReviewSubmissionDto, ReviewTripParamsDto } from "../../dto/review.dto.j
 @Controller("api/trips/:tripId")
 @UseGuards(JwtAuthGuard)
 export class ReviewController {
-  constructor(private readonly review: ReviewService) {}
+  constructor(@Inject(ReviewService) private readonly review: ReviewService) {}
 
   @Get("review-queue")
   async listQueue(@Param() params: ReviewTripParamsDto, @CurrentUser() user: CurrentUserValue) {

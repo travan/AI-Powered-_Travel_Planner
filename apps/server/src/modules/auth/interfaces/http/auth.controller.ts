@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Inject, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { getBearerToken, JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
 import { LocalJwtService } from "../../../../shared/nest/local-jwt.js";
@@ -9,8 +9,8 @@ import { AccountExistsQueryDto, LoginDto, SignupDto } from "../../dto/auth.dto.j
 @Controller("api/auth")
 export class AuthController {
   constructor(
-    private readonly auth: AuthService,
-    private readonly jwt: LocalJwtService
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(LocalJwtService) private readonly jwt: LocalJwtService
   ) {}
 
   @Get("account-exists")

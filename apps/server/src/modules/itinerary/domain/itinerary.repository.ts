@@ -1,7 +1,17 @@
 import type { ItineraryDetail } from "./itinerary.entity.js";
+import type { Itinerary, ItineraryInput } from "@travel/types";
 
 export const ITINERARY_REPOSITORY = Symbol("ITINERARY_REPOSITORY");
 
 export type ItineraryRepository = {
   findVisible(input: { itineraryId: string; userId?: string | null }): Promise<ItineraryDetail | null>;
+  createComplete(input: {
+    userId: string;
+    request: ItineraryInput;
+    result: Itinerary;
+  }): Promise<string>;
+  saveAsTrip(input: {
+    itineraryId: string;
+    userId: string;
+  }): Promise<{ tripId: string } | null>;
 };

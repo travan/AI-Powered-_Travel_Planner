@@ -87,7 +87,11 @@ export default function TripsPage() {
 
     void (async () => {
       try {
-        const data = await getItinerary(targetId);
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const data = await getItinerary(targetId, session?.access_token);
         if (cancelled) return;
 
         const first = data.itineraries?.[0] ?? null;
@@ -236,7 +240,7 @@ export default function TripsPage() {
               myTrips.map((trip) => (
                 <Link
                   key={trip.id}
-                  href={`/trips/${trip.id}`}
+                  href={`/trips/${trip.id}/workspace`}
                   className="rounded-2xl border border-outline-variant/30 bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   data-testid="web-trip-card"
                 >

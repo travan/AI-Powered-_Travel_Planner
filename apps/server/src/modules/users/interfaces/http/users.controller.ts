@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -7,7 +7,7 @@ import { PromptHistoryQueryDto, UserIdParamsDto } from "../../dto/user.dto.js";
 
 @Controller("api/users")
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(@Inject(UsersService) private readonly users: UsersService) {}
 
   @Get("me")
   @UseGuards(JwtAuthGuard)

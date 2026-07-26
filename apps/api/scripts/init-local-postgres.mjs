@@ -54,6 +54,11 @@ await appClient.connect();
 
 const schemaSql = await readFile(new URL("../db/local-postgres.sql", import.meta.url), "utf8");
 await appClient.query(schemaSql);
+const workspaceCompatSql = await readFile(
+  new URL("../../server/src/database/migrations/006_local_workspace_core_compat.sql", import.meta.url),
+  "utf8"
+);
+await appClient.query(workspaceCompatSql);
 await appClient.end();
 
 console.log(`Local PostgreSQL schema is ready: ${databaseName}`);

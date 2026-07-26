@@ -23,6 +23,7 @@ export default function JoinTripPage() {
   const [token, setToken] = useState(initialToken);
   const [joinType, setJoinType] = useState<JoinType>(initialType);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "joining" | "joined" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [joinedMember, setJoinedMember] = useState<TripMember | null>(null);
@@ -50,6 +51,7 @@ export default function JoinTripPage() {
       }
 
       setAuthToken(session.access_token);
+      setCurrentEmail(session.user?.email ?? null);
       setState("ready");
     }
 
@@ -80,6 +82,13 @@ export default function JoinTripPage() {
     }
   }
 
+  async function handleSwitchAccount() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
+    router.refresh();
+  }
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#e0f2fe_0,#f8fafc_38%,#fff7ed_100%)] pb-24 text-on-surface">
       <SiteHeader />
@@ -92,6 +101,23 @@ export default function JoinTripPage() {
           <p className="mt-3 text-sm leading-6 text-on-surface-variant">
             Use an invite token from the host or a share token to join the trip with the role configured by the host.
           </p>
+
+          {currentEmail && (
+            <div className="mt-5 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+              <p>
+                Signed in as <strong className="text-on-surface">{currentEmail}</strong>. The invited traveler must
+                open this link with their own account; the host cannot join their own invite.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleSwitchAccount()}
+                className="mt-2 text-sm font-bold text-primary hover:underline"
+                data-testid="web-trip-join-switch-account"
+              >
+                Sign out and switch account
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-[160px_1fr]">
             <select

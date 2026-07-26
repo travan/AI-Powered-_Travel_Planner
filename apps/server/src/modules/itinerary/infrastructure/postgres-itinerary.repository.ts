@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
 import type { ItineraryDetail } from "../domain/itinerary.entity.js";
 import type { ItineraryRepository } from "../domain/itinerary.repository.js";
+import type { Itinerary, ItineraryInput } from "@travel/types";
 
 type ItineraryRow = {
   id: string;
@@ -26,7 +27,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     const result = await this.sql.query<ItineraryRow>(
       `select i.id::text,
               i.user_id::text,
-              coalesce(i.title, to_jsonb(i)->'result'->>'title', to_jsonb(i)->'output'->>'title') as title,
+              coalesce(to_jsonb(i)->'result'->>'title', to_jsonb(i)->'output'->>'title') as title,
               i.status,
               i.cities,
               i.num_days,
@@ -43,6 +44,125 @@ export class PostgresItineraryRepository implements ItineraryRepository {
       [input.itineraryId, input.userId ?? null]
     );
     return result.rows[0] ? mapItinerary(result.rows[0]) : null;
+  }
+
+  async createComplete(input: {
+    userId: string;
+    request: ItineraryInput;
+    result: Itinerary;
+  }): Promise<string> {
+    const saved = await this.sql.query<{ id: string }>(
+      `insert into itineraries (
+         user_id, cities, countries, start_date, end_date, num_days,
+         budget, currency, trip_style, status, result
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
+       returning id::text`,
+      [
+        input.userId,
+        input.request.cities,
+        [],
+        input.request.start_date ?? null,
+        input.request.end_date ?? null,
+        input.request.num_days ?? input.result.num_days,
+        input.request.budget ?? null,
+        input.request.currency,
+        input.request.trip_style,
+        input.result,
+      ]
+    );
+    return saved.rows[0]!.id;
+  }
+
+  async saveAsTrip(input: {
+    itineraryId: string;
+    userId: string;
+  }): Promise<{ tripId: string } | null> {
+    const saved = await this.sql.query<{ trip_id: string }>(
+      `with source as (
+         select i.id,
+                i.cities,
+                i.start_date,
+                i.end_date,
+                i.budget,
+                coalesce(i.currency, 'USD') as currency,
+                coalesce(i.result, '{}'::jsonb) as result
+         from itineraries i
+         where i.id = $1
+           and i.user_id = $2
+         limit 1
+       ),
+       saved_itinerary as (
+         insert into saved_trips (user_id, itinerary_id)
+         select $2, source.id
+         from source
+         on conflict (user_id, itinerary_id) do nothing
+         returning itinerary_id
+       ),
+       existing_trip as (
+         select t.id
+         from trips t
+         join source on source.id = t.source_itinerary_id
+         where t.owner_user_id = $2::uuid
+         order by t.created_at desc
+         limit 1
+       ),
+       created_trip as (
+         insert into trips (
+           owner_user_id,
+           title,
+           description,
+           primary_city_slug,
+           start_date,
+           end_date,
+           status,
+           visibility,
+           budget,
+           currency,
+           source_itinerary_id
+         )
+         select $2::uuid,
+                coalesce(nullif(source.result->>'title', ''), 'Saved trip'),
+                nullif(source.result->>'summary', ''),
+                case
+                  when exists (
+                    select 1
+                    from cities c
+                    where c.slug = source.cities[1]
+                  ) then source.cities[1]
+                  else null
+                end,
+                source.start_date,
+                source.end_date,
+                'planning',
+                'private',
+                source.budget,
+                source.currency,
+                source.id
+         from source
+         where not exists (select 1 from existing_trip)
+         returning id
+       ),
+       selected_trip as (
+         select id from created_trip
+         union all
+         select id from existing_trip
+         limit 1
+       ),
+       host_member as (
+         insert into trip_members (trip_id, user_id, role, status, joined_at)
+         select selected_trip.id, $2::uuid, 'host', 'active', now()
+         from selected_trip
+         on conflict (trip_id, user_id)
+         do update set role = 'host', status = 'active', joined_at = coalesce(trip_members.joined_at, now())
+         returning trip_id
+       )
+       select trip_id::text
+       from host_member
+       limit 1`,
+      [input.itineraryId, input.userId]
+    );
+    return saved.rows[0] ? { tripId: saved.rows[0].trip_id } : null;
   }
 }
 

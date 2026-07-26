@@ -1,7 +1,20 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { forbidden, notFound, ok, type ServiceResult } from "../../../shared/application/service-result.js";
-import type { ActivityCatalogItem, TripActivity, TripActivityParticipant } from "../domain/activity.entity.js";
-import { ACTIVITY_REPOSITORY, type ActivityRepository } from "../domain/activity.repository.js";
+import {
+  forbidden,
+  notFound,
+  ok,
+  type ServiceResult,
+} from "../../../shared/application/service-result.js";
+import { getTripRolePermissions } from "../../../shared/application/trip-role-permissions.js";
+import type {
+  ActivityCatalogItem,
+  TripActivity,
+  TripActivityParticipant,
+} from "../domain/activity.entity.js";
+import {
+  ACTIVITY_REPOSITORY,
+  type ActivityRepository,
+} from "../domain/activity.repository.js";
 import type {
   ActivityCatalogQueryDto,
   CreateTripActivityDto,
@@ -11,15 +24,27 @@ import type {
 
 @Injectable()
 export class ActivitiesService {
-  constructor(@Inject(ACTIVITY_REPOSITORY) private readonly activities: ActivityRepository) {}
+  constructor(
+    @Inject(ACTIVITY_REPOSITORY)
+    private readonly activities: ActivityRepository,
+  ) {}
 
-  searchCatalog(query: ActivityCatalogQueryDto): Promise<ActivityCatalogItem[]> {
+  searchCatalog(
+    query: ActivityCatalogQueryDto,
+  ): Promise<ActivityCatalogItem[]> {
     return this.activities.searchCatalog(query);
   }
 
-  async listTripActivities(input: { tripId: string; actorUserId: string }): Promise<ServiceResult<TripActivity[]>> {
-    const member = await this.activities.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
+  async listTripActivities(input: {
+    tripId: string;
+    actorUserId: string;
+  }): Promise<ServiceResult<TripActivity[]>> {
+    const member = await this.activities.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
     return ok(await this.activities.listTripActivities(input.tripId));
   }
 
@@ -28,8 +53,18 @@ export class ActivitiesService {
     actorUserId: string;
     dto: CreateTripActivityDto;
   }): Promise<ServiceResult<TripActivity>> {
-    const member = await this.activities.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
+    const member = await this.activities.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden(
+        "Viewers cannot add activities",
+        "activity_create_forbidden",
+      );
+    }
 
     const activity = await this.activities.createTripActivity({
       tripId: input.tripId,
@@ -42,7 +77,9 @@ export class ActivitiesService {
       estimatedCost: input.dto.estimated_cost ?? null,
       currency: input.dto.currency.toUpperCase(),
       createdByUserId: input.actorUserId,
-      status: ["host", "admin"].includes(member.role) ? "approved" : "pending_review",
+      status: ["host", "co_host"].includes(member.role)
+        ? "approved"
+        : "pending_review",
     });
     await this.activities.audit({
       tripId: input.tripId,
@@ -61,13 +98,39 @@ export class ActivitiesService {
     actorUserId: string;
     dto: UpdateTripActivityDto;
   }): Promise<ServiceResult<TripActivity>> {
-    const before = await this.activities.findTripActivity({ tripId: input.tripId, activityId: input.activityId });
+    const before = await this.activities.findTripActivity({
+      tripId: input.tripId,
+      activityId: input.activityId,
+    });
     if (!before) return notFound("Activity not found");
 
-    const member = await this.activities.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
-    if (before.createdByUserId !== input.actorUserId && !["host", "admin"].includes(member.role)) {
-      return forbidden("Only host/admin or creator can edit this activity", "activity_edit_forbidden");
+    const member = await this.activities.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    const permissions = getTripRolePermissions(member.role);
+    if (!permissions.contribute) {
+      return forbidden(
+        "Viewers cannot edit activities",
+        "activity_edit_forbidden",
+      );
+    }
+    if (
+      before.createdByUserId !== input.actorUserId &&
+      !["host", "co_host"].includes(member.role)
+    ) {
+      return forbidden(
+        "Only host/co-host or creator can edit this activity",
+        "activity_edit_forbidden",
+      );
+    }
+    if (input.dto.status !== undefined && !permissions.reviewSubmissions) {
+      return forbidden(
+        "Only host/co-host can change activity review status",
+        "activity_status_forbidden",
+      );
     }
 
     const updated = await this.activities.updateTripActivity({
@@ -104,10 +167,20 @@ export class ActivitiesService {
     actorUserId: string;
     dto: UpdateActivityParticipantDto;
   }): Promise<ServiceResult<TripActivityParticipant>> {
-    const member = await this.activities.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
-    if (input.actorUserId !== input.targetUserId && !["host", "admin"].includes(member.role)) {
-      return forbidden("Only host/admin can update another user's activity participation", "participant_edit_forbidden");
+    const member = await this.activities.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (
+      input.actorUserId !== input.targetUserId &&
+      !["host", "co_host"].includes(member.role)
+    ) {
+      return forbidden(
+        "Only host/co-host can update another user's activity participation",
+        "participant_edit_forbidden",
+      );
     }
 
     const participant = await this.activities.upsertParticipant({

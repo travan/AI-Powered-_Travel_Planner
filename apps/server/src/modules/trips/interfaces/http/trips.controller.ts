@@ -1,5 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  CurrentUser,
+  type CurrentUserValue,
+} from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
 import { TripsService } from "../../application/trips.service.js";
@@ -17,7 +30,7 @@ import {
 @Controller("api/trips")
 @UseGuards(JwtAuthGuard)
 export class TripsController {
-  constructor(private readonly trips: TripsService) {}
+  constructor(@Inject(TripsService) private readonly trips: TripsService) {}
 
   @Get()
   list(@CurrentUser() user: CurrentUserValue) {
@@ -27,16 +40,38 @@ export class TripsController {
   @Get(":id")
   async detail(
     @Param() params: TripIdParamsDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
-    const result = await this.trips.getForUser({ tripId: params.id, userId: user.sub });
+    const result = await this.trips.getForUser({
+      tripId: params.id,
+      userId: user.sub,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
 
   @Get(":id/members")
-  async members(@Param() params: TripIdParamsDto, @CurrentUser() user: CurrentUserValue) {
-    const result = await this.trips.listMembers({ tripId: params.id, actorUserId: user.sub });
+  async members(
+    @Param() params: TripIdParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.listMembers({
+      tripId: params.id,
+      actorUserId: user.sub,
+    });
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Get(":id/membership")
+  async membership(
+    @Param() params: TripIdParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.getMembership({
+      tripId: params.id,
+      actorUserId: user.sub,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -45,16 +80,27 @@ export class TripsController {
   async createInvite(
     @Param() params: TripIdParamsDto,
     @Body() dto: CreateTripInviteDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
-    const result = await this.trips.createInvite({ tripId: params.id, actorUserId: user.sub, dto });
+    const result = await this.trips.createInvite({
+      tripId: params.id,
+      actorUserId: user.sub,
+      dto,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
 
   @Post("join/invite")
-  async joinInvite(@Body() dto: JoinTripInviteDto, @CurrentUser() user: CurrentUserValue) {
-    const result = await this.trips.joinInvite({ actorUserId: user.sub, actorEmail: user.email, dto });
+  async joinInvite(
+    @Body() dto: JoinTripInviteDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.joinInvite({
+      actorUserId: user.sub,
+      actorEmail: user.email,
+      dto,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -63,16 +109,26 @@ export class TripsController {
   async setShareLink(
     @Param() params: TripIdParamsDto,
     @Body() dto: UpdateTripShareLinkDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
-    const result = await this.trips.setShareLink({ tripId: params.id, actorUserId: user.sub, dto });
+    const result = await this.trips.setShareLink({
+      tripId: params.id,
+      actorUserId: user.sub,
+      dto,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
 
   @Post("join/share-link")
-  async joinShareLink(@Body() dto: JoinTripShareLinkDto, @CurrentUser() user: CurrentUserValue) {
-    const result = await this.trips.joinShareLink({ actorUserId: user.sub, dto });
+  async joinShareLink(
+    @Body() dto: JoinTripShareLinkDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.joinShareLink({
+      actorUserId: user.sub,
+      dto,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -81,7 +137,7 @@ export class TripsController {
   async updateMember(
     @Param() params: TripMemberParamsDto,
     @Body() dto: UpdateTripMemberDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
     const result = await this.trips.updateMember({
       tripId: params.id,
@@ -97,7 +153,7 @@ export class TripsController {
   async auditLogs(
     @Param() params: TripIdParamsDto,
     @Query() query: TripAuditLogQueryDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
     const result = await this.trips.listAuditLogs({
       tripId: params.id,

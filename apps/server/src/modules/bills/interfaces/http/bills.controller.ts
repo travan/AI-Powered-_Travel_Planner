@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -8,7 +8,7 @@ import { BillIdParamsDto, BillTripParamsDto, CreateBillDto, UpdateBillDto } from
 @Controller("api")
 @UseGuards(JwtAuthGuard)
 export class BillsController {
-  constructor(private readonly bills: BillsService) {}
+  constructor(@Inject(BillsService) private readonly bills: BillsService) {}
 
   @Get("bills/:id")
   async getById(@Param() params: BillIdParamsDto, @CurrentUser() user: CurrentUserValue) {

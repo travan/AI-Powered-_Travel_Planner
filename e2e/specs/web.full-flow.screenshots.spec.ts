@@ -68,7 +68,7 @@ async function seedWorkspace(request: APIRequestContext) {
 
   await postJson(request, `/api/trips/${tripId}/invites`, {
     email: "friend@example.com",
-    role: "editor",
+    role: "contributor",
     expiresInDays: 7,
   });
 

@@ -1,8 +1,18 @@
 import { Transform } from "class-transformer";
-import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min, MinLength } from "class-validator";
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+  MinLength,
+} from "class-validator";
 
-const roles = ["host", "admin", "editor", "viewer"] as const;
-const memberStatuses = ["active", "removed", "left"] as const;
+const memberStatuses = ["invited", "active", "removed"] as const;
 
 function normalizeEmail({ value }: { value: unknown }): unknown {
   if (typeof value !== "string") return value;
@@ -34,8 +44,8 @@ export class CreateTripInviteDto {
   @IsEmail()
   email?: string;
 
-  @IsIn(roles)
-  role: "admin" | "editor" | "viewer" = "viewer";
+  @IsIn(["co_host", "contributor", "viewer"])
+  role: "co_host" | "contributor" | "viewer" = "viewer";
 
   @IsOptional()
   @IsInt()
@@ -55,8 +65,8 @@ export class UpdateTripShareLinkDto {
   @IsBoolean()
   enabled!: boolean;
 
-  @IsIn(["editor", "viewer"])
-  role: "editor" | "viewer" = "viewer";
+  @IsIn(["contributor", "viewer"])
+  role: "contributor" | "viewer" = "viewer";
 }
 
 export class JoinTripShareLinkDto {
@@ -68,10 +78,10 @@ export class JoinTripShareLinkDto {
 
 export class UpdateTripMemberDto {
   @IsOptional()
-  @IsIn(roles)
-  role?: "host" | "admin" | "editor" | "viewer";
+  @IsIn(["co_host", "contributor", "viewer"])
+  role?: "co_host" | "contributor" | "viewer";
 
   @IsOptional()
   @IsIn(memberStatuses)
-  status?: "active" | "removed" | "left";
+  status?: "invited" | "active" | "removed";
 }

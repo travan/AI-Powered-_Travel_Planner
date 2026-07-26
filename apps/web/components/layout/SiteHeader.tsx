@@ -12,22 +12,63 @@ interface UserInfo {
   email: string | null;
 }
 
+const EMPTY_USER_INFO: UserInfo = {
+  avatarUrl: null,
+  displayName: null,
+  email: null,
+};
+
+let cachedUserInfo = EMPTY_USER_INFO;
+
+function toUserInfo(user: {
+  email?: string | null;
+  user_metadata?: Record<string, unknown>;
+} | null | undefined): UserInfo {
+  return {
+    avatarUrl: typeof user?.user_metadata?.["avatar_url"] === "string"
+      ? user.user_metadata["avatar_url"]
+      : null,
+    displayName: typeof user?.user_metadata?.["full_name"] === "string"
+      ? user.user_metadata["full_name"]
+      : typeof user?.user_metadata?.["name"] === "string"
+        ? user.user_metadata["name"]
+        : null,
+    email: user?.email ?? null,
+  };
+}
+
 function useUserInfo() {
-  const [userInfo, setUserInfo] = useState<UserInfo>({
-    avatarUrl: null,
-    displayName: null,
-    email: null,
-  });
+  const [userInfo, setUserInfo] = useState<UserInfo>(cachedUserInfo);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserInfo({
-        avatarUrl: user?.user_metadata?.["avatar_url"] ?? null,
-        displayName: user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? null,
-        email: user?.email ?? null,
-      });
+    let active = true;
+    const updateUserInfo = (user: Parameters<typeof toUserInfo>[0]) => {
+      if (!active) return;
+      const next = toUserInfo(user);
+      if (
+        next.avatarUrl === cachedUserInfo.avatarUrl &&
+        next.displayName === cachedUserInfo.displayName &&
+        next.email === cachedUserInfo.email
+      ) {
+        return;
+      }
+      cachedUserInfo = next;
+      setUserInfo(next);
+    };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      updateUserInfo(session?.user);
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      updateUserInfo(session?.user);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return userInfo;

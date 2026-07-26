@@ -23,10 +23,27 @@ import type {
 } from "@travel/types";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
+const SERVER_API_URL =
+  process.env["API_PROXY_TARGET"] ??
+  process.env["INTERNAL_API_URL"] ??
+  "http://127.0.0.1:3001";
 
 function getApiUrl(path: string) {
-  if (!API_URL) return path;
-  return `${API_URL.replace(/\/$/, "")}${path}`;
+  if (API_URL) return `${API_URL.replace(/\/$/, "")}${path}`;
+  if (typeof window === "undefined") {
+    return `${SERVER_API_URL.replace(/\/$/, "")}${path}`;
+  }
+  return path;
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
 }
 
 export async function generateItinerary(
@@ -84,11 +101,14 @@ export async function claimSearchDraft(
   return res.json() as Promise<SearchDraftRecord>;
 }
 
-export async function getItinerary(id: string): Promise<ItineraryOutput> {
+export async function getItinerary(id: string, authToken?: string): Promise<ItineraryOutput> {
+  const headers: Record<string, string> = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
   const res = await fetch(getApiUrl(`/api/itinerary/${id}`), {
+    headers,
     next: { revalidate: 3600 },
   });
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  if (!res.ok) throw new ApiRequestError(`Fetch failed: ${res.status}`, res.status);
   return res.json() as Promise<ItineraryOutput>;
 }
 
@@ -303,12 +323,13 @@ export async function getTransportPriceRecommendations(params: {
 export async function saveTrip(
   itineraryId: string,
   authToken: string
-): Promise<void> {
+): Promise<{ saved: true; trip_id: string }> {
   const res = await fetch(getApiUrl(`/api/itinerary/${itineraryId}/save`), {
     method: "POST",
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+  return res.json() as Promise<{ saved: true; trip_id: string }>;
 }
 
 export async function shareItinerary(

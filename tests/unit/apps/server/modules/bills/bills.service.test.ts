@@ -38,7 +38,7 @@ describe("Nest BillsService analyze", () => {
       findTripMember: vi.fn().mockResolvedValue({
         tripId: bill.tripId,
         userId: bill.uploadedByUserId,
-        role: "editor",
+        role: "contributor",
         status: "active",
         invitedByUserId: null,
         joinedAt: new Date().toISOString(),

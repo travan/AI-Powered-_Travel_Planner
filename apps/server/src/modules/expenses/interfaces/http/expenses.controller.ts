@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -15,7 +15,7 @@ import {
 @Controller("api/trips/:tripId/expenses")
 @UseGuards(JwtAuthGuard)
 export class ExpensesController {
-  constructor(private readonly expenses: ExpensesService) {}
+  constructor(@Inject(ExpensesService) private readonly expenses: ExpensesService) {}
 
   @Get()
   async list(@Param() params: ExpenseTripParamsDto, @CurrentUser() user: CurrentUserValue) {

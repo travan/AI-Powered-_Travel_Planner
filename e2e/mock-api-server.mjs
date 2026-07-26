@@ -74,6 +74,12 @@ const server = createServer(async (req, res) => {
     }));
   }
 
+  if (req.method === "GET" && pathname === "/api/trips") {
+    const userId = getUserIdFromAuth(req.headers.authorization);
+    if (!userId) return unauthorized(res);
+    return sendJson(res, 200, tripBusiness.listTripsForUser(userId));
+  }
+
   if (pathname.startsWith("/api/trips/")) {
     const routed = await routeTripBusiness(req, pathname);
     if (routed) return sendJson(res, routed.status, routed.body);
@@ -136,7 +142,14 @@ const server = createServer(async (req, res) => {
     if (!itinerary) return sendJson(res, 404, { message: "Itinerary not found" });
 
     saveTripForUser(userId, itineraryId);
-    return sendJson(res, 200, { saved: true });
+    tripBusiness.ensureSavedTripMember({
+      tripId: tripBusiness.businessTripId,
+      actorUserId: userId,
+    });
+    return sendJson(res, 200, {
+      saved: true,
+      trip_id: tripBusiness.businessTripId,
+    });
   }
 
   if (req.method === "PATCH" && pathname.match(/^\/api\/itinerary\/[^/]+\/share$/)) {
@@ -247,7 +260,14 @@ function sendSSE(res, events) {
 function getUserIdFromAuth(authorization) {
   if (!authorization?.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length).trim();
-  return token.length > 0 ? token : null;
+  if (!token) return null;
+  if (token.startsWith("mock-mobile-access-")) {
+    return token.slice("mock-mobile-access-".length);
+  }
+  if (token.startsWith("mock-access-")) {
+    return token.slice("mock-access-".length);
+  }
+  return token;
 }
 
 async function routeTripBusiness(req, pathname) {
@@ -261,6 +281,10 @@ async function routeTripBusiness(req, pathname) {
 
   const parts = pathname.split("/").filter(Boolean);
   const tripId = parts[2];
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "membership") {
+    return tripBusiness.getMembership({ tripId, actorUserId: userId });
+  }
 
   if (req.method === "GET" && parts.length === 4 && parts[3] === "members") {
     const members = tripBusiness.listMembers(tripId);

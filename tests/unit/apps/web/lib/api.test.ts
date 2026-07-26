@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ApiRequestError,
   generateItinerary,
   getItinerary,
   getPopularCities,
@@ -32,7 +33,7 @@ describe("web api client", () => {
 
     expect(result).toEqual({ job_id: "job-1", status: "queued" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/itinerary/generate",
+      "http://127.0.0.1:3001/api/itinerary/generate",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -67,6 +68,20 @@ describe("web api client", () => {
     await expect(getItinerary("it-1")).resolves.toEqual({ itinerary_id: "it-1" });
   });
 
+  it("exposes itinerary response status for route-level error handling", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({
+      ok: false,
+      status: 404,
+    } as Response);
+
+    await expect(getItinerary("missing")).rejects.toEqual(
+      expect.objectContaining<ApiRequestError>({
+        name: "ApiRequestError",
+        status: 404,
+      })
+    );
+  });
+
   it("returns empty arrays when cities endpoints fail", async () => {
     vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({ ok: false } as Response);
 
@@ -83,7 +98,7 @@ describe("web api client", () => {
     await expect(getPromptHistory("token-1", 2)).resolves.toEqual([]);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/users/me/prompt-history?limit=2",
+      "http://127.0.0.1:3001/api/users/me/prompt-history?limit=2",
       expect.objectContaining({ headers: { Authorization: "Bearer token-1" } })
     );
   });
@@ -105,5 +120,17 @@ describe("web api client", () => {
     await expect(shareItinerary("it-2", "token-2")).rejects.toThrow("Share failed: 403");
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns the workspace trip id after saving an itinerary", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({
+      ok: true,
+      json: async () => ({ saved: true, trip_id: "trip-1" }),
+    } as Response);
+
+    await expect(saveTrip("it-1", "token-1")).resolves.toEqual({
+      saved: true,
+      trip_id: "trip-1",
+    });
   });
 });

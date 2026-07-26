@@ -1,18 +1,46 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { forbidden, notFound, ok, type ServiceResult } from "../../../shared/application/service-result.js";
-import type { BillLineItemDraft, BillNormalizationResult, BillUpload } from "../domain/bill.entity.js";
-import { BILL_REPOSITORY, type BillRepository } from "../domain/bill.repository.js";
+import {
+  forbidden,
+  notFound,
+  ok,
+  type ServiceResult,
+} from "../../../shared/application/service-result.js";
+import { getTripRolePermissions } from "../../../shared/application/trip-role-permissions.js";
+import type {
+  BillLineItemDraft,
+  BillNormalizationResult,
+  BillUpload,
+} from "../domain/bill.entity.js";
+import {
+  BILL_REPOSITORY,
+  type BillRepository,
+} from "../domain/bill.repository.js";
 import type { CreateBillDto, UpdateBillDto } from "../dto/bill.dto.js";
 
 @Injectable()
 export class BillsService {
-  constructor(@Inject(BILL_REPOSITORY) private readonly bills: BillRepository) {}
+  constructor(
+    @Inject(BILL_REPOSITORY) private readonly bills: BillRepository,
+  ) {}
 
-  async getById(id: string, actorUserId: string): Promise<ServiceResult<BillUpload>> {
+  async getById(
+    id: string,
+    actorUserId: string,
+  ): Promise<ServiceResult<BillUpload>> {
     const bill = await this.bills.findById(id);
     if (!bill) return notFound("Bill upload not found");
-    const member = await this.bills.findTripMember({ tripId: bill.tripId, userId: actorUserId });
-    return member?.status === "active" ? ok(bill) : notFound("Bill upload not found");
+    const member = await this.bills.findTripMember({
+      tripId: bill.tripId,
+      userId: actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Bill upload not found");
+    return getTripRolePermissions(member.role).viewFinance
+      ? ok(bill)
+      : forbidden(
+          "Viewers cannot access trip finances",
+          "finance_view_forbidden",
+        );
   }
 
   async create(input: {
@@ -20,8 +48,15 @@ export class BillsService {
     actorUserId: string;
     dto: CreateBillDto;
   }): Promise<ServiceResult<BillUpload>> {
-    const member = await this.bills.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
+    const member = await this.bills.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden("Viewers cannot capture bills", "bill_create_forbidden");
+    }
 
     const bill = await this.bills.create({
       tripId: input.tripId,
@@ -53,10 +88,32 @@ export class BillsService {
     const before = await this.bills.findById(input.billId);
     if (!before) return notFound("Bill upload not found");
 
-    const member = await this.bills.findTripMember({ tripId: before.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
-    if (before.uploadedByUserId !== input.actorUserId && !["host", "admin"].includes(member.role)) {
-      return forbidden("Only host/admin or the uploader can edit this bill", "bill_edit_forbidden");
+    const member = await this.bills.findTripMember({
+      tripId: before.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden("Viewers cannot edit bills", "bill_edit_forbidden");
+    }
+    if (
+      before.uploadedByUserId !== input.actorUserId &&
+      !["host", "co_host"].includes(member.role)
+    ) {
+      return forbidden(
+        "Only host/co-host or the uploader can edit this bill",
+        "bill_edit_forbidden",
+      );
+    }
+    if (
+      input.dto.status !== undefined &&
+      !getTripRolePermissions(member.role).reviewSubmissions
+    ) {
+      return forbidden(
+        "Only host/co-host can change bill review status",
+        "bill_status_forbidden",
+      );
     }
 
     const updated = await this.bills.update({
@@ -90,16 +147,39 @@ export class BillsService {
     const before = await this.bills.findById(input.billId);
     if (!before) return notFound("Bill upload not found");
 
-    const member = await this.bills.findTripMember({ tripId: before.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
-    if (before.uploadedByUserId !== input.actorUserId && !["host", "admin"].includes(member.role)) {
-      return forbidden("Only host/admin or the uploader can analyze this bill", "bill_analyze_forbidden");
+    const member = await this.bills.findTripMember({
+      tripId: before.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden(
+        "Viewers cannot analyze bills",
+        "bill_analyze_forbidden",
+      );
+    }
+    if (
+      before.uploadedByUserId !== input.actorUserId &&
+      !["host", "co_host"].includes(member.role)
+    ) {
+      return forbidden(
+        "Only host/co-host or the uploader can analyze this bill",
+        "bill_analyze_forbidden",
+      );
     }
 
     const totalAmount = before.totalAmount ?? extractAmount(before.rawText);
-    const merchantName = before.merchantName ?? extractMerchant(before.rawText) ?? "Unknown merchant";
+    const merchantName =
+      before.merchantName ??
+      extractMerchant(before.rawText) ??
+      "Unknown merchant";
     const category = inferCategory(before.rawText);
-    const lineItems = buildLineItems({ rawText: before.rawText, totalAmount, category });
+    const lineItems = buildLineItems({
+      rawText: before.rawText,
+      totalAmount,
+      category,
+    });
     const updated = await this.bills.update({
       billId: input.billId,
       totalAmount,
@@ -117,7 +197,11 @@ export class BillsService {
         totalAmount,
         currency: updated.currency,
         issuedAt: updated.billIssuedAt,
-        lineItems: lineItems.map((item) => ({ name: item.name, amount: item.amount, category: item.category })),
+        lineItems: lineItems.map((item) => ({
+          name: item.name,
+          amount: item.amount,
+          category: item.category,
+        })),
       },
       suggestedExpense: {
         title: `${merchantName} payment`,
@@ -132,7 +216,8 @@ export class BillsService {
         category,
         confidence: 0.86,
         action: "update_existing",
-        reason: "Matched bill merchant and trip evidence; review before updating reusable recommendations.",
+        reason:
+          "Matched bill merchant and trip evidence; review before updating reusable recommendations.",
       },
     };
 
@@ -147,13 +232,15 @@ export class BillsService {
       evidence: result,
     });
 
-    await this.bills.storeRawOcrDocument({
-      billId: updated.id,
-      tripId: updated.tripId,
-      actorUserId: input.actorUserId,
-      rawText: before.rawText,
-      parsed: result,
-    }).catch(() => undefined);
+    await this.bills
+      .storeRawOcrDocument({
+        billId: updated.id,
+        tripId: updated.tripId,
+        actorUserId: input.actorUserId,
+        rawText: before.rawText,
+        parsed: result,
+      })
+      .catch(() => undefined);
 
     await this.bills.audit({
       tripId: updated.tripId,
@@ -170,7 +257,9 @@ export class BillsService {
 }
 
 function extractAmount(rawText: string | null): number | null {
-  const match = rawText?.match(/(?:total|tong|tổng)?\s*([0-9][0-9.,]{3,})\s*(?:vnd|đ|dong)?/i);
+  const match = rawText?.match(
+    /(?:total|tong|tổng)?\s*([0-9][0-9.,]{3,})\s*(?:vnd|đ|dong)?/i,
+  );
   if (!match?.[1]) return null;
   const amount = Number(match[1].replace(/[.,]/g, ""));
   return Number.isFinite(amount) ? amount : null;
@@ -181,7 +270,12 @@ function extractMerchant(rawText: string | null): string | null {
   if (/lantern/i.test(rawText)) return "Hoi An Lantern Studio";
   if (/coffee|cafe/i.test(rawText)) return "Son Tra sunrise cafe";
   if (/hotel|homestay/i.test(rawText)) return "Old Quarter homestay";
-  return rawText.split(/\n| bill | total /i)[0]?.trim().slice(0, 80) || null;
+  return (
+    rawText
+      .split(/\n| bill | total /i)[0]
+      ?.trim()
+      .slice(0, 80) || null
+  );
 }
 
 function buildLineItems(input: {

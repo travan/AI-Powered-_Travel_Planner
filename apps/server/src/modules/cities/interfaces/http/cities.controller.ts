@@ -1,11 +1,11 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { CitiesService } from "../../application/cities.service.js";
 import { CitySearchQueryDto, CitySlugParamsDto } from "../../dto/city.dto.js";
 
 @Controller("api/cities")
 export class CitiesController {
-  constructor(private readonly cities: CitiesService) {}
+  constructor(@Inject(CitiesService) private readonly cities: CitiesService) {}
 
   @Get("search")
   search(@Query() query: CitySearchQueryDto) {

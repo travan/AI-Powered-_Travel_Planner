@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { claimSearchDraft, createSearchDraft, generateItinerary } from "../../../lib/api";
@@ -213,13 +213,15 @@ export default function PlanPage() {
   }, [router]);
 
   // ── City helpers ───────────────────────────────────────────────────────────
-  const addCity = (slug: string, displayName: string) => {
-    if (!cities.some((c) => c.slug === slug)) {
-      setCities((p) => [...p, { slug, name: displayName }]);
-    }
+  const addCity = useCallback((slug: string, displayName: string) => {
+    setCities((current) =>
+      current.some((city) => city.slug === slug)
+        ? current
+        : [...current, { slug, name: displayName }]
+    );
     setCityInput("");
     setShowSuggestions(false);
-  };
+  }, []);
 
   const addCityFromInput = () => {
     const trimmed = cityInput.trim();
@@ -234,8 +236,10 @@ export default function PlanPage() {
     }
   };
 
-  const removeCity = (slug: string) =>
-    setCities((p) => p.filter((c) => c.slug !== slug));
+  const removeCity = useCallback(
+    (slug: string) => setCities((current) => current.filter((city) => city.slug !== slug)),
+    []
+  );
 
   // ── Generate ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
@@ -312,6 +316,61 @@ export default function PlanPage() {
   };
 
   const budgetPct = Math.round(((budgetValue - 500) / (10000 - 500)) * 100);
+  const mobilePopularCityCards = useMemo(
+    () => popularCities.slice(0, 4).map((city, idx) => (
+      <button
+        key={city.slug}
+        className="relative h-48 rounded-xl overflow-hidden text-left"
+        onClick={() => addCity(city.slug, getDisplayName(city))}
+      >
+        {city.cover_image ? (
+          <img alt={getDisplayName(city)} className="w-full h-full object-cover" src={city.cover_image} />
+        ) : (
+          <div className={`absolute inset-0 bg-linear-to-br ${GRADIENT_FALLBACKS[idx % GRADIENT_FALLBACKS.length]}`} />
+        )}
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute bottom-3 left-3">
+          <p className="text-white font-bold text-sm">{getDisplayName(city)}</p>
+          <p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">{city.country}</p>
+        </div>
+      </button>
+    )),
+    [addCity, getDisplayName, popularCities]
+  );
+  const desktopPopularCityCards = useMemo(
+    () => popularCities.slice(0, 4).map((city, idx) => (
+      <button
+        key={city.slug}
+        onClick={() => addCity(city.slug, getDisplayName(city))}
+        className={`relative rounded-xl overflow-hidden group cursor-pointer ${SPAN_CYCLE[idx % SPAN_CYCLE.length]}`}
+      >
+        {city.cover_image ? (
+          <img
+            alt={getDisplayName(city)}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            src={city.cover_image}
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-linear-to-br ${GRADIENT_FALLBACKS[idx % GRADIENT_FALLBACKS.length]}`}>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="material-symbols-outlined text-white/20 text-8xl">travel_explore</span>
+            </div>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-on-surface/80 via-transparent to-transparent" />
+        <div className="absolute bottom-4 left-4 text-left">
+          {city.popular && (
+            <span className="bg-secondary-fixed text-on-secondary-fixed text-[10px] font-black uppercase px-2 py-0.5 rounded-sm mb-1 inline-block">
+              Popular
+            </span>
+          )}
+          <p className="text-white font-bold text-xl font-headline">{getDisplayName(city)}</p>
+          <p className="text-white/70 text-sm">{city.country}</p>
+        </div>
+      </button>
+    )),
+    [addCity, getDisplayName, popularCities]
+  );
 
   return (
     <div className="bg-background text-on-surface min-h-screen">
@@ -360,22 +419,24 @@ export default function PlanPage() {
                       </button>
                     </div>
                   ))}
-                  <button
-                    className="flex items-center gap-1 text-primary font-bold text-sm px-2"
-                    onClick={() => inputRef.current?.focus()}
-                  >
-                    <span className="material-symbols-outlined text-lg">add</span> Add city
-                  </button>
+                  <span className="material-symbols-outlined text-lg text-primary pointer-events-none">
+                    add
+                  </span>
                   <input
                     ref={inputRef}
-                    className="sr-only"
+                    data-testid="web-plan-city-input-mobile"
+                    className="min-w-40 flex-1 bg-transparent border-none p-0 text-base text-on-surface outline-none placeholder:text-outline"
+                    placeholder={cities.length === 0 ? "Search city…" : "Add another city…"}
                     value={cityInput}
                     onChange={(e) => { setCityInput(e.target.value); setShowSuggestions(true); }}
+                    onFocus={() => cityInput.length >= 2 && setShowSuggestions(true)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") { e.preventDefault(); addCityFromInput(); }
                       if (e.key === "Backspace" && !cityInput && cities.length) setCities((p) => p.slice(0, -1));
+                      if (e.key === "Escape") setShowSuggestions(false);
                     }}
-                    aria-label="Add city"
+                    aria-label="Search city"
+                    aria-autocomplete="list"
                   />
                 </div>
 
@@ -514,21 +575,7 @@ export default function PlanPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                {popularCities.slice(0, 4).map((city, idx) => (
-                  <button key={city.slug} className="relative h-48 rounded-xl overflow-hidden text-left"
-                    onClick={() => addCity(city.slug, getDisplayName(city))}>
-                    {city.cover_image ? (
-                      <img alt={getDisplayName(city)} className="w-full h-full object-cover" src={city.cover_image} />
-                    ) : (
-                      <div className={`absolute inset-0 bg-linear-to-br ${GRADIENT_FALLBACKS[idx % GRADIENT_FALLBACKS.length]}`} />
-                    )}
-                    <div className="absolute inset-0 bg-black/30" />
-                    <div className="absolute bottom-3 left-3">
-                      <p className="text-white font-bold text-sm">{getDisplayName(city)}</p>
-                      <p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">{city.country}</p>
-                    </div>
-                  </button>
-                ))}
+                {mobilePopularCityCards}
               </div>
             )}
           </section>
@@ -726,32 +773,7 @@ export default function PlanPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 h-100">
-                  {popularCities.slice(0, 4).map((city, idx) => (
-                    <button key={city.slug} onClick={() => addCity(city.slug, getDisplayName(city))}
-                      className={`relative rounded-xl overflow-hidden group cursor-pointer ${SPAN_CYCLE[idx % SPAN_CYCLE.length]}`}>
-                      {city.cover_image ? (
-                        <img alt={getDisplayName(city)}
-                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          src={city.cover_image} />
-                      ) : (
-                        <div className={`absolute inset-0 bg-linear-to-br ${GRADIENT_FALLBACKS[idx % GRADIENT_FALLBACKS.length]}`}>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-white/20 text-8xl">travel_explore</span>
-                          </div>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-linear-to-t from-on-surface/80 via-transparent to-transparent" />
-                      <div className="absolute bottom-4 left-4 text-left">
-                        {city.popular && (
-                          <span className="bg-secondary-fixed text-on-secondary-fixed text-[10px] font-black uppercase px-2 py-0.5 rounded-sm mb-1 inline-block">
-                            Popular
-                          </span>
-                        )}
-                        <p className="text-white font-bold text-xl font-headline">{getDisplayName(city)}</p>
-                        <p className="text-white/70 text-sm">{city.country}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {desktopPopularCityCards}
                 </div>
               )}
             </div>

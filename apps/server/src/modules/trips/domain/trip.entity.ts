@@ -7,15 +7,19 @@ export type Trip = {
   createdAt: string;
 };
 
-export type TripMemberRole = "host" | "admin" | "editor" | "viewer";
-export type TripMemberStatus = "active" | "removed" | "left";
+export type TripMemberRole = "host" | "co_host" | "contributor" | "viewer";
+export type TripMemberStatus = "invited" | "active" | "removed";
 
 export type TripMember = {
   tripId: string;
   userId: string;
+  displayName?: string | null;
+  email?: string | null;
   role: TripMemberRole;
   status: TripMemberStatus;
   invitedByUserId: string | null;
+  invitedByDisplayName?: string | null;
+  invitedByEmail?: string | null;
   joinedAt: string;
 };
 

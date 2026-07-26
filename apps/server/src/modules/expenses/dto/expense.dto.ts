@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsNumber,
@@ -73,6 +74,13 @@ export class CreateExpenseDto {
 
   @IsIn(["equal", "custom"])
   split_strategy: "equal" | "custom" = "equal";
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  participant_user_ids?: string[];
 
   @IsOptional()
   @IsArray()

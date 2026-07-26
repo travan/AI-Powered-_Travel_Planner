@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import type { CitySuggestion } from "@travel/types";
 
 /**
@@ -28,8 +28,11 @@ export function usePopularCities(apiUrl: string, locale = "en") {
   }, [apiUrl]);
 
   // Helper: get display name in requested locale, fallback to "en"
-  const getDisplayName = (city: CitySuggestion) =>
-    city.name[locale] ?? city.name["en"] ?? Object.values(city.name)[0] ?? city.slug;
+  const getDisplayName = useCallback(
+    (city: CitySuggestion) =>
+      city.name[locale] ?? city.name["en"] ?? Object.values(city.name)[0] ?? city.slug,
+    [locale]
+  );
 
   return { cities, loading, error, getDisplayName };
 }

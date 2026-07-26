@@ -174,11 +174,17 @@ export function getMockUserFromCookieValue(cookieValue: string | undefined) {
   return decodeCookieValue(cookieValue)?.user ?? null;
 }
 
+export function getMockSessionFromCookieValue(cookieValue: string | undefined): MockSession | null {
+  return decodeCookieValue(cookieValue);
+}
+
 export function createMockBrowserClient(): MockAuthClient {
   return {
     auth: {
       async getSession() {
-        return { data: { session: getStoredSession() }, error: null };
+        const session = getStoredSession();
+        setBrowserCookie(session);
+        return { data: { session }, error: null };
       },
       async getUser() {
         return { data: { user: getStoredSession()?.user ?? null }, error: null };

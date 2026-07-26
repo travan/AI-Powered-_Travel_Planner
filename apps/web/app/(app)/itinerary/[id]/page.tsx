@@ -1,12 +1,14 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createClient } from "../../../../lib/supabase/server";
-import { getItinerary } from "../../../../lib/api";
+import { ApiRequestError, getItinerary } from "../../../../lib/api";
 import { OverviewCard } from "../../../../components/itinerary/OverviewCard";
 import { DayTimeline } from "../../../../components/itinerary/DayTimeline";
 import { TransportSection } from "../../../../components/itinerary/TransportSection";
 import { SeasonalNote } from "../../../../components/itinerary/SeasonalNote";
 import { BudgetBreakdown } from "../../../../components/itinerary/BudgetBreakdown";
+import { SaveTripButton } from "../../../../components/itinerary/SaveTripButton";
 import { ShareButton } from "../../../../components/itinerary/ShareButton";
 import type { Itinerary } from "@travel/types";
 
@@ -26,38 +28,39 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ItineraryDetailPage({ params }: PageProps) {
   const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    redirect(`/login?redirectTo=${encodeURIComponent(`/itinerary/${id}`)}`);
+  }
+
   let itinerary: Itinerary;
 
   try {
-    const data = await getItinerary(id);
+    const data = await getItinerary(id, session?.access_token);
     itinerary = data.itineraries?.[0] as Itinerary;
     if (!itinerary) notFound();
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) notFound();
+    throw error;
   }
 
-  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const isSaved = false; // TODO: query saved_trips table
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10 space-y-8">
       {/* Action bar */}
       <div className="flex items-center justify-between">
-        <a href="/plan" className="text-sm text-primary hover:underline">
+        <Link href="/plan" className="text-sm text-primary hover:underline">
           ← Plan another trip
-        </a>
+        </Link>
         <div className="flex gap-2">
-          {user && (
-            <button
-              className="rounded-lg border border-outline-variant bg-surface px-4 py-2 text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors"
-            >
-              {isSaved ? "Saved ✓" : "Save Trip"}
-            </button>
-          )}
+          {user && <SaveTripButton itineraryId={id} />}
           <ShareButton />
         </div>
       </div>

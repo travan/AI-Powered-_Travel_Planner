@@ -1,11 +1,11 @@
 import type { ItineraryInput, ItineraryOverview, Itinerary } from "@travel/types";
-import type { AIProvider, PreFetchedCityData } from "../provider";
+import type { AIProvider, PreFetchedCityData } from "../provider.js";
 import {
   buildOverviewPrompt,
   buildDetailPrompt,
   buildNLPPrompt,
   SYSTEM_PROMPT,
-} from "../prompts/itinerary";
+} from "../prompts/itinerary.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export class GeminiProvider implements AIProvider {

@@ -23,13 +23,13 @@ test.describe("trip business contract flows", () => {
 
     const invite = await postJson(request, `/api/trips/${tripId}/invites`, {
       email: "friend@example.com",
-      role: "editor",
+      role: "contributor",
       expiresInDays: 7,
     });
-    expect(invite).toEqual(expect.objectContaining({ role: "editor", status: "pending" }));
+    expect(invite).toEqual(expect.objectContaining({ role: "contributor", status: "pending" }));
 
     const joinedInviteMember = await postJson(request, "/api/trips/join/invite", { token: invite.token }, friendToken);
-    expect(joinedInviteMember).toEqual(expect.objectContaining({ userId: "e2e-user-3", role: "editor" }));
+    expect(joinedInviteMember).toEqual(expect.objectContaining({ userId: "e2e-user-3", role: "contributor" }));
 
     const shareLink = await patchJson(request, `/api/trips/${tripId}/share-link`, {
       enabled: true,
@@ -40,8 +40,8 @@ test.describe("trip business contract flows", () => {
     const joinedShareMember = await postJson(request, "/api/trips/join/share-link", { token: shareLink.shareToken }, guestToken);
     expect(joinedShareMember).toEqual(expect.objectContaining({ userId: "e2e-user-2", status: "active" }));
 
-    const updatedMember = await patchJson(request, `/api/trips/${tripId}/members/e2e-user-3`, { role: "admin" });
-    expect(updatedMember).toEqual(expect.objectContaining({ userId: "e2e-user-3", role: "admin" }));
+    const updatedMember = await patchJson(request, `/api/trips/${tripId}/members/e2e-user-3`, { role: "co_host" });
+    expect(updatedMember).toEqual(expect.objectContaining({ userId: "e2e-user-3", role: "co_host" }));
 
     const catalog = await getJson(request, "/api/activities/catalog?citySlug=hoi-an&q=lantern");
     expect(catalog[0]).toEqual(expect.objectContaining({ canonicalName: "Hoi An lantern workshop" }));
@@ -112,6 +112,7 @@ test.describe("trip business contract flows", () => {
       currency: "VND",
       paid_by_user_id: "e2e-user-1",
       split_strategy: "custom",
+      participant_user_ids: ["e2e-user-1", "e2e-user-2"],
       splits: [
         { user_id: "e2e-user-1", amount: 300000 },
         { user_id: "e2e-user-2", amount: 300000 },
@@ -161,6 +162,7 @@ test.describe("trip business contract flows", () => {
         amount: 600000,
         currency: "VND",
         split_strategy: "custom",
+        participant_user_ids: ["e2e-user-1"],
         splits: [{ user_id: "e2e-user-1", amount: 100000 }],
       },
     });

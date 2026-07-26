@@ -1,14 +1,20 @@
+import type { TripRole } from "@travel/types";
+
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
 
-export type TripMemberRole = "host" | "admin" | "editor" | "viewer";
-export type TripMemberStatus = "active" | "removed" | "left";
+export type TripMemberRole = TripRole;
+export type TripMemberStatus = "invited" | "active" | "removed";
 
 export type TripMember = {
   tripId: string;
   userId: string;
+  displayName?: string | null;
+  email?: string | null;
   role: TripMemberRole;
   status: TripMemberStatus;
   invitedByUserId: string | null;
+  invitedByDisplayName?: string | null;
+  invitedByEmail?: string | null;
   joinedAt: string;
 };
 
@@ -266,7 +272,12 @@ export type TransportPriceRecommendation = {
 
 export type DataQualitySignal = {
   id: string;
-  signalType: "price_change" | "duplicate_place" | "renamed_place" | "moved_place" | "outdated_place";
+  signalType:
+    | "price_change"
+    | "duplicate_place"
+    | "renamed_place"
+    | "moved_place"
+    | "outdated_place";
   severity: "low" | "medium" | "high";
   title: string;
   detail: string;
@@ -284,13 +295,14 @@ export type CreateExpenseInput = {
   activity_id?: string;
   bill_upload_id?: string;
   split_strategy: "equal" | "custom";
+  participant_user_ids?: string[];
   splits?: Array<{ user_id: string; amount: number }>;
 };
 
 export class WorkspaceApiError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
   ) {
     super(message);
     this.name = "WorkspaceApiError";
@@ -308,7 +320,10 @@ function getApiUrl(path: string) {
   return `${API_URL.replace(/\/$/, "")}${path}`;
 }
 
-async function requestJson<T>(path: string, options: RequestOptions): Promise<T> {
+async function requestJson<T>(
+  path: string,
+  options: RequestOptions,
+): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${options.authToken}`,
   };
@@ -336,13 +351,21 @@ async function requestJson<T>(path: string, options: RequestOptions): Promise<T>
 }
 
 export function listTripMembers(tripId: string, authToken: string) {
-  return requestJson<TripMember[]>(`/api/trips/${tripId}/members`, { authToken });
+  return requestJson<TripMember[]>(`/api/trips/${tripId}/members`, {
+    authToken,
+  });
+}
+
+export function getTripMembership(tripId: string, authToken: string) {
+  return requestJson<TripMember>(`/api/trips/${tripId}/membership`, {
+    authToken,
+  });
 }
 
 export function createTripInvite(
   tripId: string,
   authToken: string,
-  body: { email?: string; role: TripMemberRole; expiresInDays?: number }
+  body: { email?: string; role: TripMemberRole; expiresInDays?: number },
 ) {
   return requestJson<TripInvite>(`/api/trips/${tripId}/invites`, {
     authToken,
@@ -354,7 +377,7 @@ export function createTripInvite(
 export function updateTripShareLink(
   tripId: string,
   authToken: string,
-  body: { enabled: boolean; role: TripMemberRole }
+  body: { enabled: boolean; role: TripMemberRole },
 ) {
   return requestJson<TripShareLink>(`/api/trips/${tripId}/share-link`, {
     authToken,
@@ -367,7 +390,7 @@ export function updateTripMember(
   tripId: string,
   userId: string,
   authToken: string,
-  body: { role?: TripMemberRole; status?: TripMemberStatus }
+  body: { role?: TripMemberRole; status?: TripMemberStatus },
 ) {
   return requestJson<TripMember>(`/api/trips/${tripId}/members/${userId}`, {
     authToken,
@@ -392,11 +415,25 @@ export function joinTripByShareToken(authToken: string, token: string) {
   });
 }
 
-export function listTripAuditLogs(tripId: string, authToken: string, limit = 10) {
-  return requestJson<TripAuditLog[]>(`/api/trips/${tripId}/audit-logs?limit=${limit}`, { authToken });
+export function listTripAuditLogs(
+  tripId: string,
+  authToken: string,
+  limit = 10,
+) {
+  return requestJson<TripAuditLog[]>(
+    `/api/trips/${tripId}/audit-logs?limit=${limit}`,
+    { authToken },
+  );
 }
 
-export function searchActivityCatalog(query: { citySlug?: string; category?: string; q?: string; limit?: number } = {}) {
+export function searchActivityCatalog(
+  query: {
+    citySlug?: string;
+    category?: string;
+    q?: string;
+    limit?: number;
+  } = {},
+) {
   const params = new URLSearchParams();
   if (query.citySlug) params.set("citySlug", query.citySlug);
   if (query.category) params.set("category", query.category);
@@ -411,10 +448,16 @@ export function searchActivityCatalog(query: { citySlug?: string; category?: str
 }
 
 export function listTripActivities(tripId: string, authToken: string) {
-  return requestJson<TripActivity[]>(`/api/trips/${tripId}/activities`, { authToken });
+  return requestJson<TripActivity[]>(`/api/trips/${tripId}/activities`, {
+    authToken,
+  });
 }
 
-export function createTripActivity(tripId: string, authToken: string, body: CreateTripActivityInput) {
+export function createTripActivity(
+  tripId: string,
+  authToken: string,
+  body: CreateTripActivityInput,
+) {
   return requestJson<TripActivity>(`/api/trips/${tripId}/activities`, {
     authToken,
     method: "POST",
@@ -426,13 +469,16 @@ export function updateTripActivity(
   tripId: string,
   activityId: string,
   authToken: string,
-  body: Partial<CreateTripActivityInput> & { status?: string }
+  body: Partial<CreateTripActivityInput> & { status?: string },
 ) {
-  return requestJson<TripActivity>(`/api/trips/${tripId}/activities/${activityId}`, {
-    authToken,
-    method: "PATCH",
-    body,
-  });
+  return requestJson<TripActivity>(
+    `/api/trips/${tripId}/activities/${activityId}`,
+    {
+      authToken,
+      method: "PATCH",
+      body,
+    },
+  );
 }
 
 export function updateActivityParticipant(
@@ -440,41 +486,61 @@ export function updateActivityParticipant(
   activityId: string,
   userId: string,
   authToken: string,
-  status: TripActivityParticipant["status"]
+  status: TripActivityParticipant["status"],
 ) {
-  return requestJson<TripActivityParticipant>(`/api/trips/${tripId}/activities/${activityId}/participants/${userId}`, {
-    authToken,
-    method: "PATCH",
-    body: { status },
-  });
+  return requestJson<TripActivityParticipant>(
+    `/api/trips/${tripId}/activities/${activityId}/participants/${userId}`,
+    {
+      authToken,
+      method: "PATCH",
+      body: { status },
+    },
+  );
 }
 
 export function listTransportBookings(tripId: string, authToken: string) {
-  return requestJson<TransportBooking[]>(`/api/trips/${tripId}/transport-bookings`, { authToken });
+  return requestJson<TransportBooking[]>(
+    `/api/trips/${tripId}/transport-bookings`,
+    { authToken },
+  );
 }
 
-export function createTransportBooking(tripId: string, authToken: string, body: CreateTransportBookingInput) {
-  return requestJson<TransportBooking>(`/api/trips/${tripId}/transport-bookings`, {
-    authToken,
-    method: "POST",
-    body,
-  });
+export function createTransportBooking(
+  tripId: string,
+  authToken: string,
+  body: CreateTransportBookingInput,
+) {
+  return requestJson<TransportBooking>(
+    `/api/trips/${tripId}/transport-bookings`,
+    {
+      authToken,
+      method: "POST",
+      body,
+    },
+  );
 }
 
 export function updateTransportBooking(
   tripId: string,
   bookingId: string,
   authToken: string,
-  body: Partial<CreateTransportBookingInput>
+  body: Partial<CreateTransportBookingInput>,
 ) {
-  return requestJson<TransportBooking>(`/api/trips/${tripId}/transport-bookings/${bookingId}`, {
-    authToken,
-    method: "PATCH",
-    body,
-  });
+  return requestJson<TransportBooking>(
+    `/api/trips/${tripId}/transport-bookings/${bookingId}`,
+    {
+      authToken,
+      method: "PATCH",
+      body,
+    },
+  );
 }
 
-export function createBillUpload(tripId: string, authToken: string, body: CreateBillInput) {
+export function createBillUpload(
+  tripId: string,
+  authToken: string,
+  body: CreateBillInput,
+) {
   return requestJson<BillUpload>(`/api/trips/${tripId}/bills`, {
     authToken,
     method: "POST",
@@ -482,7 +548,11 @@ export function createBillUpload(tripId: string, authToken: string, body: Create
   });
 }
 
-export function updateBillUpload(billId: string, authToken: string, body: Partial<CreateBillInput> & { status?: string }) {
+export function updateBillUpload(
+  billId: string,
+  authToken: string,
+  body: Partial<CreateBillInput> & { status?: string },
+) {
   return requestJson<BillUpload>(`/api/bills/${billId}`, {
     authToken,
     method: "PATCH",
@@ -494,7 +564,11 @@ export function listExpenses(tripId: string, authToken: string) {
   return requestJson<Expense[]>(`/api/trips/${tripId}/expenses`, { authToken });
 }
 
-export function createExpense(tripId: string, authToken: string, body: CreateExpenseInput) {
+export function createExpense(
+  tripId: string,
+  authToken: string,
+  body: CreateExpenseInput,
+) {
   return requestJson<Expense>(`/api/trips/${tripId}/expenses`, {
     authToken,
     method: "POST",
@@ -506,7 +580,7 @@ export function updateExpense(
   tripId: string,
   expenseId: string,
   authToken: string,
-  body: Partial<CreateExpenseInput> & { status?: string }
+  body: Partial<CreateExpenseInput> & { status?: string },
 ) {
   return requestJson<Expense>(`/api/trips/${tripId}/expenses/${expenseId}`, {
     authToken,
@@ -520,29 +594,42 @@ export function updateExpenseSplitStatus(
   expenseId: string,
   splitId: string,
   authToken: string,
-  status: ExpenseSplitStatus
+  status: ExpenseSplitStatus,
 ) {
-  return requestJson<ExpenseSplit>(`/api/trips/${tripId}/expenses/${expenseId}/splits/${splitId}`, {
-    authToken,
-    method: "PATCH",
-    body: { status },
-  });
+  return requestJson<ExpenseSplit>(
+    `/api/trips/${tripId}/expenses/${expenseId}/splits/${splitId}`,
+    {
+      authToken,
+      method: "PATCH",
+      body: { status },
+    },
+  );
 }
 
 export function listReviewQueue(tripId: string, authToken: string) {
-  return requestJson<ReviewQueueItem[]>(`/api/trips/${tripId}/review-queue`, { authToken });
+  return requestJson<ReviewQueueItem[]>(`/api/trips/${tripId}/review-queue`, {
+    authToken,
+  });
 }
 
 export function reviewSubmission(
   tripId: string,
   authToken: string,
-  body: { entity_type: ReviewEntityType; entity_id: string; decision: "approved" | "rejected"; notes?: string }
+  body: {
+    entity_type: ReviewEntityType;
+    entity_id: string;
+    decision: "approved" | "rejected";
+    notes?: string;
+  },
 ) {
-  return requestJson<ReviewQueueItem[]>(`/api/trips/${tripId}/review-submissions`, {
-    authToken,
-    method: "PATCH",
-    body,
-  });
+  return requestJson<ReviewQueueItem[]>(
+    `/api/trips/${tripId}/review-submissions`,
+    {
+      authToken,
+      method: "PATCH",
+      body,
+    },
+  );
 }
 
 export function analyzeBillUpload(billId: string, authToken: string) {
@@ -552,35 +639,50 @@ export function analyzeBillUpload(billId: string, authToken: string) {
   });
 }
 
-export function listPlaceRecommendations(query: { citySlug?: string; category?: string; limit?: number } = {}) {
+export function listPlaceRecommendations(
+  query: { citySlug?: string; category?: string; limit?: number } = {},
+) {
   const params = new URLSearchParams();
   if (query.citySlug) params.set("citySlug", query.citySlug);
   if (query.category) params.set("category", query.category);
   if (query.limit) params.set("limit", String(query.limit));
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return fetch(getApiUrl(`/api/recommendations/places${suffix}`)).then((res) => {
-    if (!res.ok) return [] as PlaceRecommendation[];
-    return res.json() as Promise<PlaceRecommendation[]>;
-  });
+  return fetch(getApiUrl(`/api/recommendations/places${suffix}`)).then(
+    (res) => {
+      if (!res.ok) return [] as PlaceRecommendation[];
+      return res.json() as Promise<PlaceRecommendation[]>;
+    },
+  );
 }
 
 export function listTransportPriceRecommendations(
-  query: { mode?: TransportMode; originCity?: string; destinationCity?: string; limit?: number } = {}
+  query: {
+    mode?: TransportMode;
+    originCity?: string;
+    destinationCity?: string;
+    limit?: number;
+  } = {},
 ) {
   const params = new URLSearchParams();
   if (query.mode) params.set("mode", query.mode);
   if (query.originCity) params.set("originCity", query.originCity);
-  if (query.destinationCity) params.set("destinationCity", query.destinationCity);
+  if (query.destinationCity)
+    params.set("destinationCity", query.destinationCity);
   if (query.limit) params.set("limit", String(query.limit));
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return fetch(getApiUrl(`/api/recommendations/transport-prices${suffix}`)).then((res) => {
+  return fetch(
+    getApiUrl(`/api/recommendations/transport-prices${suffix}`),
+  ).then((res) => {
     if (!res.ok) return [] as TransportPriceRecommendation[];
     return res.json() as Promise<TransportPriceRecommendation[]>;
   });
 }
 
 export function listDataQualitySignals(tripId: string, authToken: string) {
-  return requestJson<DataQualitySignal[]>(`/api/trips/${tripId}/data-quality-signals`, { authToken });
+  return requestJson<DataQualitySignal[]>(
+    `/api/trips/${tripId}/data-quality-signals`,
+    { authToken },
+  );
 }

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { AppConfigService } from "../../config/app-config.service.js";
 
 type JwtPayload = Record<string, unknown> & {
@@ -15,7 +15,7 @@ export type JwtSigner = {
 
 @Injectable()
 export class LocalJwtService implements JwtSigner {
-  constructor(private readonly config: AppConfigService) {}
+  constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {}
 
   sign(payload: Record<string, unknown>, options: { expiresIn: number }): string {
     const now = Math.floor(Date.now() / 1000);

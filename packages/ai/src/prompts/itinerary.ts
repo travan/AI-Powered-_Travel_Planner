@@ -1,5 +1,5 @@
 import type { ItineraryInput, ItineraryOverview } from "@travel/types";
-import type { PreFetchedCityData } from "../provider";
+import type { PreFetchedCityData } from "../provider.js";
 
 export const SYSTEM_PROMPT = (locale: string) =>
   locale === "vi"

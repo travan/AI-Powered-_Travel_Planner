@@ -17,7 +17,7 @@ describe("hooks package", () => {
 
     const { result } = renderHook(() => useCitySearch("to", "http://api.test", 5));
 
-    expect(result.current.loading).toBe(false);
+    expect(result.current.loading).toBe(true);
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -39,6 +39,42 @@ describe("hooks package", () => {
 
     rerender({ query: "" });
     expect(result.current.suggestions).toEqual([]);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("useCitySearch ignores stale responses when the query changes", async () => {
+    let resolveFirst!: (value: Response) => void;
+    const firstRequest = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    vi.spyOn(globalThis, "fetch" as never)
+      .mockReturnValueOnce(firstRequest as never)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ slug: "danang", name: { en: "Da Nang" } }],
+      } as Response);
+
+    const { result, rerender } = renderHook(
+      ({ query }) => useCitySearch(query, "http://api.test", 5),
+      { initialProps: { query: "to" } }
+    );
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+    rerender({ query: "da" });
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toEqual([{ slug: "danang", name: { en: "Da Nang" } }]);
+      expect(result.current.loading).toBe(false);
+    });
+
+    resolveFirst({
+      ok: true,
+      json: async () => [{ slug: "tokyo", name: { en: "Tokyo" } }],
+    } as Response);
+
+    await Promise.resolve();
+    expect(result.current.suggestions).toEqual([{ slug: "danang", name: { en: "Da Nang" } }]);
   });
 
   it("usePopularCities resolves list and computes locale fallback", async () => {

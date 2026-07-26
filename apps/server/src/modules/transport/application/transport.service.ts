@@ -1,16 +1,39 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { badRequest, forbidden, notFound, ok, type ServiceResult } from "../../../shared/application/service-result.js";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  ok,
+  type ServiceResult,
+} from "../../../shared/application/service-result.js";
+import { getTripRolePermissions } from "../../../shared/application/trip-role-permissions.js";
 import type { TransportBooking } from "../domain/transport.entity.js";
-import { TRANSPORT_REPOSITORY, type TransportRepository } from "../domain/transport.repository.js";
-import type { CreateTransportBookingDto, UpdateTransportBookingDto } from "../dto/transport.dto.js";
+import {
+  TRANSPORT_REPOSITORY,
+  type TransportRepository,
+} from "../domain/transport.repository.js";
+import type {
+  CreateTransportBookingDto,
+  UpdateTransportBookingDto,
+} from "../dto/transport.dto.js";
 
 @Injectable()
 export class TransportService {
-  constructor(@Inject(TRANSPORT_REPOSITORY) private readonly transport: TransportRepository) {}
+  constructor(
+    @Inject(TRANSPORT_REPOSITORY)
+    private readonly transport: TransportRepository,
+  ) {}
 
-  async listForTrip(input: { tripId: string; actorUserId: string }): Promise<ServiceResult<TransportBooking[]>> {
-    const member = await this.transport.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
+  async listForTrip(input: {
+    tripId: string;
+    actorUserId: string;
+  }): Promise<ServiceResult<TransportBooking[]>> {
+    const member = await this.transport.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
     return ok(await this.transport.listForTrip(input.tripId));
   }
 
@@ -19,10 +42,23 @@ export class TransportService {
     actorUserId: string;
     dto: CreateTransportBookingDto;
   }): Promise<ServiceResult<TransportBooking>> {
-    const member = await this.transport.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
+    const member = await this.transport.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden(
+        "Viewers cannot add transport bookings",
+        "transport_create_forbidden",
+      );
+    }
 
-    const participants = await this.resolveParticipants(input.tripId, input.dto.participant_user_ids);
+    const participants = await this.resolveParticipants(
+      input.tripId,
+      input.dto.participant_user_ids,
+    );
     if (!participants.ok) return participants;
 
     const booking = await this.transport.create({
@@ -59,18 +95,40 @@ export class TransportService {
     actorUserId: string;
     dto: UpdateTransportBookingDto;
   }): Promise<ServiceResult<TransportBooking>> {
-    const before = await this.transport.findForTrip({ tripId: input.tripId, bookingId: input.bookingId });
+    const before = await this.transport.findForTrip({
+      tripId: input.tripId,
+      bookingId: input.bookingId,
+    });
     if (!before) return notFound("Transport booking not found");
 
-    const member = await this.transport.findTripMember({ tripId: input.tripId, userId: input.actorUserId });
-    if (!member || member.status !== "active") return notFound("Trip not found");
-    if (before.createdByUserId !== input.actorUserId && !["host", "admin"].includes(member.role)) {
-      return forbidden("Only host/admin or creator can edit this transport booking", "transport_edit_forbidden");
+    const member = await this.transport.findTripMember({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
+    if (!member || member.status !== "active")
+      return notFound("Trip not found");
+    if (!getTripRolePermissions(member.role).contribute) {
+      return forbidden(
+        "Viewers cannot edit transport bookings",
+        "transport_edit_forbidden",
+      );
+    }
+    if (
+      before.createdByUserId !== input.actorUserId &&
+      !["host", "co_host"].includes(member.role)
+    ) {
+      return forbidden(
+        "Only host/co-host or creator can edit this transport booking",
+        "transport_edit_forbidden",
+      );
     }
 
     let participantUserIds: string[] | undefined;
     if (input.dto.participant_user_ids) {
-      const participants = await this.resolveParticipants(input.tripId, input.dto.participant_user_ids);
+      const participants = await this.resolveParticipants(
+        input.tripId,
+        input.dto.participant_user_ids,
+      );
       if (!participants.ok) return participants;
       participantUserIds = participants.value;
     }
@@ -106,11 +164,20 @@ export class TransportService {
     return ok(updated);
   }
 
-  private async resolveParticipants(tripId: string, requested?: string[]): Promise<ServiceResult<string[]>> {
+  private async resolveParticipants(
+    tripId: string,
+    requested?: string[],
+  ): Promise<ServiceResult<string[]>> {
     const activeMembers = await this.transport.listActiveTripMemberIds(tripId);
     const participants = requested?.length ? requested : activeMembers;
-    const invalid = participants.find((userId) => !activeMembers.includes(userId));
-    if (invalid) return badRequest("Every transport participant must be an active trip member", "transport_participant_not_member");
+    const invalid = participants.find(
+      (userId) => !activeMembers.includes(userId),
+    );
+    if (invalid)
+      return badRequest(
+        "Every transport participant must be an active trip member",
+        "transport_participant_not_member",
+      );
     return ok([...new Set(participants)]);
   }
 }

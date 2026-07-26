@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import type { CitySuggestion } from "@travel/types";
 
 /**
@@ -12,42 +12,49 @@ import type { CitySuggestion } from "@travel/types";
 export function useCitySearch(query: string, apiUrl: string, delay = 300) {
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (query.length < 2) {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
       setSuggestions([]);
+      setLoading(false);
       return;
     }
 
-    if (timerRef.current) clearTimeout(timerRef.current);
+    const controller = new AbortController();
+    let active = true;
 
-    timerRef.current = setTimeout(async () => {
-      setLoading(true);
+    // Enter the loading state as soon as the current query is valid. This
+    // avoids briefly rendering "No results" during the debounce window.
+    setLoading(true);
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `${apiUrl}/api/cities/search?q=${encodeURIComponent(query)}`
+          `${apiUrl}/api/cities/search?q=${encodeURIComponent(normalizedQuery)}`,
+          { signal: controller.signal }
         );
+        if (!active) return;
         if (res.ok) {
           const data = await res.json() as CitySuggestion[];
+          if (!active) return;
           setSuggestions(data);
+        } else {
+          setSuggestions([]);
         }
-      } catch {
+      } catch (error) {
+        if (!active || (error instanceof Error && error.name === "AbortError")) return;
         setSuggestions([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }, delay);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [query, apiUrl, delay]);
-
-  // Clear suggestions when query is cleared
-  useEffect(() => {
-    if (query.length === 0) setSuggestions([]);
-  }, [query]);
 
   return { suggestions, loading };
 }

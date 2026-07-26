@@ -1,5 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
+import {
+  SQL_CLIENT,
+  type SqlClient,
+} from "../../../database/database.tokens.js";
 import type {
   Trip,
   TripAuditLog,
@@ -10,6 +13,7 @@ import type {
   TripShareLink,
 } from "../domain/trip.entity.js";
 import type { TripRepository } from "../domain/trip.repository.js";
+import type { TripSummary } from "@travel/types";
 
 type TripRow = {
   id: string;
@@ -20,12 +24,36 @@ type TripRow = {
   created_at: string;
 };
 
+type TripSummaryRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  primary_city_slug: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
+  visibility: string;
+  budget: string | number | null;
+  currency: string;
+  role: TripMemberRole;
+  member_count: string | number;
+  activity_count: string | number;
+  checklist_done: string | number;
+  checklist_total: string | number;
+  expense_total: string | number;
+  created_at: string;
+};
+
 type TripMemberRow = {
   trip_id: string;
   user_id: string;
+  display_name: string | null;
+  email: string | null;
   role: TripMemberRole;
   status: TripMemberStatus;
   invited_by_user_id: string | null;
+  invited_by_display_name: string | null;
+  invited_by_email: string | null;
   joined_at: string;
 };
 
@@ -66,48 +94,97 @@ type TripAuditLogRow = {
 export class PostgresTripRepository implements TripRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
-  async listForUser(userId: string): Promise<Trip[]> {
-    const result = await this.sql.query<TripRow>(
-      `select t.id::text, t.title, t.status, t.visibility, t.owner_user_id::text, t.created_at::text
+  async listForUser(userId: string): Promise<TripSummary[]> {
+    const result = await this.sql.query<TripSummaryRow>(
+      `select t.id::text,
+              t.title,
+              t.description,
+              t.primary_city_slug,
+              t.start_date::text,
+              t.end_date::text,
+              t.status,
+              t.visibility,
+              t.budget,
+              t.currency,
+              tm.role,
+              (select count(*) from trip_members members where members.trip_id = t.id and members.status = 'active') as member_count,
+              (select count(*) from trip_activities activities where activities.trip_id = t.id) as activity_count,
+              (select count(*) from trip_checklist_items checklist where checklist.trip_id = t.id and checklist.status = 'done') as checklist_done,
+              (select count(*) from trip_checklist_items checklist where checklist.trip_id = t.id) as checklist_total,
+              coalesce((
+                select sum(expenses.amount)
+                from expenses
+                where expenses.trip_id = t.id
+                  and expenses.approval_status = 'approved'
+              ), 0) as expense_total,
+              t.created_at::text
        from trips t
        join trip_members tm on tm.trip_id = t.id
-       where tm.user_id = $1
+       where tm.user_id = $1 and tm.status = 'active'
        order by t.created_at desc`,
-      [userId]
+      [userId],
     );
-    return result.rows.map(mapTrip);
+    return result.rows.map(mapTripSummary);
   }
 
-  async findForUser(input: { tripId: string; userId: string }): Promise<Trip | null> {
+  async findForUser(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<Trip | null> {
     const result = await this.sql.query<TripRow>(
       `select t.id::text, t.title, t.status, t.visibility, t.owner_user_id::text, t.created_at::text
        from trips t
        join trip_members tm on tm.trip_id = t.id
        where t.id = $1 and tm.user_id = $2
        limit 1`,
-      [input.tripId, input.userId]
+      [input.tripId, input.userId],
     );
     return result.rows[0] ? mapTrip(result.rows[0]) : null;
   }
 
-  async findMember(input: { tripId: string; userId: string }): Promise<TripMember | null> {
+  async findMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null> {
     const result = await this.sql.query<TripMemberRow>(
-      `select trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text
-       from trip_members
-       where trip_id = $1 and user_id = $2
+      `select tm.trip_id::text,
+              tm.user_id::text,
+              coalesce(nullif(btrim(member_user.display_name), ''), split_part(member_user.email::text, '@', 1)) as display_name,
+              member_user.email::text as email,
+              tm.role,
+              tm.status,
+              tm.invited_by_user_id::text,
+              coalesce(nullif(btrim(inviter.display_name), ''), split_part(inviter.email::text, '@', 1)) as invited_by_display_name,
+              inviter.email::text as invited_by_email,
+              tm.joined_at::text
+       from trip_members tm
+       join users member_user on member_user.id = tm.user_id
+       left join users inviter on inviter.id = tm.invited_by_user_id
+       where tm.trip_id = $1 and tm.user_id = $2
        limit 1`,
-      [input.tripId, input.userId]
+      [input.tripId, input.userId],
     );
     return result.rows[0] ? mapMember(result.rows[0]) : null;
   }
 
   async listMembers(tripId: string): Promise<TripMember[]> {
     const result = await this.sql.query<TripMemberRow>(
-      `select trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text
-       from trip_members
-       where trip_id = $1
-       order by role asc, joined_at asc`,
-      [tripId]
+      `select tm.trip_id::text,
+              tm.user_id::text,
+              coalesce(nullif(btrim(member_user.display_name), ''), split_part(member_user.email::text, '@', 1)) as display_name,
+              member_user.email::text as email,
+              tm.role,
+              tm.status,
+              tm.invited_by_user_id::text,
+              coalesce(nullif(btrim(inviter.display_name), ''), split_part(inviter.email::text, '@', 1)) as invited_by_display_name,
+              inviter.email::text as invited_by_email,
+              tm.joined_at::text
+       from trip_members tm
+       join users member_user on member_user.id = tm.user_id
+       left join users inviter on inviter.id = tm.invited_by_user_id
+       where tm.trip_id = $1
+       order by tm.role asc, tm.joined_at asc`,
+      [tripId],
     );
     return result.rows.map(mapMember);
   }
@@ -125,7 +202,14 @@ export class PostgresTripRepository implements TripRepository {
        values ($1, $2, $3, $4, $5, $6)
        returning id::text, trip_id::text, invited_by_user_id::text, email, role, token, status,
                  expires_at::text, accepted_by_user_id::text, accepted_at::text, created_at::text`,
-      [input.tripId, input.invitedByUserId, input.email ?? null, input.role, input.token, input.expiresAt ?? null]
+      [
+        input.tripId,
+        input.invitedByUserId,
+        input.email ?? null,
+        input.role,
+        input.token,
+        input.expiresAt ?? null,
+      ],
     );
     return mapInvite(result.rows[0]!);
   }
@@ -137,19 +221,22 @@ export class PostgresTripRepository implements TripRepository {
        from trip_invites
        where token = $1
        limit 1`,
-      [token]
+      [token],
     );
     return result.rows[0] ? mapInvite(result.rows[0]) : null;
   }
 
-  async acceptInvite(input: { inviteId: string; userId: string }): Promise<TripInvite> {
+  async acceptInvite(input: {
+    inviteId: string;
+    userId: string;
+  }): Promise<TripInvite> {
     const result = await this.sql.query<TripInviteRow>(
       `update trip_invites
        set status = 'accepted', accepted_by_user_id = $2, accepted_at = now(), updated_at = now()
        where id = $1
        returning id::text, trip_id::text, invited_by_user_id::text, email, role, token, status,
                  expires_at::text, accepted_by_user_id::text, accepted_at::text, created_at::text`,
-      [input.inviteId, input.userId]
+      [input.inviteId, input.userId],
     );
     return mapInvite(result.rows[0]!);
   }
@@ -161,12 +248,30 @@ export class PostgresTripRepository implements TripRepository {
     invitedByUserId?: string | null;
   }): Promise<TripMember> {
     const result = await this.sql.query<TripMemberRow>(
-      `insert into trip_members (trip_id, user_id, role, status, invited_by_user_id)
-       values ($1, $2, $3, 'active', $4)
-       on conflict (trip_id, user_id)
-       do update set role = excluded.role, status = 'active'
-       returning trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text`,
-      [input.tripId, input.userId, input.role, input.invitedByUserId ?? null]
+      `with saved_member as (
+         insert into trip_members (trip_id, user_id, role, status, invited_by_user_id)
+         values ($1, $2, $3, 'active', $4)
+         on conflict (trip_id, user_id)
+         do update set
+           role = case when trip_members.role = 'host' then 'host' else excluded.role end,
+           status = 'active',
+           joined_at = coalesce(trip_members.joined_at, now())
+         returning trip_id, user_id, role, status, invited_by_user_id, joined_at
+       )
+       select saved_member.trip_id::text,
+              saved_member.user_id::text,
+              coalesce(nullif(btrim(member_user.display_name), ''), split_part(member_user.email::text, '@', 1)) as display_name,
+              member_user.email::text as email,
+              saved_member.role,
+              saved_member.status,
+              saved_member.invited_by_user_id::text,
+              coalesce(nullif(btrim(inviter.display_name), ''), split_part(inviter.email::text, '@', 1)) as invited_by_display_name,
+              inviter.email::text as invited_by_email,
+              saved_member.joined_at::text
+       from saved_member
+       join users member_user on member_user.id = saved_member.user_id
+       left join users inviter on inviter.id = saved_member.invited_by_user_id`,
+      [input.tripId, input.userId, input.role, input.invitedByUserId ?? null],
     );
     return mapMember(result.rows[0]!);
   }
@@ -189,7 +294,7 @@ export class PostgresTripRepository implements TripRepository {
            updated_at = now()
        where id = $1
        returning id::text as trip_id, share_enabled, share_token, share_role`,
-      [input.tripId, input.enabled, input.role, input.token ?? null]
+      [input.tripId, input.enabled, input.role, input.token ?? null],
     );
     return mapShareLink(result.rows[0]!);
   }
@@ -200,7 +305,7 @@ export class PostgresTripRepository implements TripRepository {
        from trips
        where share_token = $1
        limit 1`,
-      [token]
+      [token],
     );
     return result.rows[0] ? mapShareLink(result.rows[0]) : null;
   }
@@ -212,12 +317,27 @@ export class PostgresTripRepository implements TripRepository {
     status?: TripMemberStatus;
   }): Promise<TripMember | null> {
     const result = await this.sql.query<TripMemberRow>(
-      `update trip_members
-       set role = coalesce($3, role),
-           status = coalesce($4, status)
-       where trip_id = $1 and user_id = $2
-       returning trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text`,
-      [input.tripId, input.userId, input.role ?? null, input.status ?? null]
+      `with saved_member as (
+         update trip_members
+         set role = coalesce($3, role),
+             status = coalesce($4, status)
+         where trip_id = $1 and user_id = $2
+         returning trip_id, user_id, role, status, invited_by_user_id, joined_at
+       )
+       select saved_member.trip_id::text,
+              saved_member.user_id::text,
+              coalesce(nullif(btrim(member_user.display_name), ''), split_part(member_user.email::text, '@', 1)) as display_name,
+              member_user.email::text as email,
+              saved_member.role,
+              saved_member.status,
+              saved_member.invited_by_user_id::text,
+              coalesce(nullif(btrim(inviter.display_name), ''), split_part(inviter.email::text, '@', 1)) as invited_by_display_name,
+              inviter.email::text as invited_by_email,
+              saved_member.joined_at::text
+       from saved_member
+       join users member_user on member_user.id = saved_member.user_id
+       left join users inviter on inviter.id = saved_member.invited_by_user_id`,
+      [input.tripId, input.userId, input.role ?? null, input.status ?? null],
     );
     return result.rows[0] ? mapMember(result.rows[0]) : null;
   }
@@ -242,11 +362,14 @@ export class PostgresTripRepository implements TripRepository {
         input.action,
         input.before ?? null,
         input.after ?? null,
-      ]
+      ],
     );
   }
 
-  async listAuditLogs(input: { tripId: string; limit: number }): Promise<TripAuditLog[]> {
+  async listAuditLogs(input: {
+    tripId: string;
+    limit: number;
+  }): Promise<TripAuditLog[]> {
     const result = await this.sql.query<TripAuditLogRow>(
       `select id::text, trip_id::text, actor_user_id::text, entity_type, entity_id::text,
               action, before_snapshot, after_snapshot, created_at::text
@@ -254,7 +377,7 @@ export class PostgresTripRepository implements TripRepository {
        where trip_id = $1
        order by created_at desc
        limit $2`,
-      [input.tripId, input.limit]
+      [input.tripId, input.limit],
     );
     return result.rows.map(mapAuditLog);
   }
@@ -271,13 +394,39 @@ function mapTrip(row: TripRow): Trip {
   };
 }
 
+function mapTripSummary(row: TripSummaryRow): TripSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    primary_city_slug: row.primary_city_slug,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    status: row.status,
+    visibility: row.visibility,
+    budget: row.budget === null ? null : Number(row.budget),
+    currency: row.currency,
+    role: row.role,
+    member_count: Number(row.member_count),
+    activity_count: Number(row.activity_count),
+    checklist_done: Number(row.checklist_done),
+    checklist_total: Number(row.checklist_total),
+    expense_total: Number(row.expense_total),
+    created_at: row.created_at,
+  };
+}
+
 function mapMember(row: TripMemberRow): TripMember {
   return {
     tripId: row.trip_id,
     userId: row.user_id,
+    displayName: row.display_name,
+    email: row.email,
     role: row.role,
     status: row.status,
     invitedByUserId: row.invited_by_user_id,
+    invitedByDisplayName: row.invited_by_display_name,
+    invitedByEmail: row.invited_by_email,
     joinedAt: row.joined_at,
   };
 }

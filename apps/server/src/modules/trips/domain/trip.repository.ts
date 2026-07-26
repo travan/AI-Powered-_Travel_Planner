@@ -7,11 +7,12 @@ import type {
   TripMemberStatus,
   TripShareLink,
 } from "./trip.entity.js";
+import type { TripSummary } from "@travel/types";
 
 export const TRIP_REPOSITORY = Symbol("TRIP_REPOSITORY");
 
 export interface TripRepository {
-  listForUser(userId: string): Promise<Trip[]>;
+  listForUser(userId: string): Promise<TripSummary[]>;
   findForUser(input: { tripId: string; userId: string }): Promise<Trip | null>;
   findMember(input: { tripId: string; userId: string }): Promise<TripMember | null>;
   listMembers(tripId: string): Promise<TripMember[]>;

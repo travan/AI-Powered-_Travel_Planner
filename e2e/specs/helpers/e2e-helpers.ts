@@ -1,6 +1,6 @@
 import { expect, Page, APIRequestContext } from "@playwright/test";
 
-export const API_BASE_URL = `http://127.0.0.1:${process.env.E2E_MOCK_API_PORT ?? "3101"}`;
+export const API_BASE_URL = `http://127.0.0.1:${process.env.E2E_MOCK_API_PORT ?? "3301"}`;
 export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
 export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";

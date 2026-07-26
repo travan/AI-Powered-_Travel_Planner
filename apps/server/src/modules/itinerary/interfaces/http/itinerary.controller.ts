@@ -1,17 +1,41 @@
-import { Controller, Get, Param, Req } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
+import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
-import { getBearerToken } from "../../../../shared/nest/jwt-auth.guard.js";
+import { getBearerToken, JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
 import { LocalJwtService } from "../../../../shared/nest/local-jwt.js";
 import { ItineraryService } from "../../application/itinerary.service.js";
-import { ItineraryIdParamsDto } from "../../dto/itinerary.dto.js";
+import { GenerateItineraryDto, ItineraryIdParamsDto } from "../../dto/itinerary.dto.js";
 
 @Controller("api/itinerary")
 export class ItineraryController {
   constructor(
-    private readonly itineraries: ItineraryService,
-    private readonly jwt: LocalJwtService
+    @Inject(ItineraryService) private readonly itineraries: ItineraryService,
+    @Inject(LocalJwtService) private readonly jwt: LocalJwtService
   ) {}
+
+  @Post("generate")
+  @UseGuards(JwtAuthGuard)
+  generate(
+    @Body() dto: GenerateItineraryDto,
+    @CurrentUser() user: CurrentUserValue
+  ) {
+    return this.itineraries.generate({ userId: user.sub, dto });
+  }
+
+  @Post(":id/save")
+  @UseGuards(JwtAuthGuard)
+  async save(
+    @Param() params: ItineraryIdParamsDto,
+    @CurrentUser() user: CurrentUserValue
+  ) {
+    const result = await this.itineraries.save({
+      itineraryId: params.id,
+      userId: user.sub,
+    });
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
 
   @Get(":id")
   async getById(
@@ -23,7 +47,12 @@ export class ItineraryController {
       userId: this.resolveOptionalUserId(request),
     });
     if (!result.ok) throwServiceError(result.error);
-    return result.value;
+    const detail = result.value;
+    return {
+      itineraries: detail.result
+        ? [{ id: detail.id, ...detail.result }]
+        : [],
+    };
   }
 
   private resolveOptionalUserId(request: Request): string | null {

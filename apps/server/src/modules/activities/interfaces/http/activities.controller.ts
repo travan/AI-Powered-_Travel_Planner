@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -15,7 +15,7 @@ import {
 
 @Controller("api")
 export class ActivitiesController {
-  constructor(private readonly activities: ActivitiesService) {}
+  constructor(@Inject(ActivitiesService) private readonly activities: ActivitiesService) {}
 
   @Get("activities/catalog")
   searchCatalog(@Query() query: ActivityCatalogQueryDto) {

@@ -11,7 +11,7 @@ const SESSION_STORAGE_KEY = "horizon.local.auth.session";
 const AUTH_CHANGE_EVENT = "horizon:local-auth-change";
 export const LOCAL_AUTH_COOKIE = "horizon_local_auth";
 export const LOCAL_AUTH_ENABLED =
-  (process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ?? process.env["AUTH_PROVIDER"]) === "local";
+  (process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ?? process.env["AUTH_PROVIDER"] ?? "local") === "local";
 
 function encodeCookieValue(session: MockSession | null) {
   if (!session) return "";
@@ -84,15 +84,24 @@ export function getLocalUserFromCookieValue(cookieValue: string | undefined): Mo
   return decodeCookieValue(cookieValue)?.user ?? null;
 }
 
+export function getLocalSessionFromCookieValue(cookieValue: string | undefined): MockSession | null {
+  return decodeCookieValue(cookieValue);
+}
+
 export function createLocalBrowserClient(): MockAuthClient {
   return {
     auth: {
       async getSession() {
-        return { data: { session: readSession() }, error: null };
+        const session = readSession();
+        // Keep the server-readable cookie in sync for users who already had a
+        // localStorage session before SSR itinerary pages were introduced.
+        writeSession(session);
+        return { data: { session }, error: null };
       },
       async getUser() {
         const session = readSession();
         if (!session?.access_token) {
+          writeSession(null);
           return { data: { user: null }, error: null };
         }
 
