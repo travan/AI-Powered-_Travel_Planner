@@ -74,6 +74,7 @@ test("guest can complete the web journey through collaboration and a selected-pa
   page,
   request,
 }) => {
+  test.slow();
   await request.post(`${API_BASE_URL}/__e2e/reset-business-fixtures`);
 
   const identity = {

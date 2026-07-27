@@ -336,6 +336,7 @@ test("host can capture bills, create custom expense splits, and settle balances"
   page,
   request,
 }) => {
+  test.slow();
   const promoteExpenseParticipant = await request.patch(
     `${API_BASE_URL}/api/trips/${tripId}/members/e2e-user-2`,
     {

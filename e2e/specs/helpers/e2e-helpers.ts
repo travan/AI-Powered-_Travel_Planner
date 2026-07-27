@@ -126,11 +126,11 @@ export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-u
 }
 
 export async function clearMobileWebMockAuthSession(page: Page) {
-  await page.context().clearCookies();
   await page.evaluate(() => {
     window.localStorage.removeItem("horizon.mobile.mock.session");
     window.localStorage.removeItem("horizon.mobile.search.intent");
   });
+  await page.context().clearCookies();
 }
 
 export async function injectMobileMockAuthSession(page: Page, userId = "e2e-trips-user") {
@@ -169,12 +169,24 @@ export async function signUpOnMobileWeb(page: Page, details: { fullName: string;
   await page.getByTestId("mobile-auth-email").fill(details.email);
   await page.getByTestId("mobile-auth-password").fill(details.password);
   await page.getByTestId("mobile-auth-submit-signup").click();
+  await waitForMobileMockAuthToSettle(page);
 }
 
 export async function signInOnMobileWeb(page: Page, details: { email: string; password: string }) {
   await page.getByTestId("mobile-auth-email").fill(details.email);
   await page.getByTestId("mobile-auth-password").fill(details.password);
   await page.getByTestId("mobile-auth-submit-login").click();
+  await waitForMobileMockAuthToSettle(page);
+}
+
+async function waitForMobileMockAuthToSettle(page: Page) {
+  await page.waitForFunction(
+    () =>
+      Boolean(window.localStorage.getItem("horizon.mobile.mock.session")) ||
+      window.location.pathname === "/login",
+    undefined,
+    { timeout: MOBILE_ASSERT_TIMEOUT_MS },
+  );
 }
 
 export async function searchCityOnMobileWeb(page: Page, city: string) {
