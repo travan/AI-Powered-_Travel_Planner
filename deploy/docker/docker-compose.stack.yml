@@ -11,6 +11,11 @@ services:
     volumes:
       - ai_travel_planner_postgres:/var/lib/postgresql/data
       - ../../apps/api/db/local-postgres.sql:/docker-entrypoint-initdb.d/001-local-postgres.sql:ro
+      - ../../apps/server/src/database/migrations/003_collaboration_finance.sql:/docker-entrypoint-initdb.d/003_collaboration_finance.sql:ro
+      - ../../apps/server/src/database/migrations/004_schedule_transport.sql:/docker-entrypoint-initdb.d/004_schedule_transport.sql:ro
+      - ../../apps/server/src/database/migrations/005_review_ocr_recommendations.sql:/docker-entrypoint-initdb.d/005_review_ocr_recommendations.sql:ro
+      - ../../apps/server/src/database/migrations/006_local_workspace_core_compat.sql:/docker-entrypoint-initdb.d/006_local_workspace_core_compat.sql:ro
+      - ../../apps/server/src/database/migrations/007_repair_self_accepted_invites.sql:/docker-entrypoint-initdb.d/007_repair_self_accepted_invites.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -94,11 +99,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    command: >
-      sh -c "pnpm --dir apps/api db:local:init &&
-             pnpm --dir apps/api db:seed:vietnam-cities &&
-             pnpm --dir apps/api db:seed:demo-system &&
-             pnpm --dir apps/api exec tsx src/index.ts"
+    command: ["pnpm", "--dir", "apps/server", "start"]
     restart: unless-stopped
 
   ui:

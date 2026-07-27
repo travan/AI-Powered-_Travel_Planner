@@ -49,11 +49,17 @@ PORT=3001
 SERVE_WEB=true
 WEB_APP_DIR=../web
 # Add app secrets below:
+DATABASE_PROVIDER=postgres
+# POSTGRES_URL=postgres://user:password@host:5432/travel_planner
+# MONGODB_URI=mongodb://host:27017/travel_planner
+# JWT_SECRET=replace-with-at-least-32-random-characters
+AUTH_PROVIDER=local
+NEXT_PUBLIC_AUTH_PROVIDER=local
+# Optional Supabase API/Auth:
 # SUPABASE_URL=
 # SUPABASE_SERVICE_KEY=
-# MONGODB_URI=
-# REDIS_URL=
-# JWT_SECRET=
+# NEXT_PUBLIC_SUPABASE_URL=
+# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 EOF
   chmod 640 "$ENV_FILE"
 fi

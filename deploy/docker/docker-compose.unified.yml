@@ -21,7 +21,7 @@ x-server-env: &server-env
   MONGODB_URI: mongodb://mongo:27017/travel_planner
   MONGODB_DB_NAME: travel_planner
   JWT_SECRET: local-docker-change-me-please-32-chars
-  TEST_ENABLE_MOCK_TOKENS: "true"
+  TEST_ENABLE_MOCK_TOKENS: "false"
 
 services:
   postgres:
@@ -92,9 +92,9 @@ services:
       API_PROXY_TARGET: http://server:3001
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NEXT_PUBLIC_API_URL: ""
-      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: local-placeholder-anon-key
-      ENABLE_MOCK_AUTH_SERVER: "true"
+      AUTH_PROVIDER: local
+      NEXT_PUBLIC_AUTH_PROVIDER: local
+      ENABLE_MOCK_AUTH_SERVER: "false"
     ports:
       - "3000:3000"
     command: ["pnpm", "--dir", "apps/web", "start", "--hostname", "0.0.0.0", "--port", "3000"]

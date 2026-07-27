@@ -11,7 +11,7 @@ Environment=PORT=3001
 Environment=SERVE_WEB=true
 Environment=WEB_APP_DIR=../web
 EnvironmentFile=-/etc/ai-travel-planner/ai-travel-planner.env
-ExecStart=/usr/bin/pnpm --dir apps/api start:unified
+ExecStart=/usr/bin/pnpm start:unified
 Restart=always
 RestartSec=5
 KillSignal=SIGINT

@@ -10,9 +10,9 @@ BACKUP_DIR="$BACKUP_ROOT/pm2-release-$(date +%Y%m%d-%H%M%S)"
 rollback() {
   echo "Starting rollback from $BACKUP_DIR"
 
-  if [[ -d "$BACKUP_DIR/apps-api-dist" ]]; then
-    rm -rf apps/api/dist
-    cp -a "$BACKUP_DIR/apps-api-dist" apps/api/dist
+  if [[ -d "$BACKUP_DIR/apps-server-dist" ]]; then
+    rm -rf apps/server/dist
+    cp -a "$BACKUP_DIR/apps-server-dist" apps/server/dist
   fi
 
   if [[ -d "$BACKUP_DIR/apps-web-next" ]]; then
@@ -36,8 +36,8 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 
-if [[ -d "apps/api/dist" ]]; then
-  cp -a apps/api/dist "$BACKUP_DIR/apps-api-dist"
+if [[ -d "apps/server/dist" ]]; then
+  cp -a apps/server/dist "$BACKUP_DIR/apps-server-dist"
 fi
 
 if [[ -d "apps/web/.next" ]]; then

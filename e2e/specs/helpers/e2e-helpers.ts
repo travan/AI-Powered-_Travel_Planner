@@ -35,12 +35,18 @@ export async function openPlanPage(page: Page) {
 }
 
 export async function clearWebMockAuthSession(page: Page) {
-  await page.context().clearCookies();
   await page.evaluate(() => {
     window.localStorage.removeItem("horizon.mock.auth.session");
     window.localStorage.removeItem("horizon.local.auth.session");
     window.localStorage.removeItem("horizon.e2e.signup.force_error");
+    document.cookie =
+      "horizon_mock_auth=; Path=/; Max-Age=0; SameSite=Lax";
+    document.cookie =
+      "horizon_local_auth=; Path=/; Max-Age=0; SameSite=Lax";
   });
+  // Clear context cookies last so an active page cannot rehydrate the old
+  // localStorage session back into a server-readable cookie between steps.
+  await page.context().clearCookies();
 }
 
 /**

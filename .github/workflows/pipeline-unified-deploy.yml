@@ -144,9 +144,12 @@ jobs:
 
       - name: Archive unified artifacts
         run: |
-          tar -czf unified-artifacts.tar.gz \
-            apps/api/dist \
+          tar --exclude=apps/web/.next/cache -czf unified-artifacts.tar.gz \
+            apps/server/dist \
+            apps/server/package.json \
             apps/web/.next \
+            apps/web/package.json \
+            packages \
             package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json
 
       - name: Upload unified artifacts

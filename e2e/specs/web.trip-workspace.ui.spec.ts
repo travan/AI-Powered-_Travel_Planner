@@ -41,7 +41,7 @@ test.beforeEach(async ({ page, request }) => {
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
 });
 
-test("host can manage members, invite, share, friend join, viewer block, and audit", async ({
+test("host can manage members, invite, share, friend join, contributor block, and audit", async ({
   page,
   request,
 }) => {
@@ -50,7 +50,7 @@ test("host can manage members, invite, share, friend join, viewer block, and aud
   await expect(page.getByTestId("web-trip-workspace")).toBeVisible();
   await page.getByTestId("web-workspace-tab-members").click();
   await expect(page.getByTestId("web-members-list")).toContainText(
-    "e2e-user-2",
+    "Viewer Traveler",
   );
 
   await page.getByTestId("web-invite-email").fill("new-friend@example.com");
@@ -97,12 +97,12 @@ test("host can manage members, invite, share, friend join, viewer block, and aud
   await expect(page.getByTestId("web-trip-join-page")).toBeVisible();
   await page.getByTestId("web-trip-join-submit").click();
   await expect(page.getByTestId("web-trip-join-message")).toContainText(
-    "Joined trip as editor",
+    "Joined trip as contributor",
   );
   await page.getByTestId("web-trip-join-open-workspace").click();
   await page.getByTestId("web-workspace-tab-members").click();
   await expect(page.getByTestId("web-members-list")).toContainText(
-    "e2e-user-3",
+    "Friend Traveler",
   );
 
   await page.goto("/plan");
@@ -124,10 +124,7 @@ test("host can manage members, invite, share, friend join, viewer block, and aud
     },
   );
   expect(forbiddenUpdate.status()).toBe(403);
-  await page.getByTestId("web-workspace-tab-audit").click();
-  await expect(page.getByTestId("web-audit-forbidden")).toContainText(
-    "Host/co-host only",
-  );
+  await expect(page.getByTestId("web-workspace-tab-audit")).toHaveCount(0);
 
   await page.goto("/plan");
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
@@ -339,6 +336,15 @@ test("host can capture bills, create custom expense splits, and settle balances"
   page,
   request,
 }) => {
+  const promoteExpenseParticipant = await request.patch(
+    `${API_BASE_URL}/api/trips/${tripId}/members/e2e-user-2`,
+    {
+      headers: { Authorization: "Bearer e2e-user-1" },
+      data: { role: "contributor" },
+    },
+  );
+  expect(promoteExpenseParticipant.ok()).toBeTruthy();
+
   await page.goto(`/trips/${tripId}/workspace`);
 
   await page.getByTestId("web-workspace-tab-schedule").click();
@@ -410,11 +416,15 @@ test("host can capture bills, create custom expense splits, and settle balances"
   await expect(page.getByTestId("web-expense-participant-count")).toContainText(
     "2 of 2 selected",
   );
-  await page.getByTestId("web-expense-participant-e2e-user-2").click();
+  await page
+    .getByTestId("web-expense-participant-e2e-user-2")
+    .uncheck({ force: true });
   await expect(page.getByTestId("web-expense-participant-count")).toContainText(
     "1 of 2 selected",
   );
-  await page.getByTestId("web-expense-participant-e2e-user-2").click();
+  await page
+    .getByTestId("web-expense-participant-e2e-user-2")
+    .check({ force: true });
   await page.getByTestId("web-expense-split-strategy").selectOption("custom");
   await page.getByTestId("web-custom-split-e2e-user-1").fill("100000");
   await page.getByTestId("web-custom-split-e2e-user-2").fill("100000");

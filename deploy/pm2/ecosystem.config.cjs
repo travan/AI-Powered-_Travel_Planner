@@ -4,7 +4,7 @@ module.exports = {
       name: "ai-travel-planner-unified",
       cwd: ".",
       script: "pnpm",
-      args: "--dir apps/api start:unified",
+      args: "start:unified",
       interpreter: "none",
       exec_mode: "fork",
       instances: 1,

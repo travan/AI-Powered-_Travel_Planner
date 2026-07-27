@@ -1,199 +1,122 @@
-# Hướng dẫn cấu hình Supabase thực cho Travel Planner
+# Optional Supabase Setup
 
-## Tổng quan
-Khi cấu hình Supabase thực (thay vì placeholder), script sẽ tự động push dữ liệu demo vào database mỗi khi chạy Playwright test suite thông qua **global setup**.
+Last verified against the repository: 2026-07-27.
 
-## Bước 1: Tạo Supabase Project
+Supabase is an optional integration. Database selection and authentication
+selection are independent decisions.
 
-1. Truy cập [supabase.com](https://supabase.com)
-2. Đăng ký tài khoản (nếu chưa có)
-3. Tạo project mới:
-   - **Name**: `travel-planner-demo`
-   - **Database Password**: Chọn mật khẩu mạnh
-   - **Region**: Chọn region gần nhất (ví dụ: `Singapore` cho Việt Nam)
+## Configuration matrix
 
-## Bước 2: Lấy API Credentials
+| Use case | Database provider | Web auth provider | Supabase required |
+| --- | --- | --- | --- |
+| Default local/self-hosted | `postgres` | `local` | No |
+| Supabase-hosted PostgreSQL, local auth | `supabase` | `local` | Database connection only |
+| Local PostgreSQL, Supabase Auth | `postgres` | `supabase` | Auth API URL/public key |
+| Full Supabase | `supabase` | `supabase` | Database and Auth configuration |
+| Isolated E2E | mock API | `mock` | No |
 
-Sau khi project tạo xong (khoảng 2-3 phút):
+Do not set `DATABASE_PROVIDER=supabase` merely because Supabase Auth is used.
+Do not set web auth to Supabase merely because the SQL database is hosted there.
 
-1. Vào **Settings** → **API**
-2. Copy các giá trị:
-   - **Project URL**: `https://xxxxx.supabase.co`
-   - **anon public key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-   - **service_role secret key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+## Default setup without Supabase
 
-## Bước 3: Cập nhật file .env
-
-Thay thế các giá trị placeholder trong `.env`:
-
-```env
-# Supabase
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-secret-key
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
+```dotenv
+DATABASE_PROVIDER=postgres
+POSTGRES_URL=postgres://travel_planner:travel_planner@localhost:5432/travel_planner
+MONGODB_URI=mongodb://localhost:27017/travel_planner
+JWT_SECRET=replace-with-at-least-32-random-characters
+AUTH_PROVIDER=local
+NEXT_PUBLIC_AUTH_PROVIDER=local
 ```
 
-**Ví dụ thực tế:**
-```env
-SUPABASE_URL=https://abcdefghijk.supabase.co
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY0MzE5MzYwMCwiZXhwIjoxOTU4NzY5NjAwfQ.example
-NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijk.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDMxOTM2MDAsImV4cCI6MTk1ODc2OTYwMH0.example
+This is enough for the web auth layer and server to use first-party local auth.
+
+## Supabase database
+
+For hosted PostgreSQL:
+
+```dotenv
+DATABASE_PROVIDER=supabase
+SUPABASE_DATABASE_URL=postgresql://...
 ```
 
-## Bước 4: Chạy Migration
+`DATABASE_URL` is also accepted. The active migrations are in
+`apps/server/src/database/migrations`; review and apply them through the
+deployment’s PostgreSQL migration process.
 
-Áp dụng schema và dữ liệu demo:
+Supabase database hosting does not require browser public keys.
+
+## Supabase server API
+
+Only server code may receive:
+
+```dotenv
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=server-only-service-role-key
+```
+
+The service-role key bypasses normal row-level access controls and must never be
+exposed to browser/mobile bundles or logs.
+
+## Supabase web auth
+
+```dotenv
+AUTH_PROVIDER=supabase
+NEXT_PUBLIC_AUTH_PROVIDER=supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-key
+```
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` is accepted as an alternative key name. The app
+shows a configuration error only when Supabase mode is selected and the required
+public configuration is missing.
+
+## Supabase mobile auth
+
+```dotenv
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-key
+EXPO_PUBLIC_WEB_URL=http://localhost:3000
+EXPO_PUBLIC_API_URL=http://localhost:3001
+```
+
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` is also accepted. Expo public variables are
+embedded in the client, so they must contain public keys only.
+
+## Auth and application authorization
+
+Supabase Auth establishes identity. The Nest API still owns trip membership,
+roles, invite consumption, bills, expenses, review, and audit authorization.
+Row-level security is useful defense in depth but does not replace the API’s
+role checks.
+
+Current trip roles:
+
+- `host`
+- `co_host`
+- `contributor`
+- `viewer`
+
+## CI and testing
+
+Standard Playwright starts an isolated mock API and forces mock auth for web and
+mobile. It must pass without Supabase variables:
 
 ```bash
-# Cài đặt Supabase CLI (nếu chưa có)
-npm install -g supabase
-
-# Link project
-supabase link --project-ref your-project-id
-
-# Chạy migration
-supabase db push
+pnpm test:e2e:auth
+pnpm test:e2e:full-flow
+pnpm test:e2e
 ```
 
-Hoặc chạy trực tiếp SQL trong Supabase Dashboard:
-- Vào **SQL Editor**
-- Copy nội dung từ `supabase/migrations/002_demo_itineraries.sql`
-- Chạy query
+Legacy Supabase demo seeding is opt-in; see `SUPABASE_DEMO_FLOW.md`.
 
-## Bước 5: Verify Setup
+## Production checklist
 
-### Test seed script
-```bash
-# Chạy seed thủ công
-pnpm run supabase:seed-demo
-```
-
-Kết quả mong đợi:
-```
-Seeded 2 demo itinerary rows.
-```
-
-### Test query script
-```bash
-# Query dữ liệu demo
-pnpm run supabase:query-demo
-```
-
-### Verify toàn bộ setup
-```bash
-# Kiểm tra toàn bộ cấu hình Supabase
-pnpm run supabase:verify-setup
-```
-
-**Với placeholder env (hiện tại):**
-```
-🔍 Verifying Supabase setup...
-
-❌ Supabase credentials are still placeholder values
-   Please follow SUPABASE_SETUP_GUIDE.md to configure real credentials
-```
-
-**Với credentials thực:**
-```
-🔍 Verifying Supabase setup...
-
-✅ Environment variables configured
-✅ Database connection successful
-✅ demo_itineraries table exists (0 rows)
-✅ Seed capability verified
-
-🎉 Supabase setup is ready!
-   Run 'pnpm exec playwright test' to see auto-seeding in action
-```
-
-## Bước 6: Chạy Playwright Test Suite
-
-```bash
-# Chạy toàn bộ test (sẽ tự động seed dữ liệu)
-pnpm exec playwright test
-```
-
-**Quan sát log:**
-```
-Running Supabase demo seed before Playwright tests...
-Seeded 2 demo itinerary rows.
-Running 6 tests using 3 workers
-...
-6 passed
-```
-
-## Troubleshooting
-
-### Lỗi "Permission denied" khi seed
-- Kiểm tra `SUPABASE_SERVICE_KEY` có đúng không
-- Service role key cần có quyền insert vào bảng
-
-### Lỗi "Table doesn't exist"
-- Chạy lại migration: `supabase db push`
-- Hoặc chạy SQL trong Supabase Dashboard
-
-### Seed script bị skip
-- Kiểm tra `.env` có được load đúng không
-- Restart terminal sau khi thay đổi `.env`
-
-### Test fail
-- Kiểm tra web servers có start được không
-- Verify mock API server chạy trên port 3101
-
-## Cấu trúc dữ liệu demo
-
-```sql
--- Bảng demo_itineraries
-CREATE TABLE public.demo_itineraries (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name text NOT NULL,
-  city text NOT NULL,
-  start_date date NOT NULL,
-  end_date date NOT NULL,
-  traveler_count int NOT NULL DEFAULT 1,
-  budget numeric NOT NULL DEFAULT 0,
-  currency text NOT NULL DEFAULT 'USD',
-  is_public boolean NOT NULL DEFAULT false,
-  tags text[] DEFAULT '{}',
-  metadata jsonb DEFAULT '{}',
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-```
-
-**Dữ liệu mẫu:**
-- **Weekend in Hanoi**: 2 người, $420.50, public
-- **Da Nang Beach Break**: 4 người, $1580, private
-
-## Lệnh hữu ích
-
-```bash
-# Verify setup
-pnpm run supabase:verify-setup
-
-# Seed dữ liệu
-pnpm run supabase:seed-demo
-
-# Query dữ liệu
-pnpm run supabase:query-demo
-
-# Chạy test web
-pnpm exec playwright test --project=web-desktop
-
-# Chạy test mobile
-pnpm exec playwright test --project=mobile-web
-
-# Xem report test
-pnpm exec playwright show-report
-```
-
-## Bảo mật
-
-⚠️ **Quan trọng:**
-- Không commit `.env` với credentials thực vào Git
-- Thêm `.env` vào `.gitignore`
-- Sử dụng service role key chỉ cho server-side operations
-- Anon key an toàn cho client-side
-
-Sau khi cấu hình xong, mỗi lần chạy `pnpm exec playwright test`, dữ liệu demo sẽ tự động được push vào Supabase database!
+- Select database and auth providers independently.
+- Keep service-role and database credentials server-only.
+- Use a strong unique `JWT_SECRET` for local auth.
+- Configure allowed OAuth redirects exactly for Supabase Auth.
+- Apply current server migrations before traffic is switched.
+- Verify API role authorization with distinct host/member accounts.
+- Build once with the exact production public variables.
+- Confirm local-mode builds do not require Supabase.

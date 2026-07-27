@@ -4,10 +4,13 @@ import {
   API_BASE_URL,
   apiJsonHeaders,
   apiAuthHeaders,
+  injectWebMockAuthSession,
 } from "./helpers/e2e-helpers";
 
 test.describe("web share and save contract flows", () => {
   test("share button is clickable on itinerary page", async ({ page }) => {
+    await page.goto("/plan");
+    await injectWebMockAuthSession(page, "share-user");
     await page.goto(`/itinerary/${queuedScenario.itineraryId}`);
 
     const shareButton = page.getByRole("button", { name: "Share" });

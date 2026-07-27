@@ -1,91 +1,60 @@
-# Supabase Demo Data Flow
+# Legacy Supabase Demo Flow
 
-## Overview
-Khi chạy Playwright test suite, Supabase demo seed script sẽ tự động chạy thông qua **global setup** để khởi tạo dữ liệu demo trước các test.
+Last verified against the repository: 2026-07-27.
 
-## Files
+This is an opt-in compatibility flow for legacy demo data. It is not part of
+normal development, CI, or the current production runtime.
 
-### 1. Migration
-- **File**: `supabase/migrations/002_demo_itineraries.sql`
-- **Mục đích**: Tạo bảng `public.demo_itineraries` với dữ liệu demo ban đầu
-- **Seed dữ liệu**:
-  - `Weekend in Hanoi` (2 người, $420.50)
-  - `Da Nang Beach Break` (4 người, $1580)
+## Current default
 
-### 2. Seed Script
-- **File**: `apps/api/scripts/seed-demo-itineraries.mjs`
-- **Mục đích**: Chèn dữ liệu demo vào database Supabase
-- **Hành động**:
-  - Xóa hàng cũ có cùng tên
-  - Insert dữ liệu demo mới
-- **Skip logic**: Bỏ qua nếu `SUPABASE_URL` hoặc `SUPABASE_SERVICE_KEY` là placeholder
+- SQL provider: local/self-hosted PostgreSQL
+- Web auth: first-party local auth
+- Playwright: in-memory mock API and mock auth
+- Supabase seed: skipped
 
-### 3. Query Script
-- **File**: `apps/api/scripts/query-demo-itineraries.mjs`
-- **Mục đích**: Truy vấn dữ liệu demo từ Supabase
-- **Chạy**: `pnpm run supabase:query-demo`
+The active API is `apps/server`. The old Supabase seed/query/verify scripts are
+not present in the current checkout; only local PostgreSQL initialization and
+Vietnam city seed utilities remain under `apps/api/scripts`.
 
-### 4. Global Setup
-- **File**: `e2e/global-setup.ts`
-- **Mục đích**: Chạy seed script trước tất cả Playwright test
-- **Cách hoạt động**:
-  ```
-  Playwright test starts
-  → global-setup.ts runs
-  → seed-demo-itineraries.mjs executes
-  → Demo data seeded (or skipped if placeholder env)
-  → Tests start
-  ```
+## Preconditions
 
-### 5. Test Spec
-- **File**: `e2e/specs/supabase-demo.contract.spec.ts`
-- **Mục đích**: Demo test với logic skip nếu Supabase chưa configure
+Use a disposable Supabase project and provide server-side variables:
 
-## Lệnh
-
-```bash
-# Chạy toàn bộ Playwright test (với global setup seed)
-pnpm exec playwright test
-
-# Chạy chỉ web
-pnpm exec playwright test --project=web-desktop
-
-# Chạy chỉ mobile
-pnpm exec playwright test --project=mobile-web
-
-# Seed dữ liệu thủ công (ngay bây giờ)
-pnpm run supabase:seed-demo
-
-# Query dữ liệu demo
-pnpm run supabase:query-demo
-```
-
-## Cấu hình môi trường
-
-Để hoạt động đầy đủ với Supabase thực, thay các giá trị placeholder trong `.env`:
-
-```env
+```dotenv
+DATABASE_PROVIDER=supabase
+SUPABASE_DATABASE_URL=postgresql://...
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+SUPABASE_SERVICE_KEY=server-only-service-role-key
 ```
 
-**Lưu ý**: Nếu vẫn là placeholder, script sẽ tự động bỏ qua (skip) mà không gây lỗi.
+Never run demo seed scripts against production data without reviewing the
+script and its target project first.
 
-## Data Structure
+## Current command status
 
-```json
-{
-  "id": "uuid",
-  "name": "string",
-  "city": "string",
-  "start_date": "date",
-  "end_date": "date",
-  "traveler_count": "int",
-  "budget": "numeric",
-  "currency": "string (default USD)",
-  "is_public": "boolean",
-  "tags": "string[]",
-  "metadata": "jsonb",
-  "created_at": "timestamptz"
-}
+There are no supported `legacy:supabase:*` package scripts. Do not add CI or
+runbook steps that call them unless equivalent scripts are restored and tested
+against a disposable project.
+
+## Optional Playwright seeding
+
+The global E2E setup skips this path unless both values are present:
+
+```dotenv
+E2E_SEED_LEGACY_SUPABASE=true
+DATABASE_PROVIDER=supabase
 ```
+
+The global setup currently looks for the removed legacy script and safely skips
+when it is absent. Standard E2E fixtures live in `e2e/mock-api-server.mjs`.
+
+## Verification
+
+If a replacement legacy seed is added later:
+
+1. run the query command and confirm only expected demo rows appear;
+2. inspect the intended Supabase project, not production;
+3. run standard isolated E2E without the seed flag to ensure tests remain
+   independent of remote state.
+
+Do not add this seed as an unconditional CI step.

@@ -8,27 +8,33 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'apps/**/src/**'
-      - 'packages/**/src/**'
-      - '**/*.test.ts'
-      - '**/*.spec.ts'
+      - 'apps/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - 'deploy/**'
+      - 'library-guidelines/**'
+      - '.github/workflows/**'
       - 'vitest.config.ts'
       - 'playwright.config.ts'
       - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - 'turbo.json'
-      - '.github/workflows/ci-cd.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'apps/**/src/**'
-      - 'packages/**/src/**'
-      - '**/*.test.ts'
-      - '**/*.spec.ts'
+      - 'apps/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - 'deploy/**'
+      - 'library-guidelines/**'
+      - '.github/workflows/**'
       - 'vitest.config.ts'
       - 'playwright.config.ts'
       - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - 'turbo.json'
-      - '.github/workflows/ci-cd.yml'
   workflow_dispatch:
 
 jobs:
@@ -60,17 +66,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build packages and apps
-        run: NODE_ENV=production pnpm run build
+      - name: Build unified server and web
+        run: pnpm build:unified
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: |
-            apps/*/dist
-            apps/*/.next
-            packages/*/dist
+            apps/server/dist
+            apps/web/.next
           retention-days: 1
 
   unit-tests:
@@ -80,6 +85,7 @@ jobs:
     env:
       NODE_ENV: development
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       AI_PROVIDER: mock
     steps:
       - name: Checkout code
@@ -111,25 +117,6 @@ jobs:
         with:
           name: build-artifacts
 
-      - name: Get changed files
-        id: changed-files
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '\.(ts|tsx|js|jsx)$' | grep -v -E '\.(test|spec)\.' | head -20)
-          else
-            CHANGED_FILES=$(git diff --name-only HEAD~1 | grep -E '\.(ts|tsx|js|jsx)$' | grep -v -E '\.(test|spec)\.' | head -20)
-          fi
-          echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
-
-      - name: Scan and generate unit tests for changed files
-        run: |
-          if [ -n "${{ steps.changed-files.outputs.changed_files }}" ]; then
-            echo "Generating unit tests for changed files..."
-            pnpm exec node scripts/generate-unit-tests.mjs ${{ steps.changed-files.outputs.changed_files }}
-          else
-            echo "No source files changed, skipping test generation."
-          fi
-
       - name: Run type check
         run: pnpm run type-check
 
@@ -137,10 +124,10 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Upload coverage reports
-        if: secrets.CODECOV_TOKEN != ''
+        if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           file: ./coverage/coverage-final.json
           flags: unittests
           name: codecov-umbrella
@@ -227,7 +214,7 @@ jobs:
           name: build-artifacts
 
       - name: Build for production
-        run: NODE_ENV=production pnpm run build
+        run: pnpm --dir apps/web build
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
