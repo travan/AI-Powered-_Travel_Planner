@@ -13,6 +13,9 @@ function firstNonEmpty(...values: Array<string | undefined>): string | undefined
 
 type RawEnv = NodeJS.ProcessEnv;
 
+const DEFAULT_CORS_ORIGINS =
+  "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8081,http://127.0.0.1:8081";
+
 type ParsedEnv = {
   NODE_ENV: "development" | "production" | "test";
   PORT: number;
@@ -121,7 +124,7 @@ function parseEnv(raw: RawEnv): ParsedEnv {
     SERVE_WEB: parseBoolean(raw.SERVE_WEB, false),
     WEB_APP_DIR: raw.WEB_APP_DIR?.trim() || "../web",
     NEXT_PUBLIC_APP_URL: parseUrl(raw.NEXT_PUBLIC_APP_URL, "http://localhost:3000", "NEXT_PUBLIC_APP_URL"),
-    CORS_ORIGINS: raw.CORS_ORIGINS?.trim() || "http://localhost:3000,http://localhost:8081",
+    CORS_ORIGINS: raw.CORS_ORIGINS?.trim() || DEFAULT_CORS_ORIGINS,
     RATE_LIMIT_MAX: parsePositiveInt(raw.RATE_LIMIT_MAX, 60, "RATE_LIMIT_MAX"),
     RATE_LIMIT_WINDOW_MS: parsePositiveInt(raw.RATE_LIMIT_WINDOW_MS, 60_000, "RATE_LIMIT_WINDOW_MS"),
     JWT_SECRET: requiredMin(raw.JWT_SECRET, 32, "JWT_SECRET"),

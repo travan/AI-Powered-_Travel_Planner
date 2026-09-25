@@ -9,17 +9,35 @@ test.describe("web desktop nav", () => {
     await page.goto("/plan");
   });
 
-  test("Home nav link navigates to /plan", async ({ page }) => {
+  test("Plan nav link navigates to /plan", async ({ page }) => {
     await page.goto("/trips?source=cached&id=cached-trip-1");
-    const homeLink = page.locator("nav").getByRole("link", { name: "Home" }).first();
-    await homeLink.click();
+    const planLink = page.locator("nav").getByRole("link", { name: "Plan" }).first();
+    await planLink.click();
     await expect(page).toHaveURL(/\/plan/, { timeout: 10_000 });
   });
 
-  test("Explore nav link navigates to /trips", async ({ page }) => {
+  test("My trips nav link navigates to /trips", async ({ page }) => {
+    const myTripsLink = page.locator("nav").getByRole("link", { name: "My trips" }).first();
+    await myTripsLink.click();
+    await expect(page).toHaveURL(/\/trips/, { timeout: 10_000 });
+  });
+
+  test("Explore nav link navigates to /explore", async ({ page }) => {
     const exploreLink = page.locator("nav").getByRole("link", { name: "Explore" }).first();
     await exploreLink.click();
-    await expect(page).toHaveURL(/\/trips/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/explore/, { timeout: 10_000 });
+    await expect(page.getByTestId("web-explore-page")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("Explore suggestion opens Plan with the destination preselected", async ({ page }) => {
+    await page.goto("/explore");
+    const customizeLink = page.getByTestId("web-explore-customize").first();
+    const destinationHref = await customizeLink.getAttribute("href");
+
+    await customizeLink.click();
+    await expect(page).toHaveURL(/\/plan\?city=.+/, { timeout: 10_000 });
+    await expect(page.getByTestId("web-plan-selected-city").first()).toBeVisible({ timeout: 10_000 });
+    expect(destinationHref).toMatch(/\/plan\?city=.+/);
   });
 
   test("Guides nav link navigates to /guides", async ({ page }) => {
@@ -36,7 +54,9 @@ test.describe("web desktop nav", () => {
     const guidesLink = page.locator("nav").getByRole("link", { name: "Guides" }).first();
     await expect(guidesLink).toHaveClass(/text-primary/);
 
-    // Explore link (/trips) should NOT be active
+    // My trips and Explore links should NOT be active
+    const myTripsLink = page.locator("nav").getByRole("link", { name: "My trips" }).first();
+    await expect(myTripsLink).not.toHaveClass(/text-primary/);
     const exploreLink = page.locator("nav").getByRole("link", { name: "Explore" }).first();
     await expect(exploreLink).not.toHaveClass(/text-primary/);
   });

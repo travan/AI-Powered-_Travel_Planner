@@ -56,6 +56,17 @@
   --color-inverse-primary:            #94ccff;
   --color-surface-tint:               #006399;
 
+  /* Legacy brand utilities used by the itinerary and landing components. */
+  --color-brand-50:                  #eff8ff;
+  --color-brand-100:                 #dff1ff;
+  --color-brand-200:                 #bfe3ff;
+  --color-brand-300:                 #94ccff;
+  --color-brand-400:                 #5eb8eb;
+  --color-brand-500:                 #0077b6;
+  --color-brand-600:                 #005d90;
+  --color-brand-700:                 #004b74;
+  --color-brand-800:                 #00324d;
+
   /* ─── Typography ─────────────────────────────────────────── */
   --font-headline: var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-body:     var(--font-manrope), 'Manrope', system-ui, sans-serif;

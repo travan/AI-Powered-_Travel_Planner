@@ -23,6 +23,22 @@ export class ItineraryController {
     return this.itineraries.generate({ userId: user.sub, dto });
   }
 
+  @Get("trips/:tripId")
+  @UseGuards(JwtAuthGuard)
+  async getSavedForTrip(
+    @Param("tripId") tripId: string,
+    @CurrentUser() user: CurrentUserValue
+  ) {
+    const result = await this.itineraries.getForTrip({ tripId, userId: user.sub });
+    if (!result.ok) throwServiceError(result.error);
+    const detail = result.value;
+    return {
+      itinerary: detail.result
+        ? { id: detail.id, ...detail.result }
+        : null,
+    };
+  }
+
   @Post(":id/save")
   @UseGuards(JwtAuthGuard)
   async save(

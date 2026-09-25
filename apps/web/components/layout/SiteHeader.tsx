@@ -75,8 +75,9 @@ function useUserInfo() {
 }
 
 const NAV_LINKS = [
-  { href: "/plan", label: "Home" },
-  { href: "/trips", label: "Explore" },
+  { href: "/plan", label: "Plan" },
+  { href: "/trips", label: "My trips" },
+  { href: "/explore", label: "Explore" },
   { href: "/guides", label: "Guides" },
 ];
 

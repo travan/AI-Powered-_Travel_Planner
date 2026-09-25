@@ -111,6 +111,10 @@ export default function PlanScreen() {
       });
       if (!res.ok) throw new Error("Generation failed");
       const response = await res.json() as GenerateResponse;
+      if (response.status === "unsupported") {
+        Alert.alert("Itinerary not available", response.message);
+        return;
+      }
       const target = resolveGenerateNavigationTarget(response);
 
       if (!target) {

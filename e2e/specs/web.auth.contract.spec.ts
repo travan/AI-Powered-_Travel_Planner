@@ -70,6 +70,28 @@ test.describe("web auth contract flows", () => {
     await expectItineraryPage(page, queuedScenario.itineraryId, queuedScenario.itinerary.itineraries[0].title);
   });
 
+  test("stale auth token redirects to login instead of showing a 401 error", async ({ page }) => {
+    const identity = createAuthIdentity();
+
+    await page.goto("/signup");
+    await signUpOnWeb(page, identity);
+    await expect(page).toHaveURL(/\/plan$/);
+
+    await page.route("**/api/itinerary/generate", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ statusCode: 401, message: "Invalid or missing token" }),
+      });
+    });
+
+    await searchCity(page, queuedScenario.city);
+    await clickGenerate(page);
+
+    await expect(page).toHaveURL(/\/login\?redirectTo=%2Fplan%3FresumeGenerate%3D1/);
+    await expect(page.getByText("Generate failed: 401")).not.toBeVisible();
+  });
+
   test("signup flow with resume generate continues to trips overview", async ({ page }) => {
     const identity = createAuthIdentity();
 
@@ -117,10 +139,24 @@ test.describe("web auth contract flows", () => {
 
     // Open account menu and sign out
     await page.getByRole("button", { name: "Account menu" }).click();
+    await expect(page.getByRole("menuitem", { name: /my trips/i })).toHaveAttribute("href", "/trips");
     await expect(page.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
     await page.getByRole("menuitem", { name: /sign out/i }).click();
 
     await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("signed-out account menu offers sign in instead of sign out", async ({ page }) => {
+    await page.goto("/plan");
+    await clearWebMockAuthSession(page);
+    await page.reload();
+
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await expect(page.getByRole("menuitem", { name: /sign in/i })).toHaveAttribute(
+      "href",
+      /\/login\?redirectTo=%2Fplan/,
+    );
+    await expect(page.getByRole("menuitem", { name: /sign out/i })).toHaveCount(0);
   });
 
   test("login continues into the itinerary generation flow", async ({ page }) => {

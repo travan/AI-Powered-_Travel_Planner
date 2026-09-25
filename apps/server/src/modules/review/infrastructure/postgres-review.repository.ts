@@ -97,14 +97,14 @@ export class PostgresReviewRepository implements ReviewRepository {
            id::text as entity_id,
            title,
            description as subtitle,
-           status,
+           approval_status as status,
            created_by_user_id::text as submitted_by_user_id,
            amount,
            currency,
            activity_id::text as linked_activity_id,
            created_at::text as created_at
          from expenses
-         where trip_id = $1 and status = 'pending_review'
+         where trip_id = $1 and approval_status = 'pending_review'
 
          union all
 
@@ -161,7 +161,7 @@ export class PostgresReviewRepository implements ReviewRepository {
     if (input.entityType === "expense") {
       const result = await this.sql.query(
         `update expenses
-         set status = $4, updated_by_user_id = $3, updated_at = now()
+         set approval_status = $4, updated_by_user_id = $3, updated_at = now()
          where trip_id = $1 and id = $2
          returning id::text`,
         [input.tripId, input.entityId, input.actorUserId, input.decision]

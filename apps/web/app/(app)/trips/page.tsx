@@ -6,13 +6,15 @@ import { useSearchParams } from "next/navigation";
 import type { Itinerary, SSEEventType, TripSummary } from "@travel/types";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { OverviewCard } from "../../../components/itinerary/OverviewCard";
-import { getItinerary, getMyTrips } from "../../../lib/api";
+import { ApiRequestError, getItinerary, getMyTrips } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 import { useSSE } from "../../../hooks/useSSE";
+import { useRouter } from "next/navigation";
 
 type LoadState = "idle" | "waiting" | "loading" | "ready" | "error";
 
 export default function TripsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
   const id = searchParams.get("id");
@@ -123,8 +125,9 @@ export default function TripsPage() {
     setError(null);
 
     void (async () => {
+      const supabase = createClient();
+
       try {
-        const supabase = createClient();
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -138,8 +141,15 @@ export default function TripsPage() {
         if (cancelled) return;
         setMyTrips(trips);
         setState("ready");
-      } catch {
+      } catch (loadError) {
         if (cancelled) return;
+        if (loadError instanceof ApiRequestError && loadError.status === 401) {
+          await supabase.auth.signOut();
+          if (!cancelled) {
+            router.replace(`/login?redirectTo=${encodeURIComponent("/trips")}`);
+          }
+          return;
+        }
         setError("Unable to load your trips.");
         setState("error");
       }
@@ -148,7 +158,7 @@ export default function TripsPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasGeneratedContext]);
+  }, [hasGeneratedContext, router]);
 
   const progressLabel = useMemo(() => {
     if (!steps.length) return "Preparing your itinerary...";
@@ -179,24 +189,41 @@ export default function TripsPage() {
       <main className="mx-auto max-w-4xl px-4 py-10 space-y-6" data-testid="web-trips-screen">
         <header className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-primary">
-            {hasGeneratedContext ? "Generated Results" : "Trip Workspace"}
+            {hasGeneratedContext ? "Generated Results" : "My trips"}
           </p>
-          <h1 className="text-3xl font-headline font-extrabold">
-            {hasGeneratedContext ? "Pick your itinerary" : "Your trips"}
-          </h1>
-          <p className="text-sm text-on-surface-variant">
-            {hasGeneratedContext
-              ? "Overview first, details next. Choose a result to open the full schedule."
-              : "Track planning, bookings, activities, bills, and group expenses in one place."}
-          </p>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-headline font-extrabold">
+                {hasGeneratedContext ? "Pick your itinerary" : "Your trips"}
+              </h1>
+              <p className="text-sm text-on-surface-variant">
+                {hasGeneratedContext
+                  ? "Overview first, details next. Choose a result to open the full schedule."
+                  : "Your saved trips, planning progress, and shared travel workspaces in one place."}
+              </p>
+            </div>
+            {!hasGeneratedContext && (
+              <Link
+                href="/plan"
+                className="inline-flex items-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary hover:brightness-105"
+              >
+                Plan a new trip
+              </Link>
+            )}
+          </div>
         </header>
 
         {state === "idle" && !hasGeneratedContext && (
           <section className="rounded-xl border border-outline-variant/30 bg-surface p-6">
             <p className="text-sm text-on-surface-variant">Sign in to see your trips.</p>
-            <Link href="/plan" className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline">
-              Plan a trip
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-4">
+              <Link href="/login?redirectTo=%2Ftrips" className="inline-flex text-sm font-semibold text-primary hover:underline">
+                Sign in
+              </Link>
+              <Link href="/plan" className="inline-flex text-sm font-semibold text-primary hover:underline">
+                Plan a trip
+              </Link>
+            </div>
           </section>
         )}
 
@@ -251,6 +278,14 @@ export default function TripsPage() {
                       <p className="mt-1 text-sm text-on-surface-variant">
                         {trip.start_date ?? "Flexible"} - {trip.end_date ?? "TBD"}
                       </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wide">
+                        <span className="rounded-full bg-primary-fixed px-2.5 py-1 text-on-primary-fixed-variant">
+                          {trip.visibility === "private" ? "Personal trip" : "Shared trip"}
+                        </span>
+                        <span className="rounded-full bg-surface-container px-2.5 py-1 text-on-surface-variant">
+                          {trip.role === "host" ? "You own this trip" : `Role: ${trip.role}`}
+                        </span>
+                      </div>
                     </div>
                     <span className="rounded-full bg-primary-fixed px-3 py-1 text-xs font-bold text-on-primary-fixed-variant">
                       {trip.status}

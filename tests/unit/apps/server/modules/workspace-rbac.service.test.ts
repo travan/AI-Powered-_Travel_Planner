@@ -85,6 +85,34 @@ describe("workspace role enforcement", () => {
     expect(repository.updateTripActivity).not.toHaveBeenCalled();
   });
 
+  it("lets contributors mark their own activity done", async () => {
+    const activity = {
+      id: "activity-1",
+      tripId: "trip-1",
+      title: "Museum",
+      createdByUserId: activeContributor.userId,
+      status: "scheduled",
+    };
+    const updated = { ...activity, status: "done" };
+    const repository = {
+      findTripActivity: vi.fn().mockResolvedValue(activity),
+      findTripMember: vi.fn().mockResolvedValue(activeContributor),
+      updateTripActivity: vi.fn().mockResolvedValue(updated),
+      audit: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new ActivitiesService(repository as never);
+
+    await expect(
+      service.updateTripActivity({
+        tripId: "trip-1",
+        activityId: "activity-1",
+        actorUserId: activeContributor.userId,
+        dto: { status: "done" },
+      }),
+    ).resolves.toEqual({ ok: true, value: updated });
+    expect(repository.updateTripActivity).toHaveBeenCalled();
+  });
+
   it("lets viewers read transport but blocks transport creation", async () => {
     const repository = {
       findTripMember: vi.fn().mockResolvedValue(activeViewer),

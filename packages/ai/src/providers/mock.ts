@@ -1,6 +1,53 @@
 import type { ItineraryInput, ItineraryOverview, Itinerary } from "@travel/types";
 import type { AIProvider, PreFetchedCityData } from "../provider.js";
 
+type MockActivityTemplate = {
+  time: string;
+  name: string;
+  description: string;
+  duration: string;
+  category: "attraction" | "food" | "leisure";
+  costShare: number;
+};
+
+const MOCK_DAY_PLANS: MockActivityTemplate[][] = [
+  [
+    { time: "09:00", name: "Orientation walk", description: "Start with a relaxed walk to get familiar with the city.", duration: "2h", category: "attraction", costShare: 0 },
+    { time: "13:00", name: "Local lunch tasting", description: "Try a well-rated local dish near the morning route.", duration: "1.5h", category: "food", costShare: 0.25 },
+    { time: "18:00", name: "Scenic sunset stop", description: "End the first day at a viewpoint with a wide city view.", duration: "1h", category: "leisure", costShare: 0.15 },
+  ],
+  [
+    { time: "08:30", name: "Morning market visit", description: "Explore the morning market and see how locals start the day.", duration: "2h", category: "attraction", costShare: 0.05 },
+    { time: "12:30", name: "Regional specialties lunch", description: "Make time for a second local specialty away from yesterday's route.", duration: "1.5h", category: "food", costShare: 0.3 },
+    { time: "19:00", name: "Evening street-food walk", description: "Sample small bites and browse the liveliest evening streets.", duration: "2h", category: "food", costShare: 0.2 },
+  ],
+  [
+    { time: "09:00", name: "Nature trail morning", description: "Spend the morning on an easy nature trail outside the busiest area.", duration: "3h", category: "attraction", costShare: 0.1 },
+    { time: "13:30", name: "Garden café break", description: "Take a slow lunch and coffee break in a quiet garden setting.", duration: "2h", category: "food", costShare: 0.25 },
+    { time: "17:30", name: "Lakeside golden hour", description: "Walk by the water during the softer late-afternoon light.", duration: "1.5h", category: "leisure", costShare: 0.05 },
+  ],
+  [
+    { time: "09:30", name: "Heritage and culture visit", description: "Learn about the destination through a cultural or heritage stop.", duration: "2.5h", category: "attraction", costShare: 0.15 },
+    { time: "13:00", name: "Farm-to-table lunch", description: "Choose a relaxed meal built around regional ingredients.", duration: "1.5h", category: "food", costShare: 0.35 },
+    { time: "18:30", name: "Riverside evening stroll", description: "Unwind with a walk through a calmer neighborhood at dusk.", duration: "1.5h", category: "leisure", costShare: 0.05 },
+  ],
+  [
+    { time: "08:00", name: "Countryside day trip", description: "Take a half-day route through the surrounding countryside.", duration: "4h", category: "attraction", costShare: 0.2 },
+    { time: "13:00", name: "Picnic or countryside lunch", description: "Have lunch close to the day's outdoor route.", duration: "1.5h", category: "food", costShare: 0.25 },
+    { time: "19:30", name: "Night-view lookout", description: "See the destination from a different angle after dark.", duration: "1h", category: "leisure", costShare: 0.1 },
+  ],
+  [
+    { time: "09:00", name: "Creative workshop", description: "Try a hands-on craft, coffee, or cooking experience.", duration: "2.5h", category: "attraction", costShare: 0.25 },
+    { time: "13:30", name: "Neighborhood lunch crawl", description: "Compare two small local stops instead of repeating a single meal route.", duration: "2h", category: "food", costShare: 0.3 },
+    { time: "18:00", name: "Local music or art evening", description: "Leave room for a low-key cultural experience after dinner.", duration: "2h", category: "leisure", costShare: 0.15 },
+  ],
+  [
+    { time: "09:00", name: "Favorite-place revisit", description: "Return to the part of the city that best matched your pace this week.", duration: "2h", category: "attraction", costShare: 0.05 },
+    { time: "12:30", name: "Farewell meal", description: "Use the final lunch to try one last signature dish.", duration: "1.5h", category: "food", costShare: 0.35 },
+    { time: "17:00", name: "Farewell photo walk", description: "Take a final unhurried walk and collect a few last memories.", duration: "1.5h", category: "leisure", costShare: 0.05 },
+  ],
+];
+
 function buildDates(input: ItineraryInput): string[] {
   const days = input.num_days ?? 3;
   const start = input.start_date ?? new Date().toISOString().slice(0, 10);
@@ -48,48 +95,29 @@ export class MockAIProvider implements AIProvider {
 
     const days = dates.map((date, idx) => {
       const city = (cityData[Math.min(idx, cityData.length - 1)]?.city ?? input.cities[0]) ?? "Unknown";
+      const templates = MOCK_DAY_PLANS[idx % MOCK_DAY_PLANS.length]!;
+      const dayCycle = Math.floor(idx / MOCK_DAY_PLANS.length);
+      const dailyCost = Math.max(100, Math.round(baseDaily * (1 + ((idx % 3) - 1) * 0.08)));
       return {
         day_number: idx + 1,
         date,
         city,
-        title: `${city} Highlights`,
-        activities: [
-          {
-            time: "09:00",
-            name: `Morning walk in ${city}`,
-            description: "Start slow with an orientation walk and coffee.",
-            duration: "2h",
-            cost: 0,
-            currency: input.currency,
-            category: "attraction" as const,
-            maps_link: "https://maps.google.com",
-          },
-          {
-            time: "13:00",
-            name: `${city} local lunch`,
-            description: "Try a highly rated local restaurant nearby.",
-            duration: "1.5h",
-            cost: Math.round(baseDaily * 0.25),
-            currency: input.currency,
-            category: "food" as const,
-            maps_link: "https://maps.google.com",
-          },
-          {
-            time: "18:00",
-            name: `Sunset viewpoint in ${city}`,
-            description: "Golden hour at a scenic location.",
-            duration: "1h",
-            cost: Math.round(baseDaily * 0.15),
-            currency: input.currency,
-            category: "leisure" as const,
-            maps_link: "https://maps.google.com",
-          },
-        ],
-        daily_cost_estimate: baseDaily,
+        title: `${city} ${dayCycle > 0 ? `Day ${idx + 1}` : "Highlights"}`,
+        activities: templates.map((template) => ({
+          time: template.time,
+          name: `${template.name} in ${city}${dayCycle > 0 ? ` · Day ${idx + 1}` : ""}`,
+          description: template.description,
+          duration: template.duration,
+          cost: Math.round(dailyCost * template.costShare),
+          currency: input.currency,
+          category: template.category,
+          maps_link: "https://maps.google.com",
+        })),
+        daily_cost_estimate: dailyCost,
       };
     });
 
-    const total = baseDaily * overview.total_days;
+    const total = days.reduce((sum, day) => sum + day.daily_cost_estimate, 0);
 
     return {
       title: overview.title,

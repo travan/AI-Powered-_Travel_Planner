@@ -114,6 +114,11 @@ export default function TripsScreen() {
         }
 
         const payload = await response.json() as GenerateResponse;
+        if (payload.status === "unsupported") {
+          setError(payload.message);
+          setState("error");
+          return;
+        }
         const target = resolveGenerateNavigationTarget(payload);
         if (!target) {
           await restorePendingRequest();

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface AccountMenuProps {
@@ -11,10 +12,15 @@ interface AccountMenuProps {
 }
 
 export function AccountMenu({ avatarUrl, displayName, email }: AccountMenuProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const isAuthenticated = Boolean(avatarUrl || displayName || email);
+  const signInHref = pathname
+    ? `/login?redirectTo=${encodeURIComponent(pathname)}`
+    : "/login";
 
   // Close on outside click
   useEffect(() => {
@@ -70,7 +76,7 @@ export function AccountMenu({ avatarUrl, displayName, email }: AccountMenuProps)
           className="absolute right-0 top-12 w-56 rounded-xl bg-surface border border-outline/10 shadow-[0_8px_32px_rgba(0,93,144,0.14)] overflow-hidden z-50"
         >
           {/* User info */}
-          {(displayName || email) && (
+          {isAuthenticated && (displayName || email) && (
             <div className="px-4 py-3 border-b border-outline/10">
               {displayName && (
                 <p className="text-sm font-semibold text-on-surface truncate">{displayName}</p>
@@ -81,16 +87,38 @@ export function AccountMenu({ avatarUrl, displayName, email }: AccountMenuProps)
             </div>
           )}
 
-          {/* Sign out */}
-          <button
-            role="menuitem"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60"
-          >
-            <span className="material-symbols-outlined text-[18px] text-outline">logout</span>
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
+          {isAuthenticated ? (
+            <>
+              <Link
+                role="menuitem"
+                href="/trips"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold text-primary hover:bg-surface-container-low transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">flight_takeoff</span>
+                My trips
+              </Link>
+              <button
+                role="menuitem"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[18px] text-outline">logout</span>
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </>
+          ) : (
+            <Link
+              role="menuitem"
+              href={signInHref}
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold text-primary hover:bg-surface-container-low transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">login</span>
+              Sign in
+            </Link>
+          )}
         </div>
       )}
     </div>

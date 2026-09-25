@@ -171,7 +171,7 @@ export function listTripsForUser(actorUserId) {
         title: "Cache City Escape",
         description:
           "A saved itinerary ready for group planning, bookings, and expenses.",
-        primary_city_slug: "cache-city",
+        primary_city_slug: "hoi-an",
         start_date: "2026-04-14",
         end_date: "2026-04-15",
         status: "planning",

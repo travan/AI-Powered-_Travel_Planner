@@ -1,5 +1,6 @@
 import type {
   ItineraryOutput,
+  Itinerary,
   CitySuggestion,
   PromptHistoryEntry,
   CreatePlaceSubmissionRequest,
@@ -46,6 +47,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+function throwApiRequestError(action: string, response: Response): never {
+  throw new ApiRequestError(`${action}: ${response.status}`, response.status);
+}
+
 export async function generateItinerary(
   body: GenerateRequest,
   authToken?: string
@@ -58,15 +63,21 @@ export async function generateItinerary(
     headers,
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
+  if (!res.ok) throwApiRequestError("Generate failed", res);
   return res.json() as Promise<GenerateResponse>;
 }
 
 export async function checkAccountExists(email: string): Promise<boolean | null> {
-  const res = await fetch(getApiUrl(`/api/auth/account-exists?email=${encodeURIComponent(email)}`));
-  if (!res.ok) return null;
-  const payload = (await res.json()) as { exists?: boolean };
-  return typeof payload.exists === "boolean" ? payload.exists : null;
+  try {
+    const res = await fetch(getApiUrl(`/api/auth/account-exists?email=${encodeURIComponent(email)}`));
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { exists?: boolean };
+    return typeof payload.exists === "boolean" ? payload.exists : null;
+  } catch {
+    // Account existence is only an optional UX hint. A temporary API/network
+    // failure must not crash the auth form while the user is typing.
+    return null;
+  }
 }
 
 export async function createSearchDraft(body: {
@@ -97,7 +108,7 @@ export async function claimSearchDraft(
     },
     body: JSON.stringify({ guest_key: guestKey }),
   });
-  if (!res.ok) throw new Error(`Claim search draft failed: ${res.status}`);
+  if (!res.ok) throwApiRequestError("Claim search draft failed", res);
   return res.json() as Promise<SearchDraftRecord>;
 }
 
@@ -110,6 +121,19 @@ export async function getItinerary(id: string, authToken?: string): Promise<Itin
   });
   if (!res.ok) throw new ApiRequestError(`Fetch failed: ${res.status}`, res.status);
   return res.json() as Promise<ItineraryOutput>;
+}
+
+export async function getSavedTripItinerary(
+  tripId: string,
+  authToken: string,
+): Promise<Itinerary | null> {
+  const res = await fetch(getApiUrl(`/api/itinerary/trips/${tripId}`), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throwApiRequestError("Saved itinerary fetch failed", res);
+  const payload = (await res.json()) as { itinerary?: Itinerary | null };
+  return payload.itinerary ?? null;
 }
 
 export async function searchCities(q: string): Promise<CitySuggestion[]> {
@@ -149,7 +173,7 @@ export async function getMyTrips(authToken: string): Promise<TripSummary[]> {
   const res = await fetch(getApiUrl("/api/trips"), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
-  if (!res.ok) throw new Error(`Trips fetch failed: ${res.status}`);
+  if (!res.ok) throwApiRequestError("Trips fetch failed", res);
   return res.json() as Promise<TripSummary[]>;
 }
 

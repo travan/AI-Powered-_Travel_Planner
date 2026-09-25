@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
-import { claimSearchDraft, createSearchDraft, generateItinerary } from "../../../lib/api";
+import { ApiRequestError, claimSearchDraft, createSearchDraft, generateItinerary } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 import { useCitySearch, usePopularCities } from "@travel/hooks";
 import {
@@ -87,7 +87,30 @@ function shouldRestorePendingSearchIntent(error: unknown): boolean {
   if (!statusMatch) return false;
 
   const status = Number(statusMatch[1]);
-  return status === 400 || status === 422;
+  return status === 400 || status === 401 || status === 422;
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  if (error instanceof ApiRequestError) return error.status === 401;
+  return error instanceof Error && /(?:Generate|Claim search draft) failed: 401/.test(error.message);
+}
+
+function buildGenerateLoginPath(draftId?: string | null): string {
+  const redirectTo = new URL("/plan", window.location.origin);
+  redirectTo.searchParams.set("resumeGenerate", "1");
+  if (draftId) redirectTo.searchParams.set("draftId", draftId);
+
+  return `/login?${new URLSearchParams({
+    redirectTo: `${redirectTo.pathname}${redirectTo.search}`,
+  }).toString()}`;
+}
+
+async function clearClientSession() {
+  try {
+    await createClient().auth.signOut();
+  } catch {
+    // Clear the local auth state even when the server rejects the stale token.
+  }
 }
 
 // Fallback gradient backgrounds for cities without a cover_image
@@ -105,9 +128,11 @@ const SPAN_CYCLE = ["col-span-2", "col-span-1", "col-span-1", "col-span-2"];
 
 export default function PlanPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isResumingRef = useRef(false);
+  const prefilledCityRef = useRef<string | null>(null);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [cities, setCities] = useState<SelectedCity[]>([]);
@@ -127,6 +152,8 @@ export default function PlanPage() {
   // ── Data from API ──────────────────────────────────────────────────────────
   const { suggestions, loading: searchLoading } = useCitySearch(cityInput, API_URL);
   const { cities: popularCities, loading: popularLoading, getDisplayName } = usePopularCities(API_URL);
+
+  const destinationSlug = searchParams.get("city");
 
   // Close suggestions dropdown on outside click
   useEffect(() => {
@@ -196,6 +223,9 @@ export default function PlanPage() {
 
         window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
         const response = await generateItinerary(requestToGenerate, session.access_token);
+        if (response.status === "unsupported") {
+          throw new Error(response.message);
+        }
         const target = resolveGenerateNavigationTarget(response);
         if (!target) {
           throw new Error("Generation response is missing the next route target.");
@@ -205,6 +235,15 @@ export default function PlanPage() {
         if (serializedIntent && shouldRestorePendingSearchIntent(e)) {
           window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, serializedIntent);
         }
+
+        if (isUnauthorizedError(e)) {
+          await clearClientSession();
+          setLoading(false);
+          isResumingRef.current = false;
+          router.replace(buildGenerateLoginPath(draftId));
+          return;
+        }
+
         setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
         isResumingRef.current = false;
         setLoading(false);
@@ -222,6 +261,21 @@ export default function PlanPage() {
     setCityInput("");
     setShowSuggestions(false);
   }, []);
+
+  // Explore links into the planner with one destination preselected. Keep the
+  // rest of the form editable so the user can tune the AI request before it is
+  // generated.
+  useEffect(() => {
+    if (!destinationSlug || prefilledCityRef.current === destinationSlug || !popularCities.length) return;
+
+    const selected = popularCities.find((city) => city.slug === destinationSlug);
+    if (!selected) return;
+
+    prefilledCityRef.current = destinationSlug;
+    setCities([{ slug: selected.slug, name: getDisplayName(selected) }]);
+    setCityInput("");
+    setShowSuggestions(false);
+  }, [destinationSlug, getDisplayName, popularCities]);
 
   const addCityFromInput = () => {
     const trimmed = cityInput.trim();
@@ -302,6 +356,11 @@ export default function PlanPage() {
 
       const response = await generateItinerary(requestPayload, session.access_token);
 
+      if (response.status === "unsupported") {
+        setError(response.message);
+        return;
+      }
+
       const target = resolveGenerateNavigationTarget(response);
       if (!target) {
         throw new Error("Generation response is missing the next route target.");
@@ -309,6 +368,14 @@ export default function PlanPage() {
 
       router.push(`/trips?source=${target.kind}&id=${target.id}`);
     } catch (e: unknown) {
+      if (isUnauthorizedError(e) && typeof window !== "undefined") {
+        const intent = await createServerBackedIntent(requestPayload);
+        window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, JSON.stringify(intent));
+        await clearClientSession();
+        router.replace(buildGenerateLoginPath(intent.draftId));
+        return;
+      }
+
       setError(e instanceof Error ? e.message : "Failed to generate itinerary. Please try again.");
     } finally {
       setLoading(false);
@@ -543,7 +610,13 @@ export default function PlanPage() {
               </div>
 
               {error && (
-                <div className="bg-error/10 border border-error/20 rounded-xl p-4 text-sm text-error font-medium">{error}</div>
+                <div
+                  role="alert"
+                  data-testid="web-plan-error"
+                  className="bg-error/10 border border-error/20 rounded-xl p-4 text-sm text-error font-medium"
+                >
+                  {error}
+                </div>
               )}
 
               {/* CTA */}
@@ -616,7 +689,7 @@ export default function PlanPage() {
                     onClick={() => inputRef.current?.focus()}
                   >
                     {cities.map((c) => (
-                      <div key={c.slug} className="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
+                      <div key={c.slug} data-testid="web-plan-selected-city" className="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
                         {c.name}
                         <button onClick={(e) => { e.stopPropagation(); removeCity(c.slug); }}
                           className="material-symbols-outlined text-sm leading-none" aria-label={`Remove ${c.name}`}>close</button>
@@ -745,7 +818,13 @@ export default function PlanPage() {
               </div>
 
               {error && (
-                <div className="bg-error/10 border border-error/20 rounded-xl p-4 text-sm text-error font-medium">{error}</div>
+                <div
+                  role="alert"
+                  data-testid="web-plan-error"
+                  className="bg-error/10 border border-error/20 rounded-xl p-4 text-sm text-error font-medium"
+                >
+                  {error}
+                </div>
               )}
 
               {/* CTA */}

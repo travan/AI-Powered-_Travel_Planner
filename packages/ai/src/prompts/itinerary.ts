@@ -75,12 +75,13 @@ ${JSON.stringify(cityData, null, 2)}
 
 INSTRUCTIONS:
 1. Distribute activities across the exact number of days in each city
-2. Schedule activities in logical geographic order to minimize travel within a day
-3. Assign realistic cost estimates based on the city's currency
-4. For each attraction that has ticket_options available, include them in ticket_activities
-5. Set golden_moment only when the activity is genuinely best at a specific time (sunset views, sunrise hikes, etc.)
-6. Transport between cities must use the transport_options data provided
-7. Budget breakdown must sum to total_cost
+2. Do not repeat the same activity, restaurant, attraction, or generic template on different days; each day must add distinct recommendations
+3. Schedule activities in logical geographic order to minimize travel within a day
+4. Assign realistic cost estimates based on the city's currency
+5. For each attraction that has ticket_options available, include them in ticket_activities
+6. Set golden_moment only when the activity is genuinely best at a specific time (sunset views, sunrise hikes, etc.)
+7. Transport between cities must use the transport_options data provided
+8. Budget breakdown must sum to total_cost
 
 Return strictly this JSON (no extra keys, no markdown):
 {

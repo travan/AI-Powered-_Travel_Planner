@@ -22,7 +22,17 @@ export interface CachedGenerateResponse {
   result?: unknown; // present when status === "cached"
 }
 
-export type GenerateResponse = QueuedGenerateResponse | CachedGenerateResponse;
+export interface UnsupportedGenerateResponse {
+  status: "unsupported";
+  code: "UNSUPPORTED_DESTINATION" | "NO_ITINERARY" | "AI_UNAVAILABLE";
+  message: string;
+  unsupported_cities?: string[];
+}
+
+export type GenerateResponse =
+  | QueuedGenerateResponse
+  | CachedGenerateResponse
+  | UnsupportedGenerateResponse;
 
 // ─── SSE Events ───────────────────────────────────────────────────────────────
 

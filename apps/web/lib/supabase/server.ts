@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import {
+  type MockSession,
   type SupabaseCookieToSet,
   resolveSupabasePublicConfig,
   WEB_SUPABASE_PUBLIC_ENV_SPEC,
@@ -7,7 +8,6 @@ import {
 import { cookies } from "next/headers";
 import {
   getLocalSessionFromCookieValue,
-  getLocalUserFromCookieValue,
   LOCAL_AUTH_COOKIE,
   LOCAL_AUTH_ENABLED,
 } from "./local-auth";
@@ -18,6 +18,34 @@ import {
   MOCK_AUTH_ENABLED,
 } from "./mock-auth";
 
+const LOCAL_AUTH_API_TARGET = (
+  process.env["E2E_API_PROXY_TARGET"] ??
+  process.env["API_PROXY_TARGET"] ??
+  "http://127.0.0.1:3001"
+).replace(/\/$/, "");
+
+async function validateLocalSession(session: MockSession | null) {
+  if (!session?.access_token) return null;
+
+  try {
+    const response = await fetch(`${LOCAL_AUTH_API_TARGET}/api/auth/me`, {
+      headers: { authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as { user?: MockSession["user"] };
+    if (!payload.user?.id) return null;
+
+    return { ...session, user: payload.user };
+  } catch {
+    // An unavailable API should not make a stale browser cookie look like a
+    // valid authenticated session and redirect the user away from /login.
+    return null;
+  }
+}
+
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -25,17 +53,25 @@ export async function createClient() {
     return {
       auth: {
         async getSession() {
+          const session = await validateLocalSession(
+            getLocalSessionFromCookieValue(cookieStore.get(LOCAL_AUTH_COOKIE)?.value)
+          );
+
           return {
             data: {
-              session: getLocalSessionFromCookieValue(cookieStore.get(LOCAL_AUTH_COOKIE)?.value),
+              session,
             },
             error: null,
           };
         },
         async getUser() {
+          const session = await validateLocalSession(
+            getLocalSessionFromCookieValue(cookieStore.get(LOCAL_AUTH_COOKIE)?.value)
+          );
+
           return {
             data: {
-              user: getLocalUserFromCookieValue(cookieStore.get(LOCAL_AUTH_COOKIE)?.value),
+              user: session?.user ?? null,
             },
             error: null,
           };

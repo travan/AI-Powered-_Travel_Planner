@@ -28,15 +28,50 @@ function decodeCookieValue(value: string | undefined) {
   }
 }
 
+function readSessionCookie() {
+  if (typeof document === "undefined") return null;
+
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCAL_AUTH_COOKIE}=`));
+
+  return decodeCookieValue(cookie?.slice(`${LOCAL_AUTH_COOKIE}=`.length));
+}
+
 function readSession() {
   if (typeof window === "undefined") return null;
 
+  const cookieSession = readSessionCookie();
+
   try {
     const value = window.localStorage.getItem(SESSION_STORAGE_KEY);
-    return value ? (JSON.parse(value) as MockSession) : null;
+    if (value) {
+      const storedSession = JSON.parse(value) as MockSession;
+
+      // The cookie is what SSR uses to decide whether /login should redirect.
+      // Prefer it when the browser has two different local sessions, otherwise
+      // the server and client can disagree about whether the user is signed in.
+      if (!cookieSession || storedSession.access_token === cookieSession.access_token) {
+        return storedSession;
+      }
+
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(cookieSession));
+      return cookieSession;
+    }
   } catch {
-    return null;
+    // Fall back to the server-readable cookie when localStorage is stale or
+    // unavailable after a browser reload.
   }
+
+  if (cookieSession) {
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(cookieSession));
+    } catch {
+      // The cookie is still enough to continue this session.
+    }
+  }
+  return cookieSession;
 }
 
 function writeSession(session: MockSession | null) {

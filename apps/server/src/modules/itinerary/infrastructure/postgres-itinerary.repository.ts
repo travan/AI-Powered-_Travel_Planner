@@ -46,6 +46,33 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     return result.rows[0] ? mapItinerary(result.rows[0]) : null;
   }
 
+  async findForTrip(input: { tripId: string; userId: string }): Promise<ItineraryDetail | null> {
+    const result = await this.sql.query<ItineraryRow>(
+      `select i.id::text,
+              i.user_id::text,
+              coalesce(to_jsonb(i)->'result'->>'title', to_jsonb(i)->'output'->>'title') as title,
+              i.status,
+              i.cities,
+              i.num_days,
+              i.budget,
+              coalesce(i.currency, 'VND') as currency,
+              i.trip_style,
+              coalesce(i.is_public, false) as is_public,
+              i.created_at::text,
+              coalesce(to_jsonb(i)->'result', to_jsonb(i)->'output') as result
+       from trips t
+       join trip_members tm
+         on tm.trip_id = t.id
+        and tm.user_id = $2
+        and tm.status = 'active'
+       join itineraries i on i.id = t.source_itinerary_id
+       where t.id = $1
+       limit 1`,
+      [input.tripId, input.userId]
+    );
+    return result.rows[0] ? mapItinerary(result.rows[0]) : null;
+  }
+
   async createComplete(input: {
     userId: string;
     request: ItineraryInput;

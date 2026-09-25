@@ -194,6 +194,19 @@ test("host can plan activities from catalog and track participation", async ({
   await activityStatus.selectOption("scheduled");
   await expect(activityStatus).toHaveValue("scheduled");
 
+  const activityCheck = page
+    .locator("input[data-testid^='web-activity-check-']")
+    .first();
+  // Changing the status persists the activity and refreshes the workspace
+  // audit/review data before the progress checkbox becomes interactive again.
+  await expect(activityCheck).toBeEnabled();
+  await expect(activityCheck).not.toBeChecked();
+  await activityCheck.click();
+  await expect(activityCheck).toBeChecked();
+  await expect(page.getByTestId("web-schedule-progress-count")).toHaveText(
+    "1/1",
+  );
+
   await page.goto("/plan");
   await setMockSession(
     page,

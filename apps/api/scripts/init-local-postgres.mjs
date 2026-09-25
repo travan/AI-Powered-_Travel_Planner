@@ -54,11 +54,30 @@ await appClient.connect();
 
 const schemaSql = await readFile(new URL("../db/local-postgres.sql", import.meta.url), "utf8");
 await appClient.query(schemaSql);
-const workspaceCompatSql = await readFile(
-  new URL("../../server/src/database/migrations/006_local_workspace_core_compat.sql", import.meta.url),
-  "utf8"
-);
-await appClient.query(workspaceCompatSql);
+const workspaceMigrationFiles = [
+  "006_local_workspace_core_compat.sql",
+];
+
+const localCompatibilityMigrationFiles = [
+  "20260922_trip_schedule_compatibility.sql",
+  "20260924_server_workspace_compatibility.sql",
+];
+
+for (const migrationFile of workspaceMigrationFiles) {
+  const migrationSql = await readFile(
+    new URL(`../../server/src/database/migrations/${migrationFile}`, import.meta.url),
+    "utf8"
+  );
+  await appClient.query(migrationSql);
+}
+
+for (const migrationFile of localCompatibilityMigrationFiles) {
+  const migrationSql = await readFile(
+    new URL(`../db/migrations/${migrationFile}`, import.meta.url),
+    "utf8"
+  );
+  await appClient.query(migrationSql);
+}
 await appClient.end();
 
 console.log(`Local PostgreSQL schema is ready: ${databaseName}`);

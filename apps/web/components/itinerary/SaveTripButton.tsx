@@ -43,7 +43,7 @@ export function SaveTripButton({ itineraryId }: { itineraryId: string }) {
         disabled={state === "saving"}
         className="rounded-lg border border-primary bg-surface px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary-container disabled:cursor-wait disabled:opacity-60"
       >
-        {state === "saving" ? "Opening workspace…" : "Save & open workspace"}
+        {state === "saving" ? "Saving to My trips…" : "Save to My trips & open workspace"}
       </button>
       {message && (
         <span role="alert" className="max-w-56 text-right text-xs text-error">

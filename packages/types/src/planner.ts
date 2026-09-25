@@ -92,6 +92,8 @@ export function resolveGenerateNavigationTarget(
     return response.job_id ? { kind: "queued", id: response.job_id } : null;
   }
 
+  if (response.status === "unsupported") return null;
+
   return response.itinerary_id
     ? { kind: "cached", id: response.itinerary_id }
     : null;

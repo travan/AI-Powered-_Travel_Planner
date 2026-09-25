@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiRequestError,
+  checkAccountExists,
   generateItinerary,
   getItinerary,
+  getSavedTripItinerary,
+  getMyTrips,
   getPopularCities,
   getPromptHistory,
   saveTrip,
@@ -59,6 +62,28 @@ describe("web api client", () => {
     ).rejects.toThrow("Generate failed: 500");
   });
 
+  it("exposes unauthorized generate responses for auth redirect handling", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({ ok: false, status: 401 } as Response);
+
+    await expect(
+      generateItinerary(
+        {
+          city: "Tokyo",
+          startDate: "2026-06-01",
+          endDate: "2026-06-05",
+          adults: 2,
+        } as never,
+        "stale-token"
+      )
+    ).rejects.toEqual(
+      expect.objectContaining<ApiRequestError>({
+        name: "ApiRequestError",
+        status: 401,
+        message: "Generate failed: 401",
+      })
+    );
+  });
+
   it("fetches itinerary details", async () => {
     vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({
       ok: true,
@@ -82,11 +107,49 @@ describe("web api client", () => {
     );
   });
 
+  it("fetches the AI itinerary attached to a saved trip", async () => {
+    const itinerary = { id: "it-1", title: "Tokyo Discovery", days: [] };
+    const fetchMock = vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({
+      ok: true,
+      json: async () => ({ itinerary }),
+    } as Response);
+
+    await expect(getSavedTripItinerary("trip-1", "token-1")).resolves.toEqual(itinerary);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/api/itinerary/trips/trip-1",
+      { headers: { Authorization: "Bearer token-1" } },
+    );
+  });
+
+  it("treats a trip without a source itinerary as empty", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({ ok: false, status: 404 } as Response);
+
+    await expect(getSavedTripItinerary("trip-1", "token-1")).resolves.toBeNull();
+  });
+
+  it("exposes unauthorized trips responses for auth redirect handling", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({ ok: false, status: 401 } as Response);
+
+    await expect(getMyTrips("stale-token")).rejects.toEqual(
+      expect.objectContaining<ApiRequestError>({
+        name: "ApiRequestError",
+        status: 401,
+        message: "Trips fetch failed: 401",
+      })
+    );
+  });
+
   it("returns empty arrays when cities endpoints fail", async () => {
     vi.spyOn(globalThis, "fetch" as never).mockResolvedValue({ ok: false } as Response);
 
     await expect(searchCities("to")).resolves.toEqual([]);
     await expect(getPopularCities()).resolves.toEqual([]);
+  });
+
+  it("treats account existence network failures as an unavailable hint", async () => {
+    vi.spyOn(globalThis, "fetch" as never).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(checkAccountExists("traveler@example.com")).resolves.toBeNull();
   });
 
   it("returns prompt history and handles non-ok as empty", async () => {

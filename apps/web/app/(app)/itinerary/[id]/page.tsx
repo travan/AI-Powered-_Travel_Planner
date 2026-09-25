@@ -78,7 +78,7 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
 
       {/* Day Timeline */}
       {itinerary.days && itinerary.days.length > 0 && (
-        <DayTimeline days={itinerary.days} />
+        <DayTimeline days={itinerary.days} currency={itinerary.currency} />
       )}
 
       {/* Budget */}

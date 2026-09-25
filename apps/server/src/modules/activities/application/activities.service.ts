@@ -126,7 +126,12 @@ export class ActivitiesService {
         "activity_edit_forbidden",
       );
     }
-    if (input.dto.status !== undefined && !permissions.reviewSubmissions) {
+    const reviewOnlyStatuses = ["pending_review", "approved", "rejected"];
+    if (
+      input.dto.status !== undefined &&
+      reviewOnlyStatuses.includes(input.dto.status) &&
+      !permissions.reviewSubmissions
+    ) {
       return forbidden(
         "Only host/co-host can change activity review status",
         "activity_status_forbidden",

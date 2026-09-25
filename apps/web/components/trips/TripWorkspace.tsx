@@ -7,7 +7,10 @@ import {
   type TripRolePermissions,
 } from "@travel/types";
 import { SiteHeader } from "../layout/SiteHeader";
+import type { Itinerary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
+import { getMyTrips, getSavedTripItinerary } from "../../lib/api";
+import { SavedAiPlanPanel } from "./SavedAiPlanPanel";
 import {
   analyzeBillUpload,
   createBillUpload,
@@ -63,6 +66,7 @@ import {
 
 type WorkspaceTab =
   | "overview"
+  | "plan"
   | "members"
   | "schedule"
   | "transport"
@@ -187,6 +191,7 @@ const AUDIT_ENTITY_FILTERS = [
 
 const TABS: Array<{ id: WorkspaceTab; label: string; ready: boolean }> = [
   { id: "overview", label: "Overview", ready: true },
+  { id: "plan", label: "Saved AI plan", ready: true },
   { id: "members", label: "Members & share", ready: true },
   { id: "schedule", label: "Schedule", ready: true },
   { id: "transport", label: "Transport", ready: true },
@@ -213,6 +218,9 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   const [state, setState] = useState<LoadState>("loading");
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
+  const [tripCitySlug, setTripCitySlug] = useState<string | null>(null);
+  const [savedPlan, setSavedPlan] = useState<Itinerary | null>(null);
+  const [savedPlanLoading, setSavedPlanLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState<TripAuditLog[]>([]);
   const [activities, setActivities] = useState<TripActivity[]>([]);
   const [activityCatalog, setActivityCatalog] = useState<ActivityCatalogItem[]>(
@@ -239,7 +247,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<TripMemberRole>("viewer");
   const [shareRole, setShareRole] = useState<TripMemberRole>("viewer");
-  const [catalogQuery, setCatalogQuery] = useState("Hoi An");
+  const [catalogQuery, setCatalogQuery] = useState("");
   const [activityForm, setActivityForm] = useState({
     title: "",
     category: "activity",
@@ -323,6 +331,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
       setMessage(null);
 
       try {
+        setSavedPlanLoading(true);
         const supabase = createClient();
         const {
           data: { session: auth },
@@ -330,6 +339,8 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
 
         if (!auth?.access_token || !auth.user?.id) {
           setSession(null);
+          setSavedPlan(null);
+          setSavedPlanLoading(false);
           setState("unauthenticated");
           return;
         }
@@ -352,6 +363,11 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         const nextMembers = currentPermissions.viewMembers
           ? await listTripMembers(tripId, authSession.accessToken)
           : [currentMember];
+        const nextTrips = await getMyTrips(authSession.accessToken).catch(
+          () => [],
+        );
+        const nextTripCitySlug =
+          nextTrips.find((trip) => trip.id === tripId)?.primary_city_slug ?? null;
 
         const [
           nextAuditLogs,
@@ -363,6 +379,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           nextPlaceRecommendations,
           nextTransportPriceRecommendations,
           nextDataQualitySignals,
+          nextSavedPlan,
         ] = await Promise.all([
           currentPermissions.viewAudit
             ? listTripAuditLogs(tripId, authSession.accessToken, 10).catch(
@@ -370,7 +387,9 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
               )
             : Promise.resolve([] as TripAuditLog[]),
           listTripActivities(tripId, authSession.accessToken).catch(() => []),
-          searchActivityCatalog({ limit: 8 }),
+          searchActivityCatalog({ citySlug: nextTripCitySlug ?? undefined, limit: 8 }).catch(
+            () => [],
+          ),
           listTransportBookings(tripId, authSession.accessToken).catch(
             () => [],
           ),
@@ -380,15 +399,19 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           currentPermissions.reviewSubmissions
             ? listReviewQueue(tripId, authSession.accessToken).catch(() => [])
             : Promise.resolve([] as ReviewQueueItem[]),
-          listPlaceRecommendations({ citySlug: "hoi-an", limit: 6 }),
-          listTransportPriceRecommendations({ limit: 6 }),
+          listPlaceRecommendations({ citySlug: nextTripCitySlug ?? undefined, limit: 6 }).catch(
+            () => [],
+          ),
+          listTransportPriceRecommendations({ limit: 6 }).catch(() => []),
           listDataQualitySignals(tripId, authSession.accessToken).catch(
             () => [],
           ),
+          getSavedTripItinerary(tripId, authSession.accessToken).catch(() => null),
         ]);
 
         if (cancelled) return;
         setMembers(nextMembers);
+        setTripCitySlug(nextTripCitySlug);
         setAuditLogs(nextAuditLogs);
         setActivities(nextActivities);
         setActivityDrafts(buildActivityDrafts(nextActivities));
@@ -402,6 +425,8 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         setPlaceRecommendations(nextPlaceRecommendations);
         setTransportPriceRecommendations(nextTransportPriceRecommendations);
         setDataQualitySignals(nextDataQualitySignals);
+        setSavedPlan(nextSavedPlan);
+        setSavedPlanLoading(false);
         setExpenseForm((current) => ({
           ...current,
           paidByUserId: current.paidByUserId || authSession.userId,
@@ -423,6 +448,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         setState("ready");
       } catch (error) {
         if (cancelled) return;
+        setSavedPlanLoading(false);
         setMessage(
           error instanceof Error ? error.message : "Unable to load workspace.",
         );
@@ -472,8 +498,10 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   async function refreshInsights(authToken = session?.accessToken) {
     if (!authToken) return;
     const [nextPlaces, nextTransportPrices, nextSignals] = await Promise.all([
-      listPlaceRecommendations({ citySlug: "hoi-an", limit: 6 }),
-      listTransportPriceRecommendations({ limit: 6 }),
+      listPlaceRecommendations({ citySlug: tripCitySlug ?? undefined, limit: 6 }).catch(
+        () => [],
+      ),
+      listTransportPriceRecommendations({ limit: 6 }).catch(() => []),
       listDataQualitySignals(tripId, authToken).catch(() => []),
     ]);
     setPlaceRecommendations(nextPlaces);
@@ -483,7 +511,11 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
 
   async function refreshActivityCatalog(query = catalogQuery) {
     setActivityCatalog(
-      await searchActivityCatalog({ q: query.trim() || undefined, limit: 8 }),
+      await searchActivityCatalog({
+        citySlug: tripCitySlug ?? undefined,
+        q: query.trim() || undefined,
+        limit: 8,
+      }).catch(() => []),
     );
   }
 
@@ -639,6 +671,45 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
     }
   }
 
+  async function handleImportSavedPlan() {
+    if (!session || !savedPlan || activities.length > 0) return;
+
+    setBusyAction("activity:import-plan");
+    setMessage(null);
+
+    try {
+      const imported: TripActivity[] = [];
+      for (const day of savedPlan.days) {
+        for (const activity of day.activities) {
+          const created = await createTripActivity(tripId, session.accessToken, {
+            title: activity.name,
+            category: activity.category,
+            scheduled_at: toPlanScheduledAt(day.date, activity.time),
+            location_name: day.city,
+            estimated_cost: activity.cost,
+            currency: savedPlan.currency,
+          });
+          imported.push(created);
+        }
+      }
+
+      setActivities(imported);
+      setActivityDrafts(buildActivityDrafts(imported));
+      setMessage(`${imported.length} AI activities added to the shared schedule.`);
+      await refreshAuditLogs(session.accessToken);
+      await refreshReviewQueue(session.accessToken);
+      setActiveTab("schedule");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to add the saved plan to Schedule.",
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function handleUpdateActivityStatus(
     activity: TripActivity,
     status: string,
@@ -692,7 +763,6 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           estimated_cost: draft.estimatedCost
             ? Number(draft.estimatedCost)
             : undefined,
-          currency: "VND",
         },
       );
       setActivities((current) =>
@@ -1291,6 +1361,14 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
               >
                 {tripId}
               </p>
+              <span
+                className="mt-4 inline-flex rounded-full bg-primary-fixed px-3 py-1 text-xs font-black text-on-primary-fixed-variant"
+                data-testid="web-workspace-ownership"
+              >
+                {activeMember?.role === "host"
+                  ? "Personal trip · You own it"
+                  : `Shared trip · ${activeMember?.role ?? "guest"}`}
+              </span>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <StatCard label="Members" value={members.length.toString()} />
                 <StatCard
@@ -1383,6 +1461,18 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                   members={members}
                   role={activeMember?.role ?? "viewer"}
                   onOpenMembers={() => setActiveTab("members")}
+                />
+              )}
+
+              {activeTab === "plan" && (
+                <SavedAiPlanPanel
+                  plan={savedPlan}
+                  loading={savedPlanLoading}
+                  canEdit={canContribute}
+                  hasScheduleActivities={activities.length > 0}
+                  importing={busyAction === "activity:import-plan"}
+                  onImportToSchedule={() => void handleImportSavedPlan()}
+                  onOpenSchedule={() => setActiveTab("schedule")}
                 />
               )}
 
@@ -1602,9 +1692,75 @@ function ActivityPlannerPanel(props: {
   onRefresh: () => void;
 }) {
   const groupedActivities = groupActivitiesByDay(props.activities);
+  const trackableActivities = props.activities.filter(
+    (activity) => activity.status !== "cancelled",
+  );
+  const completedActivities = trackableActivities.filter(
+    (activity) => activity.status === "done",
+  ).length;
+  const progressTotal = trackableActivities.length;
+  const progressPercent = progressTotal
+    ? Math.round((completedActivities / progressTotal) * 100)
+    : 0;
+  const nextActivity = [...props.activities]
+    .filter((activity) => !["done", "cancelled"].includes(activity.status))
+    .sort((left, right) => {
+      if (!left.scheduledAt) return 1;
+      if (!right.scheduledAt) return -1;
+      return left.scheduledAt.localeCompare(right.scheduledAt);
+    })[0];
 
   return (
     <section className="space-y-5" data-testid="web-activity-planner">
+      <section
+        className="rounded-3xl border border-primary/20 bg-primary-container/25 p-5 shadow-sm"
+        data-testid="web-schedule-progress"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
+              Follow your edited itinerary
+            </p>
+            <h2 className="mt-2 font-headline text-xl font-black text-on-surface">
+              Keep the trip on track
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-on-surface-variant">
+              Edit the schedule below, then check off each activity as you
+              complete it. Progress is saved for the shared trip.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-surface-container-lowest px-4 py-3 text-right">
+            <p
+              className="text-2xl font-black text-primary"
+              data-testid="web-schedule-progress-count"
+            >
+              {completedActivities}/{progressTotal}
+            </p>
+            <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+              completed
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 h-3 overflow-hidden rounded-full bg-primary-fixed/70">
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${progressPercent}%` }}
+            data-testid="web-schedule-progress-bar"
+          />
+        </div>
+
+        <p className="mt-3 text-sm font-bold text-on-primary-fixed-variant">
+          {nextActivity
+            ? `Next up: ${nextActivity.title}${nextActivity.scheduledAt ? ` · ${formatDateTime(nextActivity.scheduledAt)}` : ""}`
+            : progressTotal === 0 && props.activities.length > 0
+              ? "All activities are cancelled. Add or reschedule one to keep tracking the trip."
+              : props.activities.length > 0
+              ? "Everything on this schedule is complete."
+              : "Add the saved AI plan to Schedule to start tracking it."}
+        </p>
+      </section>
+
       {props.canContribute ? (
         <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
@@ -1812,17 +1968,33 @@ function ActivityPlannerPanel(props: {
                   props.canContribute &&
                   (props.canManage ||
                     activity.createdByUserId === props.currentUserId);
+                const canCheckProgress =
+                  props.canContribute &&
+                  (props.canManage ||
+                    activity.createdByUserId === props.currentUserId);
                 const isSavingDetails =
                   props.busyAction === `activity-details:${activity.id}`;
+                const isUpdatingStatus =
+                  props.busyAction === `activity:${activity.id}`;
 
                 return (
                   <article
                     key={activity.id}
-                    className="rounded-2xl bg-surface-container-low p-4"
+                    className={`rounded-2xl p-4 ${
+                      activity.status === "done"
+                        ? "border border-primary/30 bg-primary-container/20"
+                        : "bg-surface-container-low"
+                    }`}
                   >
                     <div className="grid gap-4 lg:grid-cols-[1fr_180px_240px] lg:items-center">
                       <div>
-                        <p className="font-bold text-on-surface">
+                        <p
+                          className={`font-bold ${
+                            activity.status === "done"
+                              ? "text-on-surface-variant line-through"
+                              : "text-on-surface"
+                          }`}
+                        >
                           {activity.title}
                         </p>
                         <p className="mt-1 text-xs text-on-surface-variant">
@@ -1848,6 +2020,30 @@ function ActivityPlannerPanel(props: {
                           Your RSVP: {myParticipation?.status ?? "not set"}
                         </p>
                       </div>
+
+                      <label
+                        className={`flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm font-bold ${
+                          activity.status === "done"
+                            ? "border-primary/30 bg-primary text-on-primary"
+                            : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant"
+                        } ${!canCheckProgress ? "opacity-60" : ""}`}
+                        data-testid={`web-activity-check-label-${activity.id}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={activity.status === "done"}
+                          disabled={!canCheckProgress || isUpdatingStatus}
+                          onChange={() =>
+                            props.onUpdateStatus(
+                              activity,
+                              activity.status === "done" ? "scheduled" : "done",
+                            )
+                          }
+                          className="h-4 w-4 accent-primary"
+                          data-testid={`web-activity-check-${activity.id}`}
+                        />
+                        {activity.status === "done" ? "Completed" : "Mark done"}
+                      </label>
 
                       <select
                         value={activity.status}
@@ -3946,6 +4142,12 @@ function AuditPanel({
   );
 }
 
+function toPlanScheduledAt(date: string, time: string): string | undefined {
+  if (!date || !time) return undefined;
+  const parsed = new Date(`${date} ${time}`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
 function formatDate(value: string | null) {
   if (!value) return "unknown";
   const date = new Date(value);
@@ -3973,7 +4175,10 @@ function formatDateTimeInput(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 16);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatMoney(value: number | null, currency: string) {
