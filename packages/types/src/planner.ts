@@ -35,10 +35,19 @@ export type GenerateNavigationTarget =
   | { kind: "queued"; id: string }
   | { kind: "cached"; id: string };
 
+export function slugifyCityName(input: string): string {
+  return input
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function createManualCity(input: string): SelectedCity {
   const trimmed = input.trim();
   return {
-    slug: trimmed.toLowerCase().replace(/\s+/g, "-"),
+    slug: slugifyCityName(trimmed),
     name: trimmed,
   };
 }

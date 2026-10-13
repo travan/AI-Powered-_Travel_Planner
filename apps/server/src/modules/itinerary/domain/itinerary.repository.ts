@@ -10,6 +10,7 @@ export type ItineraryRepository = {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
+    catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string>;
   saveAsTrip(input: {
     itineraryId: string;

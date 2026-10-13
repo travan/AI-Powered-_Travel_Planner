@@ -1,6 +1,17 @@
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export type TripStyle = "adventure" | "relax" | "culture" | "food" | "mixed";
+export type TripStyle =
+  | "adventure"
+  | "relax"
+  | "culture"
+  | "food"
+  | "mixed"
+  | "budget"
+  | "mid_range"
+  | "luxury"
+  | "family"
+  | "romantic"
+  | "cultural";
 export type ActivityCategory =
   | "attraction"
   | "food"
@@ -119,7 +130,7 @@ export interface Activity {
   name: string;
   description: string;
   duration: string;
-  cost: number;
+  cost: number | null;
   currency: string;
   category: ActivityCategory;
   maps_link: string;
@@ -233,6 +244,7 @@ export interface ItineraryOutput {
 
 export interface ItineraryInput {
   cities: string[];
+  prompt_text?: string;
   start_date?: string;
   end_date?: string;
   num_days?: number;

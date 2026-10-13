@@ -8,28 +8,57 @@ import {
 } from "../prompts/itinerary.js";
 import OpenAI from "openai";
 
+type ChatCompletionRequest = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+  think?: boolean;
+};
+
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
   private model: string;
+  private naturalInputModel: string;
+  private maxTokens?: number;
+  private disableThinking: boolean;
 
-  constructor(apiKey: string, model = "gpt-4o") {
-    this.client = new OpenAI({ apiKey });
+  constructor(
+    apiKey: string,
+    model = "gpt-4o",
+    options: {
+      baseURL?: string;
+      naturalInputModel?: string;
+      maxTokens?: number;
+      disableThinking?: boolean;
+      timeoutMs?: number;
+    } = {}
+  ) {
+    this.client = new OpenAI({
+      apiKey,
+      ...(options.baseURL ? { baseURL: options.baseURL } : {}),
+      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+      ...(options.baseURL ? { maxRetries: 0 } : {}),
+    });
     this.model = model;
+    this.naturalInputModel = options.naturalInputModel ?? "gpt-4o-mini";
+    this.maxTokens = options.maxTokens;
+    this.disableThinking = options.disableThinking ?? false;
   }
 
   async generateOverview(
     input: ItineraryInput,
     cityData: PreFetchedCityData[]
   ): Promise<ItineraryOverview> {
-    const response = await this.client.chat.completions.create({
+    const request: ChatCompletionRequest = {
       model: this.model,
-      temperature: 0.7,
+      temperature: this.disableThinking ? 0.2 : 0.7,
       response_format: { type: "json_object" },
+      stream: false,
+      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+      ...(this.disableThinking ? { think: false } : {}),
       messages: [
         { role: "system", content: SYSTEM_PROMPT(input.locale) },
         { role: "user", content: buildOverviewPrompt(input, cityData) },
       ],
-    });
+    };
+    const response = await this.client.chat.completions.create(request);
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty overview response");
@@ -41,15 +70,19 @@ export class OpenAIProvider implements AIProvider {
     overview: ItineraryOverview,
     cityData: PreFetchedCityData[]
   ): Promise<Itinerary> {
-    const response = await this.client.chat.completions.create({
+    const request: ChatCompletionRequest = {
       model: this.model,
-      temperature: 0.7,
+      temperature: this.disableThinking ? 0.2 : 0.7,
       response_format: { type: "json_object" },
+      stream: false,
+      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+      ...(this.disableThinking ? { think: false } : {}),
       messages: [
         { role: "system", content: SYSTEM_PROMPT(input.locale) },
         { role: "user", content: buildDetailPrompt(input, overview, cityData) },
       ],
-    });
+    };
+    const response = await this.client.chat.completions.create(request);
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty detail response");
@@ -78,7 +111,7 @@ export class OpenAIProvider implements AIProvider {
 
   async parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>> {
     const response = await this.client.chat.completions.create({
-      model: "gpt-4o-mini", // cheaper model for NLP parsing
+      model: this.naturalInputModel,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [

@@ -17,9 +17,9 @@ import {
   getPendingSearchIntentResult,
   savePendingSearchIntent,
 } from "../lib/pending-search-intent";
-import { requireSupabase } from "../lib/supabase";
+import { getAuthSession } from "../lib/auth-provider";
+import { mobileApiUrl } from "../lib/api";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 const MAX_POLL_ATTEMPTS = 90;
 const POLL_INTERVAL_MS = 2000;
 
@@ -59,9 +59,7 @@ export default function TripsScreen() {
 
       if (resume === "1") {
         setState("generating");
-        const {
-          data: { session },
-        } = await requireSupabase().auth.getSession();
+        const session = await getAuthSession();
 
         if (!session?.access_token) {
           setError("Your session expired. Please sign in again to continue.");
@@ -88,7 +86,7 @@ export default function TripsScreen() {
           await savePendingSearchIntent(pendingRequest);
         };
 
-        const response = await fetch(`${API_URL}/api/itinerary/generate`, {
+        const response = await fetch(mobileApiUrl("/api/itinerary/generate"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -168,7 +166,7 @@ export default function TripsScreen() {
     let cancelled = false;
 
     async function pollJob() {
-      const res = await fetch(`${API_URL}/api/itinerary/job/${queuedJobId}`);
+      const res = await fetch(mobileApiUrl(`/api/itinerary/job/${queuedJobId}`));
 
       if (res.status === 404 || res.status === 202) {
         pollCountRef.current += 1;
@@ -221,7 +219,7 @@ export default function TripsScreen() {
     setState("loading");
 
     void (async () => {
-      const res = await fetch(`${API_URL}/api/itinerary/${itineraryId}`);
+      const res = await fetch(mobileApiUrl(`/api/itinerary/${itineraryId}`));
       if (!res.ok) throw new Error("Failed to fetch itinerary");
 
       const data = await res.json() as ItineraryOutput;

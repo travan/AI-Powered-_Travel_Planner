@@ -1,0 +1,74 @@
+/* Generated from tokens.json by scripts/generate-design-tokens.mjs. */
+:root {
+  --ds-space-xs: 4px;
+  --ds-space-sm: 8px;
+  --ds-space-md: 12px;
+  --ds-space-lg: 16px;
+  --ds-space-xl: 24px;
+  --ds-space-2xl: 32px;
+}
+
+@theme {
+  --color-primary: #005d90;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #0077b6;
+  --color-on-primary-container: #f3f7ff;
+  --color-primary-fixed: #cde5ff;
+  --color-primary-fixed-dim: #94ccff;
+  --color-on-primary-fixed: #001d32;
+  --color-on-primary-fixed-variant: #004b74;
+  --color-secondary: #9b4500;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fc8a40;
+  --color-on-secondary-container: #672c00;
+  --color-secondary-fixed: #ffdbc9;
+  --color-secondary-fixed-dim: #ffb68d;
+  --color-on-secondary-fixed: #331200;
+  --color-on-secondary-fixed-variant: #763300;
+  --color-tertiary: #006176;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #007c95;
+  --color-tertiary-fixed: #b3ebff;
+  --color-tertiary-fixed-dim: #4cd6fb;
+  --color-on-tertiary-fixed: #001f27;
+  --color-on-tertiary-fixed-variant: #004e5f;
+  --color-on-tertiary-container: #ecf9ff;
+  --color-surface: #f8f9fa;
+  --color-surface-dim: #d9dadb;
+  --color-surface-bright: #f8f9fa;
+  --color-surface-variant: #e1e3e4;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f4f5;
+  --color-surface-container: #edeeef;
+  --color-surface-container-high: #e7e8e9;
+  --color-surface-container-highest: #e1e3e4;
+  --color-on-surface: #191c1d;
+  --color-on-surface-variant: #404850;
+  --color-outline: #707881;
+  --color-outline-variant: #bfc7d1;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-inverse-surface: #2e3132;
+  --color-inverse-on-surface: #f0f1f2;
+  --color-inverse-primary: #94ccff;
+  --color-surface-tint: #006399;
+  --color-brand50: #eff8ff;
+  --color-brand100: #dff1ff;
+  --color-brand200: #bfe3ff;
+  --color-brand300: #94ccff;
+  --color-brand400: #5eb8eb;
+  --color-brand500: #0077b6;
+  --color-brand600: #005d90;
+  --color-brand700: #004b74;
+  --color-brand800: #00324d;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --font-headline: var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-body: var(--font-manrope), 'Manrope', system-ui, sans-serif;
+  --font-sans: var(--font-manrope), 'Manrope', system-ui, sans-serif;
+  --font-label: var(--font-manrope), 'Manrope', system-ui, sans-serif;
+}

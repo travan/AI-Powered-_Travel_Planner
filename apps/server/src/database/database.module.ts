@@ -19,6 +19,7 @@ import { DatabaseLifecycleService } from "./database-lifecycle.service.js";
         new Pool({
           connectionString: config.postgresUrl,
           application_name: `horizon-nest-${config.databaseProvider}`,
+          ...config.databasePool,
         }),
     },
     {

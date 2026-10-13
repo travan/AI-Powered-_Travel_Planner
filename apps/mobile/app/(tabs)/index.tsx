@@ -16,7 +16,7 @@ import {
   type TripStyleKey,
 } from "@travel/types";
 import { mobileTheme } from "../../lib/theme";
-import { requireSupabase, SUPABASE_CONFIG_ERROR } from "../../lib/supabase";
+import { AUTH_CONFIG_ERROR, getAuthSession } from "../../lib/auth-provider";
 import { savePendingSearchIntent } from "../../lib/pending-search-intent";
 
 export default function HomeScreen() {
@@ -27,22 +27,12 @@ export default function HomeScreen() {
   const handlePlanPress = async () => {
     let sessionToken: string | null = null;
 
-    let supabase: ReturnType<typeof requireSupabase>;
     try {
-      supabase = requireSupabase();
-    } catch {
-      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
-      return;
-    }
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const session = await getAuthSession();
       sessionToken = session?.access_token ?? null;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      Alert.alert("Sign-in error", `Could not retrieve session: ${message}`);
+      Alert.alert("Sign-in error", `${AUTH_CONFIG_ERROR} ${message}`);
       return;
     }
 

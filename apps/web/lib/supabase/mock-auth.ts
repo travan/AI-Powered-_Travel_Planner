@@ -255,8 +255,20 @@ export function createMockBrowserClient(): MockAuthClient {
           error: null,
         };
       },
-      async resetPasswordForEmail() {
-        emitAuthChange("PASSWORD_RECOVERY", getStoredSession());
+      async resetPasswordForEmail(email) {
+        const normalizedEmail = normalizeEmail(email);
+        const account = getStoredUsers().find((entry) => entry.email === normalizedEmail);
+        if (account) {
+          // The mock provider stands in for opening the recovery link delivered
+          // by Supabase, so the reset screen can exercise the real UI flow.
+          const recoverySession = createSession({
+            id: account.id,
+            email: account.email,
+            user_metadata: account.user_metadata,
+          });
+          setStoredSession(recoverySession);
+          emitAuthChange("PASSWORD_RECOVERY", recoverySession);
+        }
         return { data: {}, error: null };
       },
       async resend() {

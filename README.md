@@ -30,21 +30,27 @@ An intelligent travel planning application that leverages AI to generate persona
 
 ## 🏗️ Architecture
 
-This is a monorepo project using Turbo for build orchestration:
+This is a pnpm/Turbo monorepo. `apps/server` is the live NestJS API; `apps/api` contains legacy API modules and tests and is not the API process started by the current Docker stack.
 
 ```
 apps/
-├── api/          # Backend API (Node.js/TypeScript)
-├── web/          # Frontend Web App (Next.js)
-└── mobile/       # Mobile App (Expo/React Native)
+├── server/       # NestJS API, database adapters, migrations, local DB bootstrap
+├── web/          # Next.js web client
+├── mobile/       # Expo / React Native client
+└── api/          # Legacy API modules and tests; not the deployed server entrypoint
 
 packages/
-├── ai/           # AI processing utilities
-├── config/       # Shared configuration
-├── hooks/        # React hooks
-├── scrapers/     # Data scraping utilities
-├── types/        # TypeScript type definitions
-└── ui/           # Shared UI components
+├── api-client/   # Shared web/mobile API URL resolution
+├── design-tokens/# Shared color, type, spacing, and radius tokens
+├── types/        # Shared contracts and domain types
+├── ui/           # Web UI components
+├── hooks/        # Shared React hooks
+├── ai/           # AI provider and prompt code
+└── scrapers/     # External data scraping
+
+e2e/
+├── specs/        # Browser full-flow tests using deterministic mock services
+└── regression/   # Checks against a running local API and PostgreSQL
 ```
 
 ## 🛠️ Tech Stack
@@ -52,46 +58,52 @@ packages/
 - **Frontend**: Next.js, React, TypeScript, Tailwind CSS
 - **Mobile**: Expo, React Native
 - **Backend**: Node.js, TypeScript
-- **Database**: Supabase (PostgreSQL)
+- **Database**: PostgreSQL; local PostgreSQL and Supabase PostgreSQL use the same server SQL adapter
 - **AI**: Custom AI integration for itinerary generation
 - **Testing**: Vitest (unit), Playwright (E2E)
 - **Build Tools**: Turbo, pnpm
 - **Deployment**: Configurable for Vercel, Expo, etc.
 
-## 📋 Prerequisites
+## 📋 Local setup
 
-- Node.js >= 20.0.0
-- pnpm >= 9.0.0
-- Supabase account (for database)
+- Node.js >= 22
+- pnpm 10.15
+- Docker Desktop or another Docker-compatible runtime for local PostgreSQL and MongoDB
 
-## 🚀 Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-username/ai-travel-planner.git
-   cd ai-travel-planner
-   ```
-
-2. **Install dependencies**
+1. **Install dependencies and create local configuration**
    ```bash
    pnpm install
+   cp .env.example .env
    ```
 
-3. **Set up Supabase**
-   - Create a new project at [supabase.com](https://supabase.com)
-   - Copy your project URL and API keys
-   - Create a `.env` file in the root directory:
-     ```env
-     SUPABASE_URL=your-supabase-url
-     SUPABASE_SERVICE_KEY=your-service-role-key
-     NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-     NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-     ```
-
-4. **Run database migrations**
+2. **Start the local databases and initialize the schema**
    ```bash
-   pnpm supabase:verify-setup
+   pnpm db:local:up
    ```
+   This starts PostgreSQL and MongoDB, provisions the least-privilege `travel_planner` role, applies the local schema, and seeds supported Vietnamese cities. It also repairs an existing Docker volume where initialization scripts were skipped. Use `pnpm db:local:init` only when bootstrapping the PostgreSQL instance configured directly in `.env`.
+
+3. **Start the API and web app**
+   ```bash
+   pnpm dev:server
+   pnpm --dir apps/web dev
+   ```
+   Start the mobile app separately with `pnpm --dir apps/mobile start`. Mobile auth defaults to `EXPO_PUBLIC_AUTH_PROVIDER=local` and uses the same server/PostgreSQL auth endpoints as web. Android Emulator uses `10.0.2.2` by default; for a physical device, set `EXPO_PUBLIC_API_URL` to the machine's LAN address. Set the provider to `supabase` and configure its public URL/key to use Supabase Auth instead. Local password recovery stays disabled until the server has an email sender and recovery endpoint; Supabase recovery links work only for Supabase Auth accounts.
+
+### Local Database Ports and Docker Modes
+
+The Compose PostgreSQL container publishes host port `5433` as container port `5432`. Connect database GUI tools on the Mac to host `127.0.0.1`, port `5433`, database `travel_planner`; use `travel_planner` with `POSTGRES_APP_PASSWORD` from `.env`, or `postgres` with `POSTGRES_PASSWORD`. The application containers connect to the same database volume through Compose DNS at `postgres:5432`. A container's `127.0.0.1` points to that container, not to the Mac.
+
+### Local Ollama Models
+
+The server can use Ollama's OpenAI-compatible API. Set `AI_PROVIDER=ollama` in `.env`; by default, `gemma4:latest` generates itinerary overviews and `qwen3.5:9b` generates itinerary details. Override the models with `OLLAMA_OVERVIEW_MODEL` and `OLLAMA_DETAIL_MODEL`. For local Docker stacks with slower models, set `NEXT_PUBLIC_API_URL=http://localhost:3001` so long generation requests go directly from the browser to the API instead of through the web proxy.
+
+For the Docker stack, the server reaches Ollama on the Mac through `http://host.docker.internal:11434/v1` (`OLLAMA_DOCKER_BASE_URL`). For a server started directly on the Mac, set `OLLAMA_BASE_URL=http://127.0.0.1:11434/v1`. Start Ollama and make sure both configured models are available before generating an itinerary.
+
+Choose one app runtime at a time because both modes use ports 3000 and 3001:
+
+- Local development: run `pnpm db:local:up`, then `pnpm dev:server` and `pnpm --dir apps/web dev` in separate terminals.
+- Full Docker stack: run `REDIS_PORT=6380 pnpm docker:stack:up`, then open `http://localhost:3000`. The API is on `http://localhost:3001`; database GUI tools still use `127.0.0.1:5433`.
+- Stop the full stack with `REDIS_PORT=6380 pnpm docker:stack:down`. This preserves the database volume; do not add `-v` if you want to keep its data.
 
 ## 🏃‍♂️ Running the Application
 
@@ -103,7 +115,7 @@ pnpm dev
 # Or run specific apps
 pnpm --dir apps/web dev      # Web app only
 pnpm --dir apps/mobile start # Mobile app only
-pnpm --dir apps/api dev      # API only
+pnpm dev:server              # API only
 ```
 
 ### Single-Domain Mode (Web + API)
@@ -120,7 +132,7 @@ To expose both frontend and backend under one domain, this project supports prox
 
 2. Start services:
    ```bash
-   pnpm --dir apps/api dev
+   pnpm dev:server
    pnpm --dir apps/web dev
    ```
 
@@ -137,29 +149,31 @@ For deployment as a single process/artifact, run the API server in unified mode 
 1. Build web + api:
    ```bash
    pnpm --dir apps/web build
-   pnpm --dir apps/api build
+   pnpm build:unified
    ```
 
 2. Start unified server:
    ```bash
-   pnpm --dir apps/api start:unified
+   pnpm start:unified
+   || docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml down 
+   || docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml up -d
    ```
 
    Note:
    - `start` and `start:unified` now read environment variables directly from runtime.
    - For local `.env` loading in manual runs, use:
      ```bash
-     pnpm --dir apps/api start:unified:dotenv
+     pnpm start:unified
      ```
 
 3. For local development in unified mode:
    ```bash
-   pnpm --dir apps/api dev:unified
+   pnpm --dir apps/server dev:unified
    ```
 
 4. Optional environment variables (API process):
    - `SERVE_WEB=true`
-   - `WEB_APP_DIR=../web` (default; relative to `apps/api` working directory)
+   - `WEB_APP_DIR=../web` (default; relative to `apps/server` working directory)
 
 In this mode, one Node.js process serves both web pages and API endpoints on the same domain/port, and mobile apps can call `https://your-domain/api/*`.
 
@@ -266,6 +280,7 @@ We welcome contributions! Please follow these steps:
 | `pnpm test:e2e:auth:flow` | Run auth flow contracts in mock mode (web + mobile-web) |
 | `pnpm test:e2e:auth:error-http` | Run web auth error-normalization contracts via HTTP intercept mode |
 | `pnpm test:e2e:auth` | Run both auth contract modes |
+| `pnpm test:regression:local-auth` | Exercise signup, session validation, logout/revocation, and login against the local PostgreSQL-backed API |
 | `pnpm supabase:seed-demo` | Seed demo data |
 | `pnpm supabase:query-demo` | Query demo data |
 

@@ -23,10 +23,9 @@ import {
   type TripStyleKey,
 } from "@travel/types";
 import { mobileTheme } from "../lib/theme";
-import { requireSupabase } from "../lib/supabase";
+import { MOBILE_API_BASE_URL, mobileApiUrl } from "../lib/api";
+import { getAuthSession } from "../lib/auth-provider";
 import { savePendingSearchIntent } from "../lib/pending-search-intent";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function PlanScreen() {
   const router = useRouter();
@@ -46,13 +45,14 @@ export default function PlanScreen() {
   const [travelers, setTravelers] = useState("2");
   const [loading, setLoading] = useState(false);
 
-  const { suggestions, loading: searchLoading } = useCitySearch(cityQuery, API_URL);
+  const { suggestions, loading: searchLoading } = useCitySearch(cityQuery, MOBILE_API_BASE_URL);
 
   const addCityFromSuggestion = useCallback((slug: string, name: string) => {
-    if (cities.some((c) => c.slug === slug)) return;
-    setCities((prev) => [...prev, { slug, name }]);
+    setCities((prev) => prev.some((city) => city.slug === slug)
+      ? prev
+      : [...prev, { slug, name }]);
     setCityQuery("");
-  }, [cities]);
+  }, []);
 
   const addCity = useCallback(() => {
     const trimmed = cityQuery.trim();
@@ -63,11 +63,12 @@ export default function PlanScreen() {
       addCityFromSuggestion(selectedCity.slug, selectedCity.name);
     } else {
       const selectedCity = createManualCity(trimmed);
-      if (cities.some((c) => c.slug === selectedCity.slug)) return;
-      setCities((prev) => [...prev, selectedCity]);
+      setCities((prev) => prev.some((city) => city.slug === selectedCity.slug)
+        ? prev
+        : [...prev, selectedCity]);
       setCityQuery("");
     }
-  }, [cityQuery, cities, suggestions, addCityFromSuggestion]);
+  }, [cityQuery, suggestions, addCityFromSuggestion]);
 
   const removeCity = useCallback((slug: string) => {
     setCities((prev) => prev.filter((c) => c.slug !== slug));
@@ -91,9 +92,7 @@ export default function PlanScreen() {
 
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await requireSupabase().auth.getSession();
+      const session = await getAuthSession();
 
       if (!session?.access_token) {
         await savePendingSearchIntent(requestPayload);
@@ -101,7 +100,7 @@ export default function PlanScreen() {
         return;
       }
 
-      const res = await fetch(`${API_URL}/api/itinerary/generate`, {
+      const res = await fetch(mobileApiUrl("/api/itinerary/generate"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

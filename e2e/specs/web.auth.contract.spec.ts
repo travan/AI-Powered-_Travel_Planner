@@ -130,6 +130,50 @@ test.describe("web auth contract flows", () => {
     );
   });
 
+  test("password recovery updates the password and allows sign-in with the new one", async ({ page }) => {
+    const identity = createAuthIdentity();
+    const newPassword = "Horizon-Recovered-456!";
+
+    await page.goto("/signup");
+    await signUpOnWeb(page, identity);
+    await expect(page).toHaveURL(/\/plan$/);
+    await clearWebMockAuthSession(page);
+
+    await page.goto("/login");
+    await page.getByTestId("web-auth-email").fill(identity.email);
+    await page.getByTestId("web-auth-password").focus();
+    await expect(page.getByTestId("web-auth-account-checking")).not.toBeVisible();
+    await page.getByTestId("web-auth-forgot-password").click();
+    await expect(page.getByTestId("web-auth-success")).toContainText(/password reset email sent/i);
+
+    // The mock provider creates the recovery session an emailed link would
+    // establish when the user opens /reset-password.
+    await page.goto("/reset-password");
+    const submit = page.getByTestId("reset-password-submit");
+    await expect(submit).toBeEnabled();
+
+    await page.getByTestId("reset-password-new-password").fill(newPassword);
+    await page.getByTestId("reset-password-confirm-password").fill(`${newPassword}-mismatch`);
+    await submit.click();
+    await expect(page.getByTestId("reset-password-error")).toContainText("Passwords do not match");
+
+    await page.getByTestId("reset-password-confirm-password").fill(newPassword);
+    await submit.click();
+    await expect(page.getByTestId("reset-password-success")).toContainText("Password updated successfully");
+    await expect(page).toHaveURL(/\/plan$/, { timeout: 5_000 });
+    await clearWebMockAuthSession(page);
+    await page.goto("/login");
+
+    await page.getByTestId("web-auth-email").fill(identity.email);
+    await page.getByTestId("web-auth-password").fill(identity.password);
+    await page.getByTestId("web-auth-submit-login").click();
+    await expect(page.getByTestId("web-auth-error")).toBeVisible();
+
+    await page.getByTestId("web-auth-password").fill(newPassword);
+    await page.getByTestId("web-auth-submit-login").click();
+    await expect(page).toHaveURL(/\/plan$/);
+  });
+
   test("sign out from account menu redirects to login", async ({ page }) => {
     const identity = createAuthIdentity();
 

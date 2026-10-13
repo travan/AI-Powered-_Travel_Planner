@@ -122,6 +122,7 @@
     "forgot": "Forgot?",
     "forgot_requires_email": "Enter your email first, then click Forgot.",
     "forgot_sent": "Password reset email sent. Please check your inbox.",
+    "local_password_reset_unavailable": "Local accounts cannot be reset until the server has an email delivery service and recovery endpoint. Supabase reset links apply only to Supabase Auth accounts.",
     "google_error": "Could not continue with Google. Please try again.",
     "signup_success": "Account created. Please check your email to confirm your account.",
     "signup_check_email": "Account created! Check your inbox to verify your email before signing in.",

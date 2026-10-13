@@ -77,14 +77,26 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
+    catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string> {
     const saved = await this.sql.query<{ id: string }>(
-      `insert into itineraries (
-         user_id, cities, countries, start_date, end_date, num_days,
-         budget, currency, trip_style, status, result
+      `with saved as (
+         insert into itineraries (
+           user_id, cities, countries, start_date, end_date, num_days,
+           budget, currency, trip_style, status, result
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
+         returning id
+       ),
+       queued as (
+         insert into city_catalog_ingestion_jobs (itinerary_id, payload)
+         select saved.id, jsonb_build_object('cities', $11::jsonb)
+         from saved
+         returning itinerary_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
-       returning id::text`,
+       select saved.id::text
+       from saved
+       inner join queued on queued.itinerary_id = saved.id`,
       [
         input.userId,
         input.request.cities,
@@ -96,6 +108,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
         input.request.currency,
         input.request.trip_style,
         input.result,
+        JSON.stringify(input.catalogCities),
       ]
     );
     return saved.rows[0]!.id;

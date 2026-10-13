@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -14,10 +14,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
-  isSupabaseConfigured,
-  requireSupabase,
-  SUPABASE_CONFIG_ERROR,
-} from "../../lib/supabase";
+  AUTH_CONFIG_ERROR,
+  isAuthConfigured,
+  requestPasswordReset,
+  signInWithEmail,
+  signUpWithEmail,
+  supportsGoogleAuth,
+} from "../../lib/auth-provider";
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 import { getPendingSearchIntent } from "../../lib/pending-search-intent";
@@ -37,6 +40,9 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function getMobileAuthErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.startsWith("Password recovery is not available")) {
+    return error.message;
+  }
   if (error && typeof error === "object" && ("message" in error || "code" in error || "status" in error)) {
     const normalized = normalizeSupabaseAuthError(error as { message?: string; code?: string; status?: number });
     return AUTH_ERROR_MESSAGES[normalized.code] ?? AUTH_ERROR_MESSAGES["unknown"] ?? "Authentication failed. Please try again.";
@@ -59,19 +65,12 @@ export function AuthMobileExperience({ mode }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resetFeedback, setResetFeedback] = useState<{ title: string; message: string; isError: boolean } | null>(null);
 
-  const title = useMemo(
-    () => (mode === "signup" ? "Start Your Narrative" : "Welcome Back"),
-    [mode],
-  );
-
-  const subtitle = useMemo(
-    () =>
-      mode === "signup"
-        ? "Join the circle of modern explorers."
-        : "Continue your journey planning.",
-    [mode],
-  );
+  const title = mode === "signup" ? "Start Your Narrative" : "Welcome Back";
+  const subtitle = mode === "signup"
+    ? "Join the circle of modern explorers."
+    : "Continue your journey planning.";
 
   const completeAuthFlow = async () => {
     const pending = await getPendingSearchIntent();
@@ -84,8 +83,8 @@ export function AuthMobileExperience({ mode }: Props) {
   };
 
   const onSubmit = async () => {
-    if (!isSupabaseConfigured) {
-      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+    if (!isAuthConfigured) {
+      Alert.alert("Configuration missing", AUTH_CONFIG_ERROR);
       return;
     }
 
@@ -96,28 +95,23 @@ export function AuthMobileExperience({ mode }: Props) {
 
     setSubmitting(true);
     try {
-      const supabase = requireSupabase();
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const signup = await signUpWithEmail({
           email,
           password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-              display_name: fullName.trim(),
-            },
-          },
+          fullName: fullName.trim(),
         });
 
-        if (error) throw error;
+        if (signup.error) throw signup.error;
+        if (signup.data.session) {
+          await completeAuthFlow();
+          return;
+        }
 
         // Try immediate sign-in to support mock auth and environments without
         // mandatory email confirmation. If sign-in fails, keep the explicit
         // login step for providers that require confirmation.
-        const signInAfterSignup = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const signInAfterSignup = await signInWithEmail(email, password);
 
         if (!signInAfterSignup.error) {
           await completeAuthFlow();
@@ -130,10 +124,7 @@ export function AuthMobileExperience({ mode }: Props) {
         );
         router.replace("/login");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await signInWithEmail(email, password);
 
         if (error) throw error;
         await completeAuthFlow();
@@ -146,35 +137,37 @@ export function AuthMobileExperience({ mode }: Props) {
   };
 
   const onForgotPassword = async () => {
-    if (!isSupabaseConfigured) {
-      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+    setResetFeedback(null);
+
+    if (!isAuthConfigured) {
+      setResetFeedback({ title: "Configuration missing", message: AUTH_CONFIG_ERROR, isError: true });
       return;
     }
 
     if (!email) {
-      Alert.alert("Missing email", "Enter your email first.");
+      setResetFeedback({ title: "Missing email", message: "Enter your email first.", isError: true });
       return;
     }
 
     setSubmitting(true);
     try {
-      const supabase = requireSupabase();
       const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3005";
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${webUrl}/reset-password`,
+      await requestPasswordReset(email, `${webUrl}/reset-password`);
+      setResetFeedback({
+        title: "Reset sent",
+        message: "Password reset instructions were sent to your email.",
+        isError: false,
       });
-      if (error) throw error;
-      Alert.alert("Reset sent", "Password reset instructions were sent to your email.");
     } catch (error) {
-      Alert.alert("Reset error", getMobileAuthErrorMessage(error));
+      setResetFeedback({ title: "Reset unavailable", message: getMobileAuthErrorMessage(error), isError: true });
     } finally {
       setSubmitting(false);
     }
   };
 
   const onGoogle = async () => {
-    if (!isSupabaseConfigured) {
-      Alert.alert("Configuration missing", SUPABASE_CONFIG_ERROR);
+    if (!isAuthConfigured) {
+      Alert.alert("Configuration missing", AUTH_CONFIG_ERROR);
       return;
     }
 
@@ -225,11 +218,14 @@ export function AuthMobileExperience({ mode }: Props) {
             placeholder="elias.thorne@horizon.com"
             placeholderTextColor={mobileTheme.colors.textMuted}
             value={email}
-            onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             testID="mobile-auth-email"
+            onChangeText={(value) => {
+              setEmail(value);
+              setResetFeedback(null);
+            }}
           />
 
           <Text style={styles.label}>PASSWORD</Text>
@@ -244,9 +240,30 @@ export function AuthMobileExperience({ mode }: Props) {
           />
 
           {mode === "login" && (
-            <Pressable style={styles.forgotWrap} onPress={onForgotPassword} testID="mobile-auth-forgot-password">
-              <Text style={styles.forgot}>Forgot password?</Text>
-            </Pressable>
+            <>
+              <Pressable
+                style={styles.forgotWrap}
+                onPress={onForgotPassword}
+                disabled={submitting}
+                testID="mobile-auth-forgot-password"
+              >
+                <Text style={styles.forgot}>Forgot password?</Text>
+              </Pressable>
+              {resetFeedback && (
+                <View
+                  style={[styles.resetFeedback, resetFeedback.isError && styles.resetFeedbackError]}
+                  accessibilityLiveRegion="polite"
+                  testID="mobile-auth-reset-feedback"
+                >
+                  <Text style={styles.resetFeedbackTitle} testID="mobile-auth-reset-feedback-title">
+                    {resetFeedback.title}
+                  </Text>
+                  <Text style={styles.resetFeedbackMessage} testID="mobile-auth-reset-feedback-message">
+                    {resetFeedback.message}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
 
           <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting} testID={`mobile-auth-submit-${mode}`}>
@@ -259,15 +276,19 @@ export function AuthMobileExperience({ mode }: Props) {
             )}
           </Pressable>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.divider} />
-          </View>
+          {supportsGoogleAuth && (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.divider} />
+              </View>
 
-          <Pressable style={styles.secondaryButton} onPress={onGoogle} disabled={submitting} testID={`mobile-auth-google-${mode}`}>
-            <Text style={styles.secondaryText}>Continue with Google</Text>
-          </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={onGoogle} disabled={submitting} testID={`mobile-auth-google-${mode}`}>
+                <Text style={styles.secondaryText}>Continue with Google</Text>
+              </Pressable>
+            </>
+          )}
 
           <Pressable
             style={styles.toggleWrap}
@@ -349,6 +370,28 @@ const styles = StyleSheet.create({
     color: mobileTheme.colors.primary,
     fontSize: 13,
     fontWeight: "600",
+  },
+  resetFeedback: {
+    borderRadius: mobileTheme.radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#e8f5ef",
+    borderWidth: 1,
+    borderColor: "#b7dfcb",
+  },
+  resetFeedbackError: {
+    backgroundColor: "#fff0ed",
+    borderColor: "#f1c6bc",
+  },
+  resetFeedbackTitle: {
+    color: mobileTheme.colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  resetFeedbackMessage: {
+    color: mobileTheme.colors.textMuted,
+    fontSize: 13,
+    marginTop: 2,
   },
   primaryButton: {
     marginTop: 8,

@@ -14,26 +14,38 @@ x-server-env: &server-env
   PORT: 3001
   SERVE_WEB: "false"
   DATABASE_PROVIDER: postgres
-  POSTGRES_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
-  DATABASE_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
+  POSTGRES_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
+  DATABASE_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
   MONGODB_URI: mongodb://mongo:27017/travel_planner
   MONGODB_DB_NAME: travel_planner
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the environment before starting a deployment profile}
 
 services:
   postgres:
     image: postgres:16-alpine
     profiles: ["staging", "production"]
     environment:
-      POSTGRES_USER: travel_planner
-      POSTGRES_PASSWORD: travel_planner
-      POSTGRES_DB: travel_planner
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting the deployment profile}
+      POSTGRES_DB: ${POSTGRES_DB:-travel_planner}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-travel_planner}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD before starting the deployment profile}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ../../apps/server/src/database/migrations:/docker-entrypoint-initdb.d:ro
+      - ./postgres/000-create-app-role.sh:/docker-entrypoint-initdb.d/000-create-app-role.sh:ro
+      - ../../apps/server/src/database/migrations/001_local_postgres.sql:/docker-entrypoint-initdb.d/001_local_postgres.sql:ro
+      - ../../apps/server/src/database/migrations/003_collaboration_finance.sql:/docker-entrypoint-initdb.d/003_collaboration_finance.sql:ro
+      - ../../apps/server/src/database/migrations/004_schedule_transport.sql:/docker-entrypoint-initdb.d/004_schedule_transport.sql:ro
+      - ../../apps/server/src/database/migrations/005_review_ocr_recommendations.sql:/docker-entrypoint-initdb.d/005_review_ocr_recommendations.sql:ro
+      - ../../apps/server/src/database/migrations/006_local_workspace_core_compat.sql:/docker-entrypoint-initdb.d/006_local_workspace_core_compat.sql:ro
+      - ../../apps/server/src/database/migrations/007_repair_self_accepted_invites.sql:/docker-entrypoint-initdb.d/007_repair_self_accepted_invites.sql:ro
+      - ../../apps/server/src/database/migrations/008_trip_schedule_compatibility.sql:/docker-entrypoint-initdb.d/008_trip_schedule_compatibility.sql:ro
+      - ../../apps/server/src/database/migrations/009_server_workspace_compatibility.sql:/docker-entrypoint-initdb.d/009_server_workspace_compatibility.sql:ro
+      - ../../apps/server/src/database/migrations/010_manual_city_catalog.sql:/docker-entrypoint-initdb.d/010_manual_city_catalog.sql:ro
+      - ../../apps/server/src/database/migrations/011_ai_city_catalog_worker.sql:/docker-entrypoint-initdb.d/011_ai_city_catalog_worker.sql:ro
+      - ./postgres/999-grant-app-role.sh:/docker-entrypoint-initdb.d/999-grant-app-role.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U travel_planner -d travel_planner"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,8 +54,6 @@ services:
   mongo:
     image: mongo:7
     profiles: ["staging", "production"]
-    ports:
-      - "27017:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:

@@ -26,10 +26,10 @@
     "docker:stack:build": "docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml build",
     "docker:stack:up": "docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml up -d --build",
     "docker:stack:down": "docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml down",
-    "db:local:up": "docker compose -f deploy/docker/docker-compose.local-data.yml up -d",
+    "db:local:up": "docker compose -f deploy/docker/docker-compose.local-data.yml up -d && node scripts/init-local-docker-postgres.mjs",
     "db:local:down": "docker compose -f deploy/docker/docker-compose.local-data.yml down",
-    "db:local:init": "node apps/api/scripts/init-local-postgres.mjs",
-    "db:seed:vietnam-cities": "node apps/api/scripts/seed-vietnam-cities.mjs",
+    "db:local:init": "pnpm --dir apps/server db:init",
+    "db:seed:vietnam-cities": "node apps/server/scripts/seed-vietnam-cities.mjs",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "clean": "turbo clean",
@@ -44,8 +44,10 @@
     "test:e2e:web-mobile-responsive": "E2E_TARGET=web playwright test --project=web-mobile-responsive",
     "test:e2e:auth:flow": "E2E_TARGET=web playwright test e2e/specs/web.auth.contract.spec.ts --project=web-desktop && E2E_TARGET=mobile playwright test e2e/specs/mobile-web.auth.contract.spec.ts --project=mobile-web",
     "test:e2e:auth:error-http": "E2E_TARGET=web playwright test e2e/specs/web.auth.error.contract.spec.ts --project=web-desktop",
-    "test:e2e:auth": "pnpm test:e2e:auth:flow && pnpm test:e2e:auth:error-http",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:auth:local": "playwright test --config playwright.local-auth.config.ts",
+    "test:e2e:auth": "pnpm test:e2e:auth:local && pnpm test:e2e:auth:flow && pnpm test:e2e:auth:error-http",
+    "test:e2e:install": "playwright install chromium",
+    "test:regression:local-auth": "node e2e/regression/local-postgres-auth.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",

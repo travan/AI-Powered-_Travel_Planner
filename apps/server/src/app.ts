@@ -1,7 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import type { Request } from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { AppModule } from "./app.module.js";
@@ -12,6 +11,7 @@ export async function buildApp(): Promise<NestExpressApplication> {
     bufferLogs: true,
   });
   const config = app.get(AppConfigService);
+  app.set("trust proxy", config.trustProxyHops);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -39,8 +39,6 @@ export async function buildApp(): Promise<NestExpressApplication> {
     rateLimit({
       max: config.rateLimit.max,
       windowMs: config.rateLimit.windowMs,
-      keyGenerator: (request: Request) =>
-        (request.headers["x-forwarded-for"] as string | undefined) ?? request.ip ?? "unknown",
     })
   );
 

@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import {
   createShareToken,
   findCitySuggestions,
@@ -14,6 +15,8 @@ import {
 } from "./fixtures/index.mjs";
 
 const port = Number(process.env.PORT ?? 3101);
+const localAuthAccounts = new Map();
+const localAuthSessions = new Map();
 
 const server = createServer(async (req, res) => {
   setCors(res);
@@ -33,6 +36,60 @@ const server = createServer(async (req, res) => {
 
   if (pathname === "/health") {
     return sendJson(res, 200, { status: "ok" });
+  }
+
+  if (req.method === "GET" && pathname === "/api/auth/account-exists") {
+    const email = (url.searchParams.get("email") ?? "").trim().toLowerCase();
+    return sendJson(res, 200, { exists: localAuthAccounts.has(email) });
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/register") {
+    const body = await readJsonBody(req);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return sendJson(res, 400, { code: "invalid_email", message: "Please enter a valid email address." });
+    }
+    if (password.length < 8) {
+      return sendJson(res, 400, { code: "weak_password", message: "Password must be at least 8 characters." });
+    }
+    if (localAuthAccounts.has(email)) {
+      return sendJson(res, 409, { code: "user_already_exists", message: "User already registered" });
+    }
+    const user = {
+      id: `local-e2e-${randomUUID()}`,
+      email,
+      user_metadata: {
+        full_name: typeof body.full_name === "string" ? body.full_name.trim() : null,
+        avatar_url: null,
+      },
+    };
+    localAuthAccounts.set(email, { user, password });
+    return sendJson(res, 201, createLocalAuthResponse(user));
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/session") {
+    const body = await readJsonBody(req);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const account = localAuthAccounts.get(email);
+    if (!account || account.password !== body.password) {
+      return sendJson(res, 401, { code: "invalid_credentials", message: "Invalid login credentials" });
+    }
+    return sendJson(res, 200, createLocalAuthResponse(account.user));
+  }
+
+  if (req.method === "GET" && pathname === "/api/auth/me") {
+    const token = getLocalAuthToken(req.headers.authorization);
+    const email = token ? localAuthSessions.get(token) : undefined;
+    const account = email ? localAuthAccounts.get(email) : undefined;
+    if (!account) return sendJson(res, 401, { code: "invalid_credentials", message: "Invalid or missing token" });
+    return sendJson(res, 200, { user: account.user });
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/logout") {
+    const token = getLocalAuthToken(req.headers.authorization);
+    if (token) localAuthSessions.delete(token);
+    return sendJson(res, 200, { ok: true });
   }
 
   if (req.method === "GET" && pathname === "/api/cities/popular") {
@@ -215,6 +272,27 @@ function setCors(res) {
 function sendJson(res, statusCode, body) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
+}
+
+function createLocalAuthResponse(user) {
+  const accessToken = `local-e2e-${randomUUID()}`;
+  const expiresIn = 7 * 24 * 60 * 60;
+  localAuthSessions.set(accessToken, user.email);
+  const session = {
+    access_token: accessToken,
+    refresh_token: "",
+    token_type: "bearer",
+    expires_in: expiresIn,
+    expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+    user,
+  };
+  return { user, session };
+}
+
+function getLocalAuthToken(authorization) {
+  return typeof authorization === "string"
+    ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
+    : null;
 }
 
 async function readJsonBody(req) {

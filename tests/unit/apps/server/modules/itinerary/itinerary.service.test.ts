@@ -14,12 +14,28 @@ function createRepository(
   };
 }
 
+function createCitiesService(): CitiesService {
+  return {
+    remember: vi.fn(async (name: string) => ({
+      slug: name.toLowerCase().replace(/\s+/g, "-"),
+      name: { en: name },
+      country: "",
+      timezone: "",
+      currency: "",
+      lat: null,
+      lon: null,
+      popular: false,
+    })),
+    findForPlanning: vi.fn().mockResolvedValue(null),
+  } as unknown as CitiesService;
+}
+
 describe("ItineraryService.save", () => {
   it("returns the workspace trip id after saving", async () => {
     const repository = createRepository(
       vi.fn().mockResolvedValue({ tripId: "trip-1" })
     );
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
       service.save({ itineraryId: "itinerary-1", userId: "user-1" })
@@ -31,7 +47,7 @@ describe("ItineraryService.save", () => {
 
   it("does not expose another user's itinerary", async () => {
     const repository = createRepository(vi.fn().mockResolvedValue(null));
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
       service.save({ itineraryId: "itinerary-1", userId: "user-2" })
@@ -78,7 +94,7 @@ describe("ItineraryService.getForTrip", () => {
     } as never;
     const repository = createRepository(vi.fn());
     repository.findForTrip = vi.fn().mockResolvedValue(itinerary);
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
       service.getForTrip({ tripId: "trip-1", userId: "user-1" })
@@ -88,7 +104,8 @@ describe("ItineraryService.getForTrip", () => {
   it("does not expose a missing source itinerary", async () => {
     const repository = createRepository(vi.fn());
     repository.findForTrip = vi.fn().mockResolvedValue(null);
-    const service = new ItineraryService(repository);
+    const cities = createCitiesService();
+    const service = new ItineraryService(repository, cities);
 
     await expect(
       service.getForTrip({ tripId: "trip-1", userId: "user-1" })
@@ -104,18 +121,15 @@ describe("ItineraryService.getForTrip", () => {
 });
 
 describe("ItineraryService.generate", () => {
-  it("returns a supported fallback when a destination is not in the city catalog", async () => {
+  it("generates and saves an itinerary when a destination is not in the city catalog", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
     const repository = createRepository(vi.fn());
-    const cities = {
-      getDetail: vi.fn().mockResolvedValue({
-        ok: false,
-        error: { code: "not_found", statusCode: 404, message: "City not found" },
-      }),
-    } as unknown as CitiesService;
+    repository.createComplete = vi.fn().mockResolvedValue("itinerary-1");
+    const cities = createCitiesService();
     const service = new ItineraryService(repository, cities);
 
-    await expect(
-      service.generate({
+    try {
+      const response = await service.generate({
         userId: "user-1",
         dto: {
           cities: ["unknown-place"],
@@ -126,13 +140,31 @@ describe("ItineraryService.generate", () => {
           trip_style: "adventure",
           num_travelers: 2,
         },
-      }),
-    ).resolves.toEqual({
-      status: "unsupported",
-      code: "UNSUPPORTED_DESTINATION",
-      message: "We don't have enough destination data for Unknown Place yet. Try another destination or search by a nearby supported city.",
-      unsupported_cities: ["Unknown Place"],
-    });
-    expect(repository.createComplete).not.toHaveBeenCalled();
+      });
+
+      expect(response).toMatchObject({
+        status: "cached",
+        itinerary_id: "itinerary-1",
+      });
+      expect(repository.createComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-1",
+          request: expect.objectContaining({
+            cities: ["unknown-place"],
+            currency: "USD",
+          }),
+          catalogCities: [{ slug: "unknown-place", name: "Unknown Place" }],
+          result: expect.objectContaining({
+            days: expect.arrayContaining([
+              expect.objectContaining({ city: "Unknown Place" }),
+            ]),
+          }),
+        }),
+      );
+      expect(cities.remember).toHaveBeenCalledWith("Unknown Place");
+      expect(cities.findForPlanning).toHaveBeenCalledWith("unknown-place");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

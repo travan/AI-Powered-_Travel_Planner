@@ -2,16 +2,16 @@ import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
-import { isSupabaseConfigured, requireSupabase } from "../lib/supabase";
+import { AUTH_PROVIDER, handleAuthCallback, isAuthConfigured } from "../lib/auth-provider";
 
 export default function RootLayout() {
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isAuthConfigured || AUTH_PROVIDER === "local") return;
 
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
       if (url.includes("access_token") || url.includes("code=")) {
-        await requireSupabase().auth.exchangeCodeForSession(url);
+        await handleAuthCallback(url);
       }
     };
 

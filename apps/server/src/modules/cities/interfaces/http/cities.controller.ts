@@ -1,7 +1,8 @@
-import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
+import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
 import { CitiesService } from "../../application/cities.service.js";
-import { CitySearchQueryDto, CitySlugParamsDto } from "../../dto/city.dto.js";
+import { CitySearchQueryDto, CitySlugParamsDto, RememberCityDto } from "../../dto/city.dto.js";
 
 @Controller("api/cities")
 export class CitiesController {
@@ -15,6 +16,12 @@ export class CitiesController {
   @Get("popular")
   popular() {
     return this.cities.popular();
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  remember(@Body() dto: RememberCityDto) {
+    return this.cities.remember(dto.name);
   }
 
   @Get(":slug")

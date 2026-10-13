@@ -1,4 +1,4 @@
-import type { City } from "./city.entity.js";
+import type { City, CityPlanningData } from "./city.entity.js";
 
 export const CITY_REPOSITORY = Symbol("CITY_REPOSITORY");
 
@@ -6,4 +6,6 @@ export interface CityRepository {
   search(query: string): Promise<City[]>;
   popular(): Promise<City[]>;
   findBySlug(slug: string): Promise<City | null>;
+  findForPlanning(value: string): Promise<CityPlanningData | null>;
+  remember(name: string): Promise<City>;
 }

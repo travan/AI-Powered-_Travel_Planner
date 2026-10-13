@@ -523,9 +523,11 @@ export default function PlanPage() {
                       >
                         <span className="material-symbols-outlined text-primary text-base">location_on</span>
                         <span className="font-semibold text-sm">{s.name["en"] ?? s.slug}</span>
-                        <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
-                          {s.country}
-                        </span>
+                        {s.country && (
+                          <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
+                            {s.country}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -534,7 +536,7 @@ export default function PlanPage() {
 
               {/* Duration */}
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
+                <div className="flex h-6 items-center justify-between">
                   <label className="block text-sm font-bold uppercase tracking-widest text-outline">Duration</label>
                   <button
                     className="text-xs font-bold text-primary uppercase tracking-widest"
@@ -597,10 +599,10 @@ export default function PlanPage() {
               {/* Trip Style */}
               <div className="space-y-4">
                 <label className="block text-sm font-bold uppercase tracking-widest text-outline">Trip Style</label>
-                <div className="flex overflow-x-auto gap-2 pb-1 -mx-1 px-1 scrollbar-hide">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-4">
                   {TRIP_STYLES.map((s) => (
                     <button key={s.key} onClick={() => setTripStyle(s.key)}
-                      className={`flex-none flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                      className={`flex w-full items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
                         tripStyle === s.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant"
                       }`}>
                       <span>{s.emoji}</span> {s.label}
@@ -735,7 +737,11 @@ export default function PlanPage() {
                           onClick={() => addCity(s.slug, s.name["en"] ?? s.slug)}>
                           <span className="material-symbols-outlined text-primary text-base">location_on</span>
                           <span className="font-semibold text-sm">{s.name["en"] ?? s.slug}</span>
-                          <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">{s.country}</span>
+                          {s.country && (
+                            <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
+                              {s.country}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -770,7 +776,7 @@ export default function PlanPage() {
                     )}
                   </div>
                   <div className="space-y-3">
-                    <label className="text-sm font-bold uppercase tracking-widest text-outline">Budget</label>
+                    <label className="flex h-6 items-center text-sm font-bold uppercase tracking-widest text-outline">Budget</label>
                     <div className="flex gap-2">
                       <div className="relative flex-1 flex items-center bg-surface-container-high rounded-lg p-4">
                         <span className="material-symbols-outlined text-primary mr-3">payments</span>
@@ -791,10 +797,10 @@ export default function PlanPage() {
                 {/* Trip Style */}
                 <div className="space-y-3">
                   <label className="text-sm font-bold uppercase tracking-widest text-outline">Trip Style</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-4">
                     {TRIP_STYLES.map((s) => (
                       <button key={s.key} onClick={() => setTripStyle(s.key)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                        className={`flex w-full items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
                           tripStyle === s.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
                         }`}>
                         <span>{s.emoji}</span> {s.label}

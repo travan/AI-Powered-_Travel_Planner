@@ -3,14 +3,17 @@ export { OpenAIProvider } from "./providers/openai.js";
 export { GeminiProvider } from "./providers/gemini.js";
 export { ClaudeProvider } from "./providers/claude.js";
 export { MockAIProvider } from "./providers/mock.js";
+export { OllamaProvider } from "./providers/ollama.js";
+export type { OllamaProviderOptions } from "./providers/ollama.js";
+export { normalizeOllamaItinerary } from "./providers/ollama.js";
 
 import type { AIProvider } from "./provider.js";
+export type AIProviderName = "openai" | "gemini" | "claude" | "ollama";
 import { OpenAIProvider } from "./providers/openai.js";
 import { GeminiProvider } from "./providers/gemini.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { MockAIProvider } from "./providers/mock.js";
-
-export type AIProviderName = "openai" | "gemini" | "claude";
+import { OllamaProvider } from "./providers/ollama.js";
 
 function isPlaceholder(value: string | undefined): boolean {
   if (!value) return true;
@@ -43,6 +46,12 @@ export function createAIProvider(
       const key = resolveKey("ANTHROPIC_API_KEY", isDev);
       return key === null ? new MockAIProvider() : new ClaudeProvider(key);
     }
+    case "ollama":
+      return new OllamaProvider({
+        baseURL: process.env["OLLAMA_BASE_URL"]?.trim() || "http://127.0.0.1:11434/v1",
+        overviewModel: process.env["OLLAMA_OVERVIEW_MODEL"]?.trim() || "gemma4:latest",
+        detailModel: process.env["OLLAMA_DETAIL_MODEL"]?.trim() || "qwen3.5:9b",
+      });
     default:
       throw new Error(`Unknown AI provider: ${provider as string}`);
   }

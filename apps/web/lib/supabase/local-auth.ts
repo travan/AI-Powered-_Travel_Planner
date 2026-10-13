@@ -182,13 +182,19 @@ export function createLocalBrowserClient(): MockAuthClient {
         };
       },
       async resetPasswordForEmail() {
-        return { data: {}, error: null };
+        return {
+          data: {},
+          error: new Error("Password recovery is not available for local accounts until an email delivery service is configured."),
+        };
       },
       async resend() {
         return { data: {}, error: null };
       },
       async updateUser() {
-        return { data: { user: readSession()?.user ?? null }, error: null };
+        return {
+          data: { user: readSession()?.user ?? null },
+          error: new Error("Password updates are not available for local accounts until a secure recovery flow is configured."),
+        };
       },
       async signOut() {
         const session = readSession();

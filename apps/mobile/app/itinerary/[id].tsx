@@ -8,8 +8,8 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState, useRef } from "react";
 import type { ItineraryOutput } from "@travel/types";
+import { mobileApiUrl } from "../../lib/api";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 const MAX_POLL_ATTEMPTS = 90; // 3 minutes at 2s intervals
 const POLL_INTERVAL_MS = 2000;
 
@@ -30,8 +30,8 @@ export default function ItineraryDetailScreen() {
       try {
         const endpoint =
           source === "queued"
-            ? `${API_URL}/api/itinerary/job/${id}`
-            : `${API_URL}/api/itinerary/${id}`;
+            ? mobileApiUrl(`/api/itinerary/job/${id}`)
+            : mobileApiUrl(`/api/itinerary/${id}`);
 
         const res = await fetch(endpoint);
 

@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@travel/api-client': path.resolve(__dirname, 'packages/api-client/src/index.ts'),
+      '@travel/design-tokens': path.resolve(__dirname, 'packages/design-tokens/src/index.ts'),
       '@travel/types': path.resolve(__dirname, 'packages/types/src/index.ts'),
       '@supabase/supabase-js': path.resolve(__dirname, 'apps/mobile/node_modules/@supabase/supabase-js'),
       'expo-linking': path.resolve(__dirname, 'apps/mobile/node_modules/expo-linking'),

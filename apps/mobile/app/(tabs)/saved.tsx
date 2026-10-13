@@ -3,12 +3,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  isMockAuthEnabled,
-  isSupabaseConfigured,
-  requireSupabase,
-  SUPABASE_CONFIG_ERROR,
-} from "../../lib/supabase";
+import { AUTH_PROVIDER, AUTH_CONFIG_ERROR, isAuthConfigured, getAuthUser } from "../../lib/auth-provider";
+import { requireSupabase } from "../../lib/supabase";
 import { getMockSavedTrips } from "../../lib/mock-auth";
 import { mobileTheme } from "../../lib/theme";
 
@@ -21,21 +17,26 @@ export default function SavedScreen() {
 
   useEffect(() => {
     async function fetchSaved() {
-      if (!isSupabaseConfigured) {
+      if (!isAuthConfigured) {
         setLoading(false);
         return;
       }
 
-      const supabase = requireSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getAuthUser();
       if (!user) { setLoading(false); return; }
 
-      if (isMockAuthEnabled) {
+      if (AUTH_PROVIDER === "mock") {
         setTrips(await getMockSavedTrips());
         setLoading(false);
         return;
       }
 
+      if (AUTH_PROVIDER === "local") {
+        setLoading(false);
+        return;
+      }
+
+      const supabase = requireSupabase();
       const databaseClient = supabase as unknown as SupabaseClient;
 
       const { data, error } = await databaseClient
@@ -76,12 +77,14 @@ export default function SavedScreen() {
       <View style={styles.empty}>
         <Ionicons name="bookmark-outline" size={56} color="#c9d3de" />
         <Text style={styles.emptyTitle} testID="mobile-saved-state">
-          {isSupabaseConfigured ? "No saved trips yet" : "Saved trips unavailable"}
+          {isAuthConfigured ? "No saved trips yet" : "Saved trips unavailable"}
         </Text>
         <Text style={styles.emptySub}>
-          {isSupabaseConfigured
+          {isAuthConfigured && AUTH_PROVIDER === "local"
+            ? "Saved trips are not connected to the local auth service yet."
+            : isAuthConfigured
             ? "Plan a trip and save it to see it here."
-            : SUPABASE_CONFIG_ERROR}
+            : AUTH_CONFIG_ERROR}
         </Text>
         <TouchableOpacity
           style={styles.cta}

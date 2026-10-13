@@ -1,4 +1,4 @@
--- Compatibility layer for databases initialized from apps/api/db/local-postgres.sql.
+-- Compatibility layer for databases initialized from 001_local_postgres.sql.
 -- Keeps the richer local schema while adding the collaboration fields expected by
 -- the Nest workspace API.
 

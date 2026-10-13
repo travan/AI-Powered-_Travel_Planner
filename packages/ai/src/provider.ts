@@ -9,8 +9,8 @@ export interface PreFetchedCityData {
   country: string;
   timezone: string;
   currency: string;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   places: unknown[];
   restaurants: unknown[];
   hotels: unknown[];

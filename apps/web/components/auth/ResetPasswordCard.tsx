@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
+import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 
 export function ResetPasswordCard() {
   const t = useTranslations("auth");
@@ -21,6 +22,8 @@ export function ResetPasswordCard() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (LOCAL_AUTH_ENABLED) return;
+
     const supabase = createClient();
 
     supabase.auth.getSession().then(({ data }) => {
@@ -86,7 +89,11 @@ export function ResetPasswordCard() {
           <p className="text-on-surface-variant">{t("reset_password_subtitle")}</p>
         </div>
 
-        {!isRecoverySession && (
+        {LOCAL_AUTH_ENABLED ? (
+          <p className="mb-6 rounded-xl bg-secondary-fixed px-4 py-3 text-sm font-medium text-on-secondary-fixed">
+            {t("local_password_reset_unavailable")}
+          </p>
+        ) : !isRecoverySession && (
           <p className="mb-6 rounded-xl bg-secondary-fixed px-4 py-3 text-sm font-medium text-on-secondary-fixed">
             {t("reset_password_missing_session")}
           </p>
@@ -104,6 +111,7 @@ export function ResetPasswordCard() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder={t("password_placeholder")}
+                data-testid="reset-password-new-password"
                 className="w-full rounded-xl bg-surface-container-high py-4 pr-12 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
               />
               <button
@@ -127,6 +135,7 @@ export function ResetPasswordCard() {
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder={t("password_placeholder")}
+                data-testid="reset-password-confirm-password"
                 className="w-full rounded-xl bg-surface-container-high py-4 pr-12 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
               />
               <button
@@ -139,12 +148,13 @@ export function ResetPasswordCard() {
             </span>
           </label>
 
-          {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">{errorMessage}</p>}
-          {successMessage && <p className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant">{successMessage}</p>}
+          {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container" data-testid="reset-password-error">{errorMessage}</p>}
+          {successMessage && <p className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant" data-testid="reset-password-success">{successMessage}</p>}
 
           <button
             type="submit"
-            disabled={loading || !isRecoverySession}
+            disabled={loading || !isRecoverySession || LOCAL_AUTH_ENABLED}
+            data-testid="reset-password-submit"
             className="w-full rounded-full bg-on-surface py-4 text-base font-bold text-surface transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-65"
           >
             {loading ? t("loading") : t("reset_password_submit")}

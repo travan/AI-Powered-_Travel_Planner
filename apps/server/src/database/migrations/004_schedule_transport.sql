@@ -29,6 +29,11 @@ create table if not exists public.transport_bookings (
   updated_at timestamptz not null default now()
 );
 
+-- Older local volumes may already have transport_bookings without the newer
+-- activity link. Add it before creating the index below.
+alter table public.transport_bookings
+  add column if not exists activity_id uuid;
+
 create table if not exists public.transport_booking_participants (
   transport_booking_id uuid not null references public.transport_bookings(id) on delete cascade,
   user_id uuid not null references public.users(id) on delete cascade,
