@@ -102,6 +102,7 @@ For the Docker stack, the server reaches Ollama on the Mac through `http://host.
 Choose one app runtime at a time because both modes use ports 3000 and 3001:
 
 - Local development: run `pnpm db:local:up`, then `pnpm dev:server` and `pnpm --dir apps/web dev` in separate terminals.
+- Docker with automatic source updates: run `pnpm docker:dev` and keep the terminal open. Web edits hot reload; API edits compile and restart the API service automatically. See [Docker development](docs/testing/docker-development.md) for configuration, migrations, and switching modes.
 - Full Docker stack: run `REDIS_PORT=6380 pnpm docker:stack:up`, then open `http://localhost:3000`. The API is on `http://localhost:3001`; database GUI tools still use `127.0.0.1:5433`.
 - Stop the full stack with `REDIS_PORT=6380 pnpm docker:stack:down`. This preserves the database volume; do not add `-v` if you want to keep its data.
 

@@ -218,12 +218,21 @@ export function onAuthStateChange(callback: MockAuthCallback) {
   return { unsubscribe: () => localAuthSubscribers.delete(callback) };
 }
 
-export async function requestPasswordReset(email: string, redirectTo?: string) {
-  if (AUTH_PROVIDER === "local") {
-    throw new Error("Password recovery is not available for local accounts until an email delivery service is configured.");
+export async function requestPasswordReset(email: string, _redirectTo?: string) {
+  if (AUTH_PROVIDER === "mock") {
+    const { error } = await requireSupabase().auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    return;
   }
-  const { error } = await requireSupabase().auth.resetPasswordForEmail(email, { redirectTo });
-  if (error) throw error;
+  const response = await fetch(mobileApiUrl("/api/auth/forgot-password"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.message === "string" ? payload.message : "Password recovery failed. Please try again.");
+  }
 }
 
 export async function handleAuthCallback(url: string) {

@@ -62,14 +62,30 @@ test.describe("web first-party local authentication", () => {
     await expect(page.getByTestId("web-auth-error")).toBeVisible();
   });
 
-  test("explains that password recovery is unavailable for local accounts", async ({ page }) => {
+  test("local password recovery uses the common API and accepts an emailed token", async ({ page }) => {
+    await page.route("**/api/auth/forgot-password", async route => {
+      expect(route.request().postDataJSON()).toEqual({ email: "traveler@horizon.test" });
+      await route.fulfill({ json: { ok: true } });
+    });
     await page.goto("/login");
     await page.getByTestId("web-auth-email").fill("traveler@horizon.test");
     await page.getByTestId("web-auth-password").focus();
     await expect(page.getByTestId("web-auth-account-checking")).not.toBeVisible();
     await page.getByTestId("web-auth-forgot-password").click();
-    await expect(page.getByTestId("web-auth-error")).toContainText(
-      "Local accounts cannot be reset until the server has an email delivery service",
-    );
+    await expect(page.getByTestId("web-auth-success")).toBeVisible();
+    await page.route("**/api/auth/reset-password", async route => {
+      expect(route.request().postDataJSON()).toEqual({ token: "a".repeat(64), password: "New-password-93!" });
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.goto(`/reset-password#recovery_token=${"a".repeat(64)}`);
+    await expect(page.getByTestId("reset-password-submit")).toBeEnabled();
+    await expect(page).toHaveURL(/\/reset-password$/);
+    await page.getByTestId("reset-password-new-password").fill("New-password-93!");
+    await page.getByTestId("reset-password-confirm-password").fill("New-password-93!");
+    await page.getByTestId("reset-password-submit").click();
+    await expect(page.getByTestId("reset-password-success")).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/reset-password");
+    await expect(page.getByTestId("reset-password-submit")).toBeDisabled();
   });
 });

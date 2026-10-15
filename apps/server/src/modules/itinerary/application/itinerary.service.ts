@@ -92,7 +92,11 @@ export class ItineraryService {
         return {
           catalogReference: { slug: city.slug, name: displayName },
           planningData: planningData
-            ? toPreFetchedCityData(planningData, request.currency, request.locale)
+            ? toPreFetchedCityData(
+                planningData,
+                request.currency,
+                request.locale,
+              )
             : toMinimalCityData(name, request.currency),
         };
       }),
@@ -116,15 +120,30 @@ export class ItineraryService {
         `AI itinerary generation failed for provider "${providerName}"`,
         details,
       );
+      await this.recordFailure(
+        input.userId,
+        request,
+        providerName,
+        "AI_UNAVAILABLE",
+        error,
+      );
       return {
         status: "unsupported",
         code: "AI_UNAVAILABLE",
-        message:
-          "We couldn't build a reliable itinerary for this request yet. Try another destination or a broader trip style.",
+        message: providerName === "ollama"
+          ? "The local AI service could not complete this request. Check that Ollama is running and the configured model is available, then try again."
+          : "The AI service could not complete this request. Please try again shortly.",
       };
     }
 
     if (!Array.isArray(detail.days) || detail.days.length === 0) {
+      await this.recordFailure(
+        input.userId,
+        request,
+        providerName,
+        "NO_ITINERARY",
+        "Model returned no itinerary days",
+      );
       return {
         status: "unsupported",
         code: "NO_ITINERARY",
@@ -137,13 +156,39 @@ export class ItineraryService {
       userId: input.userId,
       request,
       result: detail,
-      catalogCities: rememberedCities.map(({ catalogReference }) => catalogReference),
+      catalogCities: rememberedCities.map(
+        ({ catalogReference }) => catalogReference,
+      ),
     });
     return {
       status: "cached" as const,
       itinerary_id: itineraryId,
       result: detail,
     };
+  }
+  private async recordFailure(
+    userId: string,
+    request: ItineraryInput,
+    provider: string,
+    code: string,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      await this.itineraries.recordFailure({
+        userId,
+        request,
+        provider,
+        code,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } catch (persistenceError) {
+      this.logger.error(
+        "Could not persist AI generation failure",
+        persistenceError instanceof Error
+          ? persistenceError.stack
+          : String(persistenceError),
+      );
+    }
   }
 }
 

@@ -12,24 +12,30 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - ai_travel_planner_postgres:/var/lib/postgresql/data
-      - ./postgres/000-create-app-role.sh:/docker-entrypoint-initdb.d/000-create-app-role.sh:ro
-      - ../../apps/server/src/database/migrations/001_local_postgres.sql:/docker-entrypoint-initdb.d/001_local_postgres.sql:ro
-      - ../../apps/server/src/database/migrations/003_collaboration_finance.sql:/docker-entrypoint-initdb.d/003_collaboration_finance.sql:ro
-      - ../../apps/server/src/database/migrations/004_schedule_transport.sql:/docker-entrypoint-initdb.d/004_schedule_transport.sql:ro
-      - ../../apps/server/src/database/migrations/005_review_ocr_recommendations.sql:/docker-entrypoint-initdb.d/005_review_ocr_recommendations.sql:ro
-      - ../../apps/server/src/database/migrations/006_local_workspace_core_compat.sql:/docker-entrypoint-initdb.d/006_local_workspace_core_compat.sql:ro
-      - ../../apps/server/src/database/migrations/007_repair_self_accepted_invites.sql:/docker-entrypoint-initdb.d/007_repair_self_accepted_invites.sql:ro
-      - ../../apps/server/src/database/migrations/008_trip_schedule_compatibility.sql:/docker-entrypoint-initdb.d/008_trip_schedule_compatibility.sql:ro
-      - ../../apps/server/src/database/migrations/009_server_workspace_compatibility.sql:/docker-entrypoint-initdb.d/009_server_workspace_compatibility.sql:ro
-      - ../../apps/server/src/database/migrations/010_manual_city_catalog.sql:/docker-entrypoint-initdb.d/010_manual_city_catalog.sql:ro
-      - ../../apps/server/src/database/migrations/011_ai_city_catalog_worker.sql:/docker-entrypoint-initdb.d/011_ai_city_catalog_worker.sql:ro
-      - ./postgres/999-grant-app-role.sh:/docker-entrypoint-initdb.d/999-grant-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.server
+    image: ai-travel-planner:server
+    working_dir: /app/apps/server
+    command: ["node", "scripts/init-local-postgres.mjs"]
+    environment:
+      DATABASE_PROVIDER: postgres
+      POSTGRES_URL: postgresql://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
+      POSTGRES_ADMIN_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+    volumes:
+      - ../../apps/server/src/database/migrations:/app/apps/server/src/database/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   mongodb:
     image: mongo:7
@@ -76,6 +82,15 @@ services:
       OLLAMA_DETAIL_MODEL: ${OLLAMA_DETAIL_MODEL:-qwen3.5:9b}
       PORT: 3001
       SERVE_WEB: "false"
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       DATABASE_PROVIDER: postgres
       POSTGRES_URL: postgresql://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
       POSTGRES_URLS: postgresql://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner},${POSTGRES_FALLBACK_URLS:-}
@@ -92,12 +107,14 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-60}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       FREE_DAILY_GENERATE_LIMIT: ${FREE_DAILY_GENERATE_LIMIT:-3}
-      NEXT_PUBLIC_APP_URL: http://localhost:${UI_PORT:-3000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       CORS_ORIGINS: http://localhost:${UI_PORT:-3000},http://ui:3000
       TEST_ENABLE_MOCK_TOKENS: ${TEST_ENABLE_MOCK_TOKENS:-false}
     ports:
       - "${API_PORT:-3001}:3001"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       mongodb:
@@ -136,7 +153,7 @@ services:
       NEXT_PUBLIC_AUTH_PROVIDER: ${NEXT_PUBLIC_AUTH_PROVIDER:-local}
       AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
       ENABLE_MOCK_AUTH_SERVER: ${ENABLE_MOCK_AUTH_SERVER:-false}
-      NEXT_PUBLIC_APP_URL: http://localhost:${UI_PORT:-3000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
     ports:

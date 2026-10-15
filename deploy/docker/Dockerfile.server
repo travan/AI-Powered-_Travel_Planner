@@ -18,6 +18,15 @@ COPY packages/ui/package.json ./packages/ui/package.json
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
   pnpm install --frozen-lockfile --filter @travel/server...
 
+# Development keeps workspace TypeScript sources and dev dependencies.
+FROM deps AS dev
+COPY apps/server ./apps/server
+COPY packages ./packages
+COPY scripts ./scripts
+WORKDIR /app/apps/server
+ENV NODE_ENV=development
+CMD ["sh", "-c", "pnpm exec tsc && exec pnpm exec tsx dist/index.js"]
+
 FROM deps AS builder
 WORKDIR /app
 

@@ -12,6 +12,13 @@ export type ItineraryRepository = {
     result: Itinerary;
     catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string>;
+  recordFailure(input: {
+    userId: string;
+    request: ItineraryInput;
+    provider: string;
+    code: string;
+    message: string;
+  }): Promise<void>;
   saveAsTrip(input: {
     itineraryId: string;
     userId: string;

@@ -226,3 +226,57 @@ test.describe("web auth contract flows", () => {
     );
   });
 });
+
+test("missing server draft falls back to browser intent and does not repeat claim on reload", async ({ page }) => {
+  await page.goto("/signup");
+  await signUpOnWeb(page, createAuthIdentity());
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.evaluate(() => {
+    sessionStorage.setItem("horizon.search.intent", JSON.stringify({
+      request: { cities: ["tokyo"], city_names: ["Tokyo"], num_days: 3, budget: 1200, currency: "USD", trip_style: "mid_range", num_travelers: 2, locale: "en" },
+      draftId: "missing-draft", guestKey: "guest-test-key", createdAt: Date.now(),
+    }));
+  });
+  let claims = 0;
+  let generations = 0;
+  await page.route("**/api/search-drafts/*/claim", async route => {
+    claims++;
+    await route.fulfill({ status: 404, json: { message: "Search draft not found or expired" } });
+  });
+  await page.route("**/api/itinerary/generate", async route => {
+    generations++;
+    expect(route.request().postDataJSON()).toMatchObject({ cities: ["tokyo"], num_days: 3 });
+    await route.fulfill({ status: 503, json: { message: "AI temporarily unavailable" } });
+  });
+  await page.goto("/plan?resumeGenerate=1&draftId=missing-draft");
+  await expect(page.locator('[data-testid="web-plan-error"]:visible')).toHaveText("Generate failed: 503");
+  await expect(page).toHaveURL(/\/plan$/);
+  await expect(page.getByTestId("web-plan-selected-city")).toContainText("Tokyo");
+  expect(claims).toBe(1);
+  expect(generations).toBe(1);
+  await page.reload();
+  await expect(page.getByText("Claim search draft failed: 404")).toHaveCount(0);
+  expect(claims).toBe(1);
+  expect(generations).toBe(1);
+});
+
+test("missing draft without a browser copy clears stale resume parameters", async ({ page }) => {
+  await page.goto("/signup");
+  await signUpOnWeb(page, createAuthIdentity());
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.evaluate(() => {
+    sessionStorage.removeItem("horizon.search.intent");
+    localStorage.setItem("horizon.search.guest_key", "guest-test-key");
+  });
+  let claims = 0;
+  await page.route("**/api/search-drafts/*/claim", async route => {
+    claims++;
+    await route.fulfill({ status: 404, json: {} });
+  });
+  await page.goto("/plan?resumeGenerate=1&draftId=missing-draft");
+  await expect(page.locator('[data-testid="web-plan-error"]:visible')).toHaveText("Your saved search is no longer available. Please choose a destination and try again.");
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.reload();
+  await expect(page.getByText("Your saved search is no longer available. Please choose a destination and try again.")).toHaveCount(0);
+  expect(claims).toBe(1);
+});

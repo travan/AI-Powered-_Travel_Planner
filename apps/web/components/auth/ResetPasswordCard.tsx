@@ -6,12 +6,14 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
-import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
+import { MOCK_AUTH_ENABLED } from "@/lib/supabase/mock-auth";
+import { completePasswordRecovery } from "@/lib/password-recovery";
 
 export function ResetPasswordCard() {
   const t = useTranslations("auth");
   const router = useRouter();
 
+  const [recoveryToken, setRecoveryToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +24,14 @@ export function ResetPasswordCard() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (LOCAL_AUTH_ENABLED) return;
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("recovery_token");
+    if (token) {
+      setRecoveryToken(token);
+      setIsRecoverySession(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      return;
+    }
+    if (!MOCK_AUTH_ENABLED) return;
 
     const supabase = createClient();
 
@@ -46,7 +55,7 @@ export function ResetPasswordCard() {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       setErrorMessage(t("reset_password_min"));
       return;
     }
@@ -59,20 +68,16 @@ export function ResetPasswordCard() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({ password });
-
-      if (error) {
-        setErrorMessage(error.message);
-        return;
-      }
-
+      await completePasswordRecovery(recoveryToken, password);
+      if (!MOCK_AUTH_ENABLED) await createClient().auth.signOut().catch(() => undefined);
+      setRecoveryToken("");
+      setIsRecoverySession(false);
       setSuccessMessage(t("reset_password_success"));
       setTimeout(() => {
         router.replace("/login");
       }, 900);
-    } catch {
-      setErrorMessage(t("error_generic"));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : t("error_generic"));
     } finally {
       setLoading(false);
     }
@@ -89,11 +94,7 @@ export function ResetPasswordCard() {
           <p className="text-on-surface-variant">{t("reset_password_subtitle")}</p>
         </div>
 
-        {LOCAL_AUTH_ENABLED ? (
-          <p className="mb-6 rounded-xl bg-secondary-fixed px-4 py-3 text-sm font-medium text-on-secondary-fixed">
-            {t("local_password_reset_unavailable")}
-          </p>
-        ) : !isRecoverySession && (
+        {!isRecoverySession && (
           <p className="mb-6 rounded-xl bg-secondary-fixed px-4 py-3 text-sm font-medium text-on-secondary-fixed">
             {t("reset_password_missing_session")}
           </p>
@@ -106,7 +107,7 @@ export function ResetPasswordCard() {
               <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
               <input
                 required
-                minLength={6}
+                minLength={8}
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -130,7 +131,7 @@ export function ResetPasswordCard() {
               <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
               <input
                 required
-                minLength={6}
+                minLength={8}
                 type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
@@ -153,7 +154,7 @@ export function ResetPasswordCard() {
 
           <button
             type="submit"
-            disabled={loading || !isRecoverySession || LOCAL_AUTH_ENABLED}
+            disabled={loading || !isRecoverySession}
             data-testid="reset-password-submit"
             className="w-full rounded-full bg-on-surface py-4 text-base font-bold text-surface transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-65"
           >

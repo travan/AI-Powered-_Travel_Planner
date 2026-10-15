@@ -4,12 +4,13 @@ import type { ItineraryRepository } from "../../../../../../apps/server/src/modu
 import type { CitiesService } from "../../../../../../apps/server/src/modules/cities/application/cities.service";
 
 function createRepository(
-  saveAsTrip: ItineraryRepository["saveAsTrip"]
+  saveAsTrip: ItineraryRepository["saveAsTrip"],
 ): ItineraryRepository {
   return {
     findVisible: vi.fn(),
     findForTrip: vi.fn(),
     createComplete: vi.fn(),
+    recordFailure: vi.fn(),
     saveAsTrip,
   };
 }
@@ -33,12 +34,12 @@ function createCitiesService(): CitiesService {
 describe("ItineraryService.save", () => {
   it("returns the workspace trip id after saving", async () => {
     const repository = createRepository(
-      vi.fn().mockResolvedValue({ tripId: "trip-1" })
+      vi.fn().mockResolvedValue({ tripId: "trip-1" }),
     );
     const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.save({ itineraryId: "itinerary-1", userId: "user-1" })
+      service.save({ itineraryId: "itinerary-1", userId: "user-1" }),
     ).resolves.toEqual({
       ok: true,
       value: { saved: true, trip_id: "trip-1" },
@@ -50,7 +51,7 @@ describe("ItineraryService.save", () => {
     const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.save({ itineraryId: "itinerary-1", userId: "user-2" })
+      service.save({ itineraryId: "itinerary-1", userId: "user-2" }),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -83,13 +84,31 @@ describe("ItineraryService.getForTrip", () => {
         currency: "USD",
         num_days: 5,
         num_travelers: 1,
-        seasonal_notes: { travel_month: "April", daylight_hours: "12h", sunrise_time: "06:00", sunset_time: "18:00", weather_note: "Mild", highlights: [], warnings: [] },
+        seasonal_notes: {
+          travel_month: "April",
+          daylight_hours: "12h",
+          sunrise_time: "06:00",
+          sunset_time: "18:00",
+          weather_note: "Mild",
+          highlights: [],
+          warnings: [],
+        },
         transport_summary: [],
         days: [],
         hotels: [],
         restaurants: [],
         suggestions: [],
-        budget_breakdown: { accommodation: 0, food: 0, activities: 0, transport: 0, contingency: 0, total: 1200, currency: "USD", per_person: 1200, per_day: 240 },
+        budget_breakdown: {
+          accommodation: 0,
+          food: 0,
+          activities: 0,
+          transport: 0,
+          contingency: 0,
+          total: 1200,
+          currency: "USD",
+          per_person: 1200,
+          per_day: 240,
+        },
       },
     } as never;
     const repository = createRepository(vi.fn());
@@ -97,7 +116,7 @@ describe("ItineraryService.getForTrip", () => {
     const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.getForTrip({ tripId: "trip-1", userId: "user-1" })
+      service.getForTrip({ tripId: "trip-1", userId: "user-1" }),
     ).resolves.toEqual({ ok: true, value: itinerary });
   });
 
@@ -108,7 +127,7 @@ describe("ItineraryService.getForTrip", () => {
     const service = new ItineraryService(repository, cities);
 
     await expect(
-      service.getForTrip({ tripId: "trip-1", userId: "user-1" })
+      service.getForTrip({ tripId: "trip-1", userId: "user-1" }),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -167,4 +186,48 @@ describe("ItineraryService.generate", () => {
       vi.unstubAllEnvs();
     }
   });
+});
+
+describe("AI failure persistence", () => {
+  it.each([false, true])(
+    "returns the original AI failure when diagnostic persistence fails=%s",
+    async (databaseFails) => {
+      vi.stubEnv("AI_PROVIDER", "invalid-provider");
+      const repository = createRepository(vi.fn());
+      if (databaseFails)
+        repository.recordFailure = vi
+          .fn()
+          .mockRejectedValue(new Error("database down"));
+      try {
+        const response = await new ItineraryService(
+          repository,
+          createCitiesService(),
+        ).generate({
+          userId: "user-1",
+          dto: {
+            cities: ["tokyo"],
+            num_days: 2,
+            currency: "USD",
+            trip_style: "mid_range",
+            num_travelers: 1,
+          },
+        });
+        expect(response).toMatchObject({
+          status: "unsupported",
+          code: "AI_UNAVAILABLE",
+        });
+        expect(repository.recordFailure).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: "user-1",
+            provider: "invalid-provider",
+            code: "AI_UNAVAILABLE",
+            message: expect.any(String),
+          }),
+        );
+        expect(repository.createComplete).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

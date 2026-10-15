@@ -1423,7 +1423,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         )}
 
         {state === "ready" && (
-          <section className="grid gap-5 lg:grid-cols-[240px_1fr]">
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
             <nav className="flex gap-2 overflow-x-auto rounded-3xl border border-outline-variant/30 bg-surface/90 p-2 shadow-sm lg:flex-col">
               {visibleTabs.map((tab) => (
                 <button
@@ -2640,7 +2640,7 @@ function BillsPanel(props: {
 
   return (
     <section className="space-y-5" data-testid="web-bills-panel">
-      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h2 className="font-headline text-xl font-black">Capture bill</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
@@ -2648,7 +2648,7 @@ function BillsPanel(props: {
             later feed the same bill contract.
           </p>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <select
               value={props.billForm.activityId}
               onChange={(event) =>
@@ -2750,7 +2750,7 @@ function BillsPanel(props: {
             </button>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               value={props.expenseForm.title}
               onChange={(event) =>
@@ -2951,7 +2951,7 @@ function BillsPanel(props: {
                 {formatMoney(expenseAmount, "VND")} · remaining{" "}
                 {formatMoney(customSplitDelta, "VND")}
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {selectedParticipants.map((member) => (
                   <label key={member.userId} className="block">
                     <span className="text-xs font-bold text-on-surface-variant">
@@ -2995,7 +2995,7 @@ function BillsPanel(props: {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h2 className="font-headline text-xl font-black">Captured bills</h2>
           <div className="mt-5 space-y-3" data-testid="web-bill-list">

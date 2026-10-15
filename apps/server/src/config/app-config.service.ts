@@ -127,6 +127,24 @@ export class AppConfigService {
     };
   }
 
+  get passwordRecovery() {
+    const provider = parseEnum(process.env.AUTH_PROVIDER, ["local", "supabase"], "local", "AUTH_PROVIDER");
+    const appUrl = new URL(this.env.NEXT_PUBLIC_APP_URL);
+    if (!["http:", "https:"].includes(appUrl.protocol) || (this.nodeEnv === "production" && appUrl.protocol !== "https:")) {
+      throw new Error("Password recovery requires a valid HTTP(S) app URL (HTTPS in production)");
+    }
+    return {
+      provider,
+      resetUrl: new URL("/reset-password", appUrl).toString(),
+      smtpHost: process.env.SMTP_HOST?.trim(),
+      smtpPort: parsePositiveInt(process.env.SMTP_PORT, 587, "SMTP_PORT"),
+      smtpSecure: parseBoolean(process.env.SMTP_SECURE, false),
+      smtpUser: process.env.SMTP_USER,
+      smtpPassword: process.env.SMTP_PASSWORD,
+      from: process.env.SMTP_FROM?.trim(),
+    };
+  }
+
   get mongo() {
     return {
       uri: this.env.MONGODB_URI,

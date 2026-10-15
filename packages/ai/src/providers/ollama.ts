@@ -74,7 +74,8 @@ export class OllamaProvider implements AIProvider {
       this.detailModel,
       SYSTEM_PROMPT(input.locale),
       buildDetailPrompt(input, overview, cityData),
-      8192,
+      Math.min(32768, Math.max(8192, 4096 + overview.total_days * 2500)),
+      Math.min(900_000, Math.max(180_000, overview.total_days * 60_000)),
     );
     return normalizeOllamaItinerary(parseJsonRecord(content));
   }
@@ -108,6 +109,7 @@ async function generateJson(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
+  timeoutMs = 180_000,
 ): Promise<string> {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -123,7 +125,7 @@ async function generateJson(
       stream: false,
       options: { temperature: 0.2, num_predict: maxTokens },
     }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { slugifyCityName } from "@travel/types";
+import * as travelTypes from "@travel/types";
 import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
 import type {
   City,
@@ -22,6 +22,9 @@ type CityRow = {
 
 type CityPlaceRow = CityPlace;
 type CityActivityRow = CityActivity;
+
+// tsx exposes this CommonJS workspace package through default; bundlers use named exports.
+const { slugifyCityName } = (travelTypes as unknown as { default?: typeof travelTypes }).default ?? travelTypes;
 
 @Injectable()
 export class PostgresCityRepository implements CityRepository {
@@ -160,7 +163,7 @@ export class PostgresCityRepository implements CityRepository {
       `insert into cities (
          slug, name, country, timezone, currency, lat, lon, popular, search_text
        )
-       values ($1, jsonb_build_object('en', $2, 'vi', $2), '', '', '', null, null, false, lower($2))
+       values ($1, jsonb_build_object('en', $2::text, 'vi', $2::text), '', '', '', null, null, false, lower($2))
        on conflict (slug) do nothing`,
       [slug, normalizedName]
     );

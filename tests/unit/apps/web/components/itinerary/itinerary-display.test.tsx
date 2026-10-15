@@ -35,6 +35,22 @@ describe("itinerary display components", () => {
     );
 
     expect(markup).toContain("Paris → Lyon");
-    expect(markup).toContain("Unknown mode");
+    expect(markup).toContain("Transport to be confirmed");
+  });
+});
+
+
+describe("transport data quality", () => {
+  it("hides the entire section when AI returns empty or malformed routes", () => {
+    const segments = [null, {}, { recommended_mode: "taxi" }, { from: " ", to: "Hanoi" }] as unknown as TransportSegment[];
+    expect(renderToStaticMarkup(createElement(TransportSection, { segments }))).toBe("");
+  });
+  it("keeps useful routes and never renders empty or unsafe booking links", () => {
+    const segments = [{ from: "Hoan Kiem Lake", to: "Temple of Literature", recommended_mode: "taxi", options: [null, { provider: "Taxi", type: "taxi", booking_url: "" }, { provider: "Unsafe", type: "taxi", booking_url: "javascript:alert(1)" }] }, {}] as unknown as TransportSegment[];
+    const markup = renderToStaticMarkup(createElement(TransportSection, { segments }));
+    expect(markup).toContain("Hoan Kiem Lake → Temple of Literature");
+    expect(markup).not.toContain("Book now");
+    expect(markup).not.toContain("Unknown mode");
+    expect(markup).not.toContain("javascript:");
   });
 });

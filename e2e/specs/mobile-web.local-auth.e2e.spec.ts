@@ -41,13 +41,14 @@ test("Expo Web local auth registers, loads profile, signs out, and logs back in"
   await expect(page.getByTestId("mobile-profile-email")).toHaveText(identity.email);
 });
 
-test("explains password recovery is unavailable for local mobile accounts", async ({ page }) => {
+test("local mobile recovery calls the common API", async ({ page }) => {
+  await page.route("**/api/auth/forgot-password", async route => {
+    expect(route.request().postDataJSON()).toEqual({ email: "traveler@horizon.test" });
+    await route.fulfill({ json: { ok: true }, headers: { "access-control-allow-origin": "*" } });
+  });
   await page.goto("/login");
   await page.getByTestId("mobile-auth-email").fill("traveler@horizon.test");
   await page.getByTestId("mobile-auth-forgot-password").click();
-
-  await expect(page.getByTestId("mobile-auth-reset-feedback-title")).toHaveText("Reset unavailable");
-  await expect(page.getByTestId("mobile-auth-reset-feedback-message")).toContainText(
-    "Password recovery is not available for local accounts until an email delivery service is configured",
-  );
+  await expect(page.getByTestId("mobile-auth-reset-feedback-title")).toHaveText("Reset sent");
+  await expect(page.getByTestId("mobile-auth-reset-feedback-message")).toContainText("If an account exists");
 });

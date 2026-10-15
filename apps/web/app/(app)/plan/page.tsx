@@ -213,14 +213,38 @@ export default function PlanPage() {
         const guestKey = parsed?.guestKey ?? window.localStorage.getItem(SEARCH_DRAFT_GUEST_KEY);
 
         if (draftId && guestKey) {
-          const draft = await claimSearchDraft(draftId, guestKey, session.access_token);
-          requestToGenerate = draft.search_payload;
+          try {
+            const draft = await claimSearchDraft(draftId, guestKey, session.access_token);
+            requestToGenerate = draft.search_payload;
+          } catch (claimError) {
+            // A removed draft must not discard the request saved in this browser.
+            // Auth and server failures still propagate; only missing drafts allow fallback.
+            if (!(claimError instanceof ApiRequestError) || claimError.status !== 404) throw claimError;
+          }
         }
+
+        // Consume the resume URL once, including when the server draft no longer exists.
+        // Reload must not automatically repeat a failed or already-started generation.
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("resumeGenerate");
+        cleanUrl.searchParams.delete("draftId");
+        window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
 
         if (!requestToGenerate) {
-          throw new Error("No pending search draft was found.");
+          window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+          throw new Error("Your saved search is no longer available. Please choose a destination and try again.");
         }
 
+        // Keep the recovered form editable if AI generation fails.
+        setCities(requestToGenerate.cities.map((slug, index) => ({ slug, name: requestToGenerate.city_names?.[index] ?? slug })));
+        setNumDays(requestToGenerate.num_days ?? 7);
+        setStartDate(requestToGenerate.start_date ?? "");
+        setEndDate(requestToGenerate.end_date ?? "");
+        setUseDateRange(Boolean(requestToGenerate.start_date));
+        setBudgetValue(requestToGenerate.budget ?? 3500);
+        setCurrency(requestToGenerate.currency ?? "USD");
+        setTripStyle(requestToGenerate.trip_style as TripStyleKey);
+        setNumTravelers(requestToGenerate.num_travelers ?? 2);
         window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
         const response = await generateItinerary(requestToGenerate, session.access_token);
         if (response.status === "unsupported") {

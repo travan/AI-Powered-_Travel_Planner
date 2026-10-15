@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
+import { requestPasswordRecovery } from "@/lib/password-recovery";
 import { createClient } from "@/lib/supabase/client";
 import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 import { checkAccountExists } from "@/lib/api";
@@ -180,11 +181,6 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (LOCAL_AUTH_ENABLED) {
-      setErrorMessage(t("local_password_reset_unavailable"));
-      return;
-    }
-
     if (!email.trim()) {
       setErrorMessage(t("forgot_requires_email"));
       return;
@@ -192,15 +188,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
-        return;
-      }
+      await requestPasswordRecovery(email.trim());
 
       setSuccessMessage(t("forgot_sent"));
     } catch (error) {

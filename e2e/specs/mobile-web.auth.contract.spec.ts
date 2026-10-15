@@ -76,7 +76,7 @@ test.describe("mobile web auth contract flows", () => {
     await page.getByTestId("mobile-auth-forgot-password").click();
     await expect(page.getByTestId("mobile-auth-reset-feedback-title")).toHaveText("Reset sent");
     await expect(page.getByTestId("mobile-auth-reset-feedback-message")).toContainText(
-      "Password reset instructions were sent to your email",
+      "If an account exists for this email",
     );
   });
 

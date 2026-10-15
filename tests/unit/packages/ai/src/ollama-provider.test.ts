@@ -317,12 +317,88 @@ describe("normalizeOllamaItinerary", () => {
 
     expect(prompt).toContain("3500 USD total for the entire group of 2");
     expect(prompt).toContain('Preserve style "mid_range"');
-    expect(prompt).toContain("4-5 distinct non-meal activities");
+    expect(prompt).toContain("6-8 distinct non-meal activities");
     expect(prompt).toContain("Meals do not count toward this minimum");
-    expect(prompt).toContain("Every activity name must identify a specific real venue or named area");
-    expect(prompt).toContain("exactly 2 concise but informative sentences");
-    expect(prompt).toContain("25-40 words total");
+    expect(prompt).toContain(
+      "Every activity name must identify a specific real venue or named area",
+    );
+    expect(prompt).toContain("3 concise but informative sentences");
+    expect(prompt).toContain("45-65 words total");
     expect(prompt).toContain('"daily_cost_estimate":number');
     expect(prompt).toContain('"budget_breakdown"');
   });
+});
+
+describe("Ollama response failures", () => {
+  it.each([
+    [404, '{"error":"model not found"}', "HTTP 404"],
+    [500, "backend failed", "HTTP 500"],
+    [
+      200,
+      JSON.stringify({ message: { content: '{"cities":' } }),
+      "malformed JSON",
+    ],
+    [200, JSON.stringify({ message: { content: "[]" } }), "not an object"],
+    [200, JSON.stringify({ message: { content: "null" } }), "not an object"],
+  ])(
+    "rejects status %s with invalid content %s",
+    async (status, body, error) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response(body, { status })),
+      );
+      try {
+        const provider = new OllamaProvider({
+          baseURL: "http://localhost:11434/v1/",
+          overviewModel: "qwen3.5:9b",
+          detailModel: "qwen3.5:9b",
+        });
+        await expect(
+          provider.parseNaturalInput("Tokyo for 2 days", "en"),
+        ).rejects.toThrow(error);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("propagates a timeout instead of saving fabricated output", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValue(
+          new DOMException("Inference timed out", "TimeoutError"),
+        ),
+    );
+    try {
+      const provider = new OllamaProvider({
+        baseURL: "http://localhost:11434",
+        overviewModel: "qwen3.5:9b",
+        detailModel: "qwen3.5:9b",
+      });
+      await expect(provider.parseNaturalInput("Tokyo", "en")).rejects.toThrow(
+        "Inference timed out",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+it("allows larger output for a detailed seven-day local itinerary", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: { content: JSON.stringify({ days: [] }) } }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    const provider = new OllamaProvider({ baseURL: "http://localhost:11434/v1", overviewModel: "gemma4:latest", detailModel: "qwen3.5:9b" });
+    await provider.generateDetail(
+      { cities: ["hanoi"], num_days: 7, currency: "USD", trip_style: "budget", locale: "en", num_travelers: 3 },
+      { title: "Hanoi", overview: "Hanoi", cities: ["Hanoi"], total_days: 7, estimated_budget: { min: 500, max: 500, currency: "USD" }, day_plan: ["Hanoi"] },
+      [emptyCityData("Hanoi")],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body.options.num_predict).toBe(21596);
+    expect(body.messages[1].content).toContain("6-8 distinct non-meal activities");
+    expect(body.messages[1].content).toContain("Never return empty objects, placeholder routes");
+  } finally { vi.unstubAllGlobals(); }
 });

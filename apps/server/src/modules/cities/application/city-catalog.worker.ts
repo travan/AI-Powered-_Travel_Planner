@@ -5,7 +5,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from "@nestjs/common";
-import { slugifyCityName } from "@travel/types";
+import * as travelTypes from "@travel/types";
 import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
 
 const MAX_ATTEMPTS = 5;
@@ -38,6 +38,9 @@ type CatalogPlace = {
   category: "hotel" | "restaurant";
   address: string | null;
 };
+
+// tsx exposes this CommonJS workspace package through default; bundlers use named exports.
+const { slugifyCityName } = (travelTypes as unknown as { default?: typeof travelTypes }).default ?? travelTypes;
 
 @Injectable()
 export class CityCatalogWorker implements OnModuleInit, OnModuleDestroy {

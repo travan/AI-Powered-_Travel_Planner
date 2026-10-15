@@ -13,7 +13,7 @@ x-server-env: &server-env
   NODE_ENV: ${API_NODE_ENV:-development}
   PORT: 3001
   SERVE_WEB: "false"
-  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
   CORS_ORIGINS: http://localhost:3000,http://localhost:8081
   DATABASE_PROVIDER: postgres
   POSTGRES_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
@@ -37,24 +37,30 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./postgres/000-create-app-role.sh:/docker-entrypoint-initdb.d/000-create-app-role.sh:ro
-      - ../../apps/server/src/database/migrations/001_local_postgres.sql:/docker-entrypoint-initdb.d/001_local_postgres.sql:ro
-      - ../../apps/server/src/database/migrations/003_collaboration_finance.sql:/docker-entrypoint-initdb.d/003_collaboration_finance.sql:ro
-      - ../../apps/server/src/database/migrations/004_schedule_transport.sql:/docker-entrypoint-initdb.d/004_schedule_transport.sql:ro
-      - ../../apps/server/src/database/migrations/005_review_ocr_recommendations.sql:/docker-entrypoint-initdb.d/005_review_ocr_recommendations.sql:ro
-      - ../../apps/server/src/database/migrations/006_local_workspace_core_compat.sql:/docker-entrypoint-initdb.d/006_local_workspace_core_compat.sql:ro
-      - ../../apps/server/src/database/migrations/007_repair_self_accepted_invites.sql:/docker-entrypoint-initdb.d/007_repair_self_accepted_invites.sql:ro
-      - ../../apps/server/src/database/migrations/008_trip_schedule_compatibility.sql:/docker-entrypoint-initdb.d/008_trip_schedule_compatibility.sql:ro
-      - ../../apps/server/src/database/migrations/009_server_workspace_compatibility.sql:/docker-entrypoint-initdb.d/009_server_workspace_compatibility.sql:ro
-      - ../../apps/server/src/database/migrations/010_manual_city_catalog.sql:/docker-entrypoint-initdb.d/010_manual_city_catalog.sql:ro
-      - ../../apps/server/src/database/migrations/011_ai_city_catalog_worker.sql:/docker-entrypoint-initdb.d/011_ai_city_catalog_worker.sql:ro
-      - ./postgres/999-grant-app-role.sh:/docker-entrypoint-initdb.d/999-grant-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.server
+    image: ai-travel-planner:server
+    working_dir: /app/apps/server
+    command: ["node", "scripts/init-local-postgres.mjs"]
+    environment:
+      DATABASE_PROVIDER: postgres
+      POSTGRES_URL: postgresql://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
+      POSTGRES_ADMIN_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+    volumes:
+      - ../../apps/server/src/database/migrations:/app/apps/server/src/database/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   mongo:
     image: mongo:7
@@ -74,6 +80,8 @@ services:
     <<: *app-image
     container_name: travel-planner-server
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       mongo:
@@ -103,7 +111,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_PROXY_TARGET: http://server:3001
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_URL: ""
       AUTH_PROVIDER: local
       NEXT_PUBLIC_AUTH_PROVIDER: local

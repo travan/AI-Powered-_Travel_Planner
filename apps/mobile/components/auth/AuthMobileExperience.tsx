@@ -151,11 +151,10 @@ export function AuthMobileExperience({ mode }: Props) {
 
     setSubmitting(true);
     try {
-      const webUrl = process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:3005";
-      await requestPasswordReset(email, `${webUrl}/reset-password`);
+      await requestPasswordReset(email);
       setResetFeedback({
         title: "Reset sent",
-        message: "Password reset instructions were sent to your email.",
+        message: "If an account exists for this email, password reset instructions will be sent.",
         isError: false,
       });
     } catch (error) {

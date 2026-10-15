@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
+    // Detailed local itineraries scale up to 15 minutes; allow the provider to finish.
+    proxyTimeout: 960_000,
     serverActions: { allowedOrigins: ["localhost:3000"] },
   },
   async rewrites() {
