@@ -19,6 +19,8 @@ x-server-env: &server-env
   MONGODB_URI: mongodb://mongo:27017/travel_planner
   MONGODB_DB_NAME: travel_planner
   JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the environment before starting a deployment profile}
+  NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8081}
 
 services:
   postgres:
@@ -87,7 +89,7 @@ services:
     environment:
       <<: *server-env
       NEXT_PUBLIC_APP_URL: http://localhost:3100
-      CORS_ORIGINS: http://localhost:3100
+      CORS_ORIGINS: ${STAGING_CORS_ORIGINS:-http://localhost:3100}
     ports:
       - "3101:3001"
     command: ["pnpm", "--dir", "apps/server", "start"]

@@ -125,6 +125,10 @@ pnpm dev:server              # API only
 
 To expose both frontend and backend under one domain, this project supports proxying `/api/*` and `/health` from Next.js to the API service.
 
+**Vercel deployments:** The `apps/web` project deploys only Next.js. It does not start `apps/server`, PostgreSQL, MongoDB, Redis, or Docker Compose. Login, city search, and itinerary generation require a separately running API with reachable databases. Deploy the API and databases first, then set `API_PROXY_TARGET` in the Vercel project to the API's stable HTTPS origin and redeploy the web project. Leave `NEXT_PUBLIC_API_URL` empty to use the same-origin proxy. Never use `localhost` or a Docker service name as `API_PROXY_TARGET` on Vercel; those addresses refer to Vercel's runtime, not your computer. Verify `https://<web-domain>/health` and `https://<web-domain>/api/cities/popular` both return HTTP 200 before testing login. The API also needs a production `JWT_SECRET`, `NEXT_PUBLIC_APP_URL` set to the web origin, database connections, and email settings for local password recovery.
+
+A [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/) can publish the Docker API from a machine you control, but the containers and data stay on that machine and stop serving when it or the tunnel stops. Use a stable hostname for an API target. [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) change hostname on restart and do not support SSE, which the itinerary flow uses. Cloudflare's free Workers hosting does not run this Docker Compose stack or its database volumes.
+
 1. Configure web env in `apps/web/.env.local`:
    ```env
    NEXT_PUBLIC_API_URL=

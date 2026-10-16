@@ -108,7 +108,7 @@ services:
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       FREE_DAILY_GENERATE_LIMIT: ${FREE_DAILY_GENERATE_LIMIT:-3}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      CORS_ORIGINS: http://localhost:${UI_PORT:-3000},http://ui:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:${UI_PORT:-3000},http://ui:3000}
       TEST_ENABLE_MOCK_TOKENS: ${TEST_ENABLE_MOCK_TOKENS:-false}
     ports:
       - "${API_PORT:-3001}:3001"

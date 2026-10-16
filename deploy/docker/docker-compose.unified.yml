@@ -14,7 +14,7 @@ x-server-env: &server-env
   PORT: 3001
   SERVE_WEB: "false"
   NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-  CORS_ORIGINS: http://localhost:3000,http://localhost:8081
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8081}
   DATABASE_PROVIDER: postgres
   POSTGRES_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
   DATABASE_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
