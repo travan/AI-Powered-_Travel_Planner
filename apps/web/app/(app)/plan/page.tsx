@@ -147,6 +147,7 @@ export default function PlanPage() {
   const [tripStyle, setTripStyle] = useState<TripStyleKey>("mid_range");
   const [numTravelers, setNumTravelers] = useState(2);
   const [loading, setLoading] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ── Data from API ──────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ export default function PlanPage() {
         if (!target) {
           throw new Error("Generation response is missing the next route target.");
         }
-        router.replace(`/trips?source=${target.kind}&id=${target.id}`);
+        router.replace(`/trips?source=${target.kind}&id=${target.id}${response.status === "cached" && response.cache_hit ? "&reused=1" : ""}`);
       } catch (e: unknown) {
         if (serializedIntent && shouldRestorePendingSearchIntent(e)) {
           window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, serializedIntent);
@@ -350,6 +351,7 @@ export default function PlanPage() {
       locale: "en",
     });
     requestPayload.prompt_text = buildPromptText(requestPayload);
+    if (forceRefresh) requestPayload.force_refresh = true;
 
     try {
       const supabase = createClient();
@@ -390,7 +392,7 @@ export default function PlanPage() {
         throw new Error("Generation response is missing the next route target.");
       }
 
-      router.push(`/trips?source=${target.kind}&id=${target.id}`);
+      router.push(`/trips?source=${target.kind}&id=${target.id}${response.status === "cached" && response.cache_hit ? "&reused=1" : ""}`);
     } catch (e: unknown) {
       if (isUnauthorizedError(e) && typeof window !== "undefined") {
         const intent = await createServerBackedIntent(requestPayload);
@@ -646,6 +648,10 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input type="checkbox" checked={forceRefresh} onChange={(event) => setForceRefresh(event.target.checked)} disabled={loading} />
+                Generate a new version with AI, even if this exact trip was saved
+              </label>
               <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary py-5 rounded-full font-headline font-extrabold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                 {loading ? (
@@ -658,7 +664,7 @@ export default function PlanPage() {
                     auto_awesome
                   </span>
                 )}
-                {loading ? "Building your journey…" : "Generate Magic Itinerary"}
+                {loading ? "Finding or building your journey…" : "Generate Magic Itinerary"}
               </button>
             </div>
           </section>
@@ -858,6 +864,10 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input type="checkbox" checked={forceRefresh} onChange={(event) => setForceRefresh(event.target.checked)} disabled={loading} />
+                Generate a new version with AI, even if this exact trip was saved
+              </label>
               <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary font-bold py-5 rounded-full text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed font-headline">
                 {loading ? (
@@ -866,7 +876,7 @@ export default function PlanPage() {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 ) : null}
-                {loading ? "Building your journey…" : "Generate Magic Itinerary"}
+                {loading ? "Finding or building your journey…" : "Generate Magic Itinerary"}
                 {!loading && <span className="material-symbols-outlined">auto_awesome</span>}
               </button>
             </div>

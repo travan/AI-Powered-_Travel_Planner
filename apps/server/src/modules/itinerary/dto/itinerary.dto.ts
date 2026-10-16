@@ -2,6 +2,7 @@ import { Transform } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
   IsArray,
   IsIn,
   IsInt,
@@ -74,4 +75,8 @@ export class GenerateItineraryDto {
   @IsOptional()
   @IsString()
   prompt_text?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  force_refresh?: boolean;
 }

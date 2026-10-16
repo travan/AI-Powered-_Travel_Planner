@@ -58,13 +58,28 @@ test("Qwen response is normalized, persisted, catalogued, saved idempotently and
   expect(response.ok()).toBeTruthy();
   const generated = await response.json();
   expect(generated.status).toBe("cached");
+  expect(generated.cache_hit).toBe(false);
   expect(generated.result.days[0].activities[0].name).toBe("Senso-ji");
+  expect(generated.result.ai_usage).toEqual([
+    expect.objectContaining({
+      provider: "ollama",
+      model: "qwen3.5:9b",
+      operation: "detail",
+      input_tokens: 320,
+      output_tokens: 180,
+      total_tokens: 500,
+      duration_ms: 2400,
+    }),
+  ]);
   const stored = await db.query(
     "select status, result from itineraries where id = $1",
     [generated.itinerary_id],
   );
   expect(stored.rows[0].status).toBe("complete");
   expect(stored.rows[0].result).toEqual(generated.result);
+  const reopenedItinerary = await request.get(`/api/itinerary/${generated.itinerary_id}`, { headers });
+  expect(reopenedItinerary.ok()).toBeTruthy();
+  expect((await reopenedItinerary.json()).itineraries[0].ai_usage).toEqual(generated.result.ai_usage);
   await expect
     .poll(
       async () =>
@@ -96,6 +111,77 @@ test("Qwen response is normalized, persisted, catalogued, saved idempotently and
   );
 });
 
+test("an exact repeat reuses the itinerary; changed inputs use the city catalog for a new AI call", async ({ request }) => {
+  const name = `New Harbor ${randomUUID().slice(0, 8)}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const data = { ...input, cities: [name], city_names: [name] };
+  const first = await request.post("/api/itinerary/generate", { headers, data });
+  expect(first.ok()).toBeTruthy();
+  const firstBody = await first.json();
+  expect(firstBody.status).toBe("cached");
+
+  const cityRows = await db.query("select slug from cities where name->>'en' = $1", [name]);
+  expect(cityRows.rows).toHaveLength(1);
+  const slug = cityRows.rows[0].slug;
+  try {
+    await expect.poll(async () => (await db.query(
+      "select status from city_catalog_ingestion_jobs where itinerary_id = $1",
+      [firstBody.itinerary_id],
+    )).rows[0]?.status).toBe("completed");
+    expect((await db.query("select title from activity_catalog where city_slug = $1", [slug])).rows)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ title: "Senso-ji" })]));
+
+    const second = await request.post("/api/itinerary/generate", { headers, data });
+    expect(second.ok()).toBeTruthy();
+    const secondBody = await second.json();
+    expect(secondBody).toMatchObject({ cache_hit: true, itinerary_id: firstBody.itinerary_id });
+    expect((await db.query("select slug from cities where name->>'en' = $1", [name])).rows).toHaveLength(1);
+    expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(1);
+
+    const changed = await request.post("/api/itinerary/generate", {
+      headers, data: { ...data, budget: 750 },
+    });
+    expect(changed.ok()).toBeTruthy();
+    const changedBody = await changed.json();
+    expect(changedBody.cache_hit).toBe(false);
+    expect(changedBody.itinerary_id).not.toBe(firstBody.itinerary_id);
+    const calls = await (await request.get("http://127.0.0.1:3349/calls")).json();
+    expect(calls.count).toBe(2);
+    expect(calls.prompts[0]).not.toContain("Senso-ji");
+    expect(calls.prompts[1]).toContain("Senso-ji");
+
+    const refreshed = await request.post("/api/itinerary/generate", {
+      headers, data: { ...data, force_refresh: true },
+    });
+    expect(refreshed.ok()).toBeTruthy();
+    expect((await refreshed.json()).cache_hit).toBe(false);
+    expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(3);
+
+    const other = await request.post("/api/auth/register", {
+      data: { email: `cache-${randomUUID()}@test.invalid`, password: "Test-password-9x!" },
+    });
+    expect(other.ok()).toBeTruthy();
+    const otherUser = await other.json();
+    try {
+      const privateResult = await request.post("/api/itinerary/generate", {
+        headers: { Authorization: `Bearer ${otherUser.session.access_token}` },
+        data,
+      });
+      expect(privateResult.ok()).toBeTruthy();
+      expect((await privateResult.json()).cache_hit).toBe(false);
+      expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(4);
+    } finally {
+      await db.query("delete from itineraries where user_id = $1", [otherUser.user.id]);
+      await db.query("delete from users where id = $1", [otherUser.user.id]);
+    }
+  } finally {
+    await db.query("delete from itineraries where user_id = $1", [userId]);
+    await db.query("delete from activity_catalog where city_slug = $1", [slug]);
+    await db.query("delete from place_catalog where city_slug = $1", [slug]);
+    await db.query("delete from cities where slug = $1", [slug]);
+  }
+});
+
 for (const [mode, code] of [
   ["http-error", "AI_UNAVAILABLE"],
   ["malformed", "AI_UNAVAILABLE"],
@@ -124,6 +210,11 @@ for (const [mode, code] of [
       status: "failed",
       result: { error: { provider: "ollama", code } },
     });
+    if (mode !== "http-error") {
+      expect(rows.rows[0].result.ai_usage).toEqual([
+        expect.objectContaining({ input_tokens: 320, output_tokens: 180, total_tokens: 500 }),
+      ]);
+    }
     const jobs = await db.query(
       "select id from city_catalog_ingestion_jobs where itinerary_id = $1",
       [rows.rows[0].id],

@@ -1,4 +1,9 @@
-import type { ItineraryInput, ItineraryOverview, Itinerary } from "@travel/types";
+import type {
+  ItineraryInput,
+  ItineraryOverview,
+  Itinerary,
+  AiTokenUsage,
+} from "@travel/types";
 import type { AIProvider, PreFetchedCityData } from "../provider.js";
 import {
   buildOverviewPrompt,
@@ -18,6 +23,11 @@ export class OpenAIProvider implements AIProvider {
   private naturalInputModel: string;
   private maxTokens?: number;
   private disableThinking: boolean;
+  private readonly usage: AiTokenUsage[] = [];
+
+  getUsage(): AiTokenUsage[] {
+    return [...this.usage];
+  }
 
   constructor(
     apiKey: string,
@@ -59,6 +69,7 @@ export class OpenAIProvider implements AIProvider {
       ],
     };
     const response = await this.client.chat.completions.create(request);
+    this.recordUsage(response, "overview");
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty overview response");
@@ -83,6 +94,7 @@ export class OpenAIProvider implements AIProvider {
       ],
     };
     const response = await this.client.chat.completions.create(request);
+    this.recordUsage(response, "detail");
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty detail response");
@@ -123,5 +135,23 @@ export class OpenAIProvider implements AIProvider {
     const content = response.choices[0]?.message.content;
     if (!content) return {};
     return JSON.parse(content) as Partial<ItineraryInput>;
+  }
+
+  private recordUsage(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+    operation: AiTokenUsage["operation"],
+  ): void {
+    const input = response.usage?.prompt_tokens ?? null;
+    const output = response.usage?.completion_tokens ?? null;
+    this.usage.push({
+      operation,
+      provider: "openai",
+      model: response.model || this.model,
+      input_tokens: input,
+      output_tokens: output,
+      total_tokens:
+        response.usage?.total_tokens ??
+        (input !== null && output !== null ? input + output : null),
+    });
   }
 }

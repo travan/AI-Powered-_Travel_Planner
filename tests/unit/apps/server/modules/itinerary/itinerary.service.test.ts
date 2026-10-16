@@ -9,6 +9,7 @@ function createRepository(
   return {
     findVisible: vi.fn(),
     findForTrip: vi.fn(),
+    findReusable: vi.fn().mockResolvedValue(null),
     createComplete: vi.fn(),
     recordFailure: vi.fn(),
     saveAsTrip,
@@ -140,6 +141,49 @@ describe("ItineraryService.getForTrip", () => {
 });
 
 describe("ItineraryService.generate", () => {
+  it("reuses an exact saved result without constructing an AI provider", async () => {
+    vi.stubEnv("AI_PROVIDER", "invalid-provider");
+    const repository = createRepository(vi.fn());
+    const stored = { title: "Saved Hanoi trip", days: [{ city: "Hanoi" }] } as never;
+    repository.findReusable = vi.fn().mockResolvedValue({ id: "saved-1", result: stored });
+    try {
+      const response = await new ItineraryService(repository, createCitiesService()).generate({
+        userId: "user-1",
+        dto: {
+          cities: ["hanoi"], city_names: ["Hanoi"], num_days: 7,
+          budget: 500, currency: "USD", trip_style: "budget", num_travelers: 3,
+        },
+      });
+      expect(response).toMatchObject({ status: "cached", cache_hit: true, itinerary_id: "saved-1", result: stored });
+      expect(repository.createComplete).not.toHaveBeenCalled();
+      expect(repository.findReusable).toHaveBeenCalledWith({ userId: "user-1", cacheKey: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("honors force_refresh and calls AI for a new version", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
+    const repository = createRepository(vi.fn());
+    repository.createComplete = vi.fn().mockResolvedValue("fresh-1");
+    repository.findReusable = vi.fn().mockResolvedValue({ id: "saved-1", result: { days: [{}] } });
+    try {
+      const response = await new ItineraryService(repository, createCitiesService()).generate({
+        userId: "user-1",
+        dto: {
+          cities: ["hanoi"], city_names: ["Hanoi"], num_days: 1,
+          budget: 500, currency: "USD", trip_style: "budget", num_travelers: 3,
+          force_refresh: true,
+        },
+      });
+      expect(response).toMatchObject({ status: "cached", cache_hit: false, itinerary_id: "fresh-1" });
+      expect(repository.findReusable).not.toHaveBeenCalled();
+      expect(repository.createComplete).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("generates and saves an itinerary when a destination is not in the city catalog", async () => {
     vi.stubEnv("AI_PROVIDER", "mock");
     const repository = createRepository(vi.fn());

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import type { Itinerary } from "@travel/types";
 import { Badge } from "@travel/ui";
 
@@ -40,6 +41,20 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
       </div>
 
       <p className="text-gray-700 leading-relaxed">{itinerary.overview}</p>
+
+      {itinerary.ai_usage && itinerary.ai_usage.length > 0 && (
+        <details className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          <summary className="cursor-pointer font-medium">AI tokens used when this itinerary was created</summary>
+          <ul className="mt-2 space-y-1">
+            {itinerary.ai_usage.map((call, index) => (
+              <li key={`${call.operation}-${index}`}>
+                {call.operation} · {call.provider}/{call.model}: {call.input_tokens?.toLocaleString() ?? "unknown"} input + {call.output_tokens?.toLocaleString() ?? "unknown"} output = {call.total_tokens?.toLocaleString() ?? "unknown"} tokens
+                {call.duration_ms != null ? ` · ${(call.duration_ms / 1000).toFixed(1)}s` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {/* Day plan pills */}
       <div className="flex flex-wrap gap-2">

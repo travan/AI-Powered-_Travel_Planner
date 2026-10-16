@@ -7,7 +7,6 @@ import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { requestPasswordRecovery } from "@/lib/password-recovery";
 import { createClient } from "@/lib/supabase/client";
-import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 import { checkAccountExists } from "@/lib/api";
 import { normalizeSupabaseAuthError } from "@travel/types";
 

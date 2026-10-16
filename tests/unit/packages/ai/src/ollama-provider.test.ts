@@ -190,6 +190,9 @@ describe("normalizeOllamaItinerary", () => {
             }),
           },
           done_reason: "stop",
+          prompt_eval_count: 260,
+          eval_count: 140,
+          total_duration: 1_750_000_000,
         }),
         { status: 200 },
       ),
@@ -225,6 +228,15 @@ describe("normalizeOllamaItinerary", () => {
       );
 
       expect(result.days[0]?.activities[0]?.name).toBe("Visit Senso-ji");
+      expect(provider.getUsage()).toEqual([{
+        operation: "detail",
+        provider: "ollama",
+        model: "qwen3.5:9b",
+        input_tokens: 260,
+        output_tokens: 140,
+        total_tokens: 400,
+        duration_ms: 1750,
+      }]);
       expect(fetchMock).toHaveBeenCalledWith(
         "http://127.0.0.1:11434/api/chat",
         expect.objectContaining({ method: "POST" }),

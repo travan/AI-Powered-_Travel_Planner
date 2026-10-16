@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   notFound,
@@ -12,11 +13,13 @@ import {
 import {
   createAIProvider,
   MockAIProvider,
+  type AIProvider,
   type AIProviderName,
   type PreFetchedCityData,
 } from "@travel/ai";
 import type {
   GenerateResponse,
+  AiTokenUsage,
   Itinerary,
   ItineraryInput,
   ItineraryOverview,
@@ -102,18 +105,44 @@ export class ItineraryService {
       }),
     );
     const cityData = rememberedCities.map(({ planningData }) => planningData);
+    const providerName = process.env["AI_PROVIDER"] ?? "mock";
+    const cacheKey = generationCacheKey(
+      request,
+      rememberedCities.map(({ catalogReference }) => catalogReference.slug),
+      providerName,
+    );
+    if (!input.dto.force_refresh) {
+      const reusable = await this.itineraries.findReusable({
+        userId: input.userId,
+        cacheKey,
+      });
+      if (reusable) {
+        return {
+          status: "cached",
+          itinerary_id: reusable.id,
+          result: reusable.result,
+          cache_hit: true,
+        };
+      }
+    }
     let overview: ItineraryOverview;
     let detail: Itinerary;
-    const providerName = process.env["AI_PROVIDER"] ?? "mock";
+    let provider: AIProvider | undefined;
 
     try {
-      const provider =
+      provider =
         providerName === "mock"
           ? new MockAIProvider()
           : createAIProvider(providerName as AIProviderName);
       overview = await provider.generateOverview(request, cityData);
       detail = await provider.generateDetail(request, overview, cityData);
+      const usage = provider.getUsage?.() ?? [];
+      if (usage.length) {
+        detail.ai_usage = usage;
+        this.logger.log(`AI usage for ${input.userId}: ${JSON.stringify(usage)}`);
+      }
     } catch (error) {
+      const usage = provider?.getUsage?.() ?? [];
       const details =
         error instanceof Error ? (error.stack ?? error.message) : String(error);
       this.logger.error(
@@ -126,10 +155,12 @@ export class ItineraryService {
         providerName,
         "AI_UNAVAILABLE",
         error,
+        usage,
       );
       return {
         status: "unsupported",
         code: "AI_UNAVAILABLE",
+        ...(usage.length ? { ai_usage: usage } : {}),
         message: providerName === "ollama"
           ? "The local AI service could not complete this request. Check that Ollama is running and the configured model is available, then try again."
           : "The AI service could not complete this request. Please try again shortly.",
@@ -137,21 +168,25 @@ export class ItineraryService {
     }
 
     if (!Array.isArray(detail.days) || detail.days.length === 0) {
+      const usage = provider?.getUsage?.() ?? [];
       await this.recordFailure(
         input.userId,
         request,
         providerName,
         "NO_ITINERARY",
         "Model returned no itinerary days",
+        usage,
       );
       return {
         status: "unsupported",
         code: "NO_ITINERARY",
+        ...(usage.length ? { ai_usage: usage } : {}),
         message:
           "There are not enough recommendations to build a usable itinerary for this request.",
       };
     }
 
+    detail.generation_cache_key = cacheKey;
     const itineraryId = await this.itineraries.createComplete({
       userId: input.userId,
       request,
@@ -164,6 +199,7 @@ export class ItineraryService {
       status: "cached" as const,
       itinerary_id: itineraryId,
       result: detail,
+      cache_hit: false,
     };
   }
   private async recordFailure(
@@ -172,6 +208,7 @@ export class ItineraryService {
     provider: string,
     code: string,
     error: unknown,
+    usage: AiTokenUsage[] = [],
   ): Promise<void> {
     try {
       await this.itineraries.recordFailure({
@@ -180,6 +217,7 @@ export class ItineraryService {
         provider,
         code,
         message: error instanceof Error ? error.message : String(error),
+        usage,
       });
     } catch (persistenceError) {
       this.logger.error(
@@ -190,6 +228,32 @@ export class ItineraryService {
       );
     }
   }
+}
+
+function generationCacheKey(
+  request: ItineraryInput,
+  citySlugs: string[],
+  provider: string,
+): string {
+  // Bump the version when the itinerary prompt or response contract changes.
+  const model = provider === "ollama"
+    ? process.env["OLLAMA_DETAIL_MODEL"]?.trim() || "qwen3.5:9b"
+    : provider;
+  return createHash("sha256").update(JSON.stringify({
+    version: 1,
+    provider,
+    model,
+    cities: citySlugs,
+    start_date: request.start_date ?? null,
+    end_date: request.end_date ?? null,
+    num_days: request.num_days ?? null,
+    budget: request.budget ?? null,
+    currency: request.currency.toUpperCase(),
+    trip_style: request.trip_style,
+    locale: request.locale,
+    num_travelers: request.num_travelers,
+    prompt_text: request.prompt_text?.trim() ?? "",
+  })).digest("hex");
 }
 
 function normalizeTripStyle(style: string): TripStyle {

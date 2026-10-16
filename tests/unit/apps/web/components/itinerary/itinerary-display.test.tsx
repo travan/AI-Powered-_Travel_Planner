@@ -3,9 +3,34 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ActivityCard } from "../../../../../../apps/web/components/itinerary/ActivityCard";
 import { TransportSection } from "../../../../../../apps/web/components/itinerary/TransportSection";
-import type { Activity, GoldenMoment, TransportSegment } from "@travel/types";
+import { OverviewCard } from "../../../../../../apps/web/components/itinerary/OverviewCard";
+import type { Activity, GoldenMoment, Itinerary, TransportSegment } from "@travel/types";
 
 describe("itinerary display components", () => {
+  it("shows measured AI tokens on a reopened itinerary", () => {
+    const itinerary = {
+      title: "Hanoi trip",
+      overview: "A city walk.",
+      num_days: 1,
+      num_travelers: 1,
+      currency: "USD",
+      total_cost: 100,
+      days: [],
+      ai_usage: [{
+        operation: "detail",
+        provider: "ollama",
+        model: "qwen3.5:9b",
+        input_tokens: 1200,
+        output_tokens: 800,
+        total_tokens: 2000,
+        duration_ms: 5000,
+      }],
+    } as Itinerary;
+    const markup = renderToStaticMarkup(createElement(OverviewCard, { itinerary }));
+    expect(markup).toContain("AI tokens used when this itinerary was created");
+    expect(markup).toContain("1,200 input + 800 output = 2,000 tokens");
+  });
+
   it("renders an activity when optional model fields are incomplete", () => {
     const activity = {
       name: "Museum visit",

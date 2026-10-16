@@ -313,6 +313,11 @@ export default function TripsPage() {
 
         {state === "ready" && hasGeneratedContext && itinerary && (
           <section className="space-y-4">
+            {searchParams.get("reused") === "1" && (
+              <p className="rounded-xl border border-primary/30 bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant">
+                Reused your saved itinerary. No AI model was called for this request.
+              </p>
+            )}
             <OverviewCard itinerary={itinerary} />
             <div className="flex justify-end">
               <Link

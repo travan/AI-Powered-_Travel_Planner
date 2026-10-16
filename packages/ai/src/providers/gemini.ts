@@ -1,4 +1,9 @@
-import type { ItineraryInput, ItineraryOverview, Itinerary } from "@travel/types";
+import type {
+  ItineraryInput,
+  ItineraryOverview,
+  Itinerary,
+  AiTokenUsage,
+} from "@travel/types";
 import type { AIProvider, PreFetchedCityData } from "../provider.js";
 import {
   buildOverviewPrompt,
@@ -11,13 +16,22 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenerativeAI;
   private model: string;
+  private readonly usage: AiTokenUsage[] = [];
+
+  getUsage(): AiTokenUsage[] {
+    return [...this.usage];
+  }
 
   constructor(apiKey: string, model = "gemini-1.5-pro") {
     this.client = new GoogleGenerativeAI(apiKey);
     this.model = model;
   }
 
-  private async callModel(systemPrompt: string, userPrompt: string): Promise<string> {
+  private async callModel(
+    systemPrompt: string,
+    userPrompt: string,
+    operation?: AiTokenUsage["operation"],
+  ): Promise<string> {
     const genModel = this.client.getGenerativeModel({
       model: this.model,
       systemInstruction: systemPrompt,
@@ -25,6 +39,20 @@ export class GeminiProvider implements AIProvider {
     });
 
     const result = await genModel.generateContent(userPrompt);
+    if (operation) {
+      const input = result.response.usageMetadata?.promptTokenCount ?? null;
+      const output = result.response.usageMetadata?.candidatesTokenCount ?? null;
+      this.usage.push({
+        operation,
+        provider: "gemini",
+        model: this.model,
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens:
+          result.response.usageMetadata?.totalTokenCount ??
+          (input !== null && output !== null ? input + output : null),
+      });
+    }
     const text = result.response.text();
     if (!text) throw new Error("Gemini returned empty response");
     return text;
@@ -36,7 +64,8 @@ export class GeminiProvider implements AIProvider {
   ): Promise<ItineraryOverview> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
-      buildOverviewPrompt(input, cityData)
+      buildOverviewPrompt(input, cityData),
+      "overview",
     );
     return JSON.parse(text) as ItineraryOverview;
   }
@@ -48,7 +77,8 @@ export class GeminiProvider implements AIProvider {
   ): Promise<Itinerary> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
-      buildDetailPrompt(input, overview, cityData)
+      buildDetailPrompt(input, overview, cityData),
+      "detail",
     );
     return JSON.parse(text) as Itinerary;
   }

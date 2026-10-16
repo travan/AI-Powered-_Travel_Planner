@@ -4,6 +4,7 @@ import type {
   ItineraryInput,
   ItineraryOverview,
   Itinerary,
+  AiTokenUsage,
 } from "@travel/types";
 import {
   buildDetailPrompt,
@@ -23,6 +24,11 @@ export class OllamaProvider implements AIProvider {
   private readonly overviewModel: string;
   private readonly detailModel: string;
   private readonly openAICompatible: OpenAIProvider;
+  private readonly usage: AiTokenUsage[] = [];
+
+  getUsage(): AiTokenUsage[] {
+    return [...this.usage];
+  }
 
   constructor(options: OllamaProviderOptions) {
     this.chatEndpoint = getOllamaChatEndpoint(options.baseURL);
@@ -76,6 +82,7 @@ export class OllamaProvider implements AIProvider {
       buildDetailPrompt(input, overview, cityData),
       Math.min(32768, Math.max(8192, 4096 + overview.total_days * 2500)),
       Math.min(900_000, Math.max(180_000, overview.total_days * 60_000)),
+      (payload) => this.usage.push(toUsage(payload, this.detailModel, "detail")),
     );
     return normalizeOllamaItinerary(parseJsonRecord(content));
   }
@@ -110,6 +117,7 @@ async function generateJson(
   userPrompt: string,
   maxTokens: number,
   timeoutMs = 180_000,
+  onPayload?: (payload: Record<string, unknown>) => void,
 ): Promise<string> {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -137,6 +145,7 @@ async function generateJson(
 
   const payload: unknown = await response.json();
   const result = record(payload);
+  onPayload?.(result);
   const message = record(result["message"]);
   const content = text(message["content"]);
   if (!content) {
@@ -146,6 +155,26 @@ async function generateJson(
     );
   }
   return content;
+}
+
+function toUsage(
+  payload: Record<string, unknown>,
+  model: string,
+  operation: AiTokenUsage["operation"],
+): AiTokenUsage {
+  const input = nonNegativeNumber(payload["prompt_eval_count"]);
+  const output = nonNegativeNumber(payload["eval_count"]);
+  const total = input !== undefined && output !== undefined ? input + output : null;
+  const durationNs = nonNegativeNumber(payload["total_duration"]);
+  return {
+    operation,
+    provider: "ollama",
+    model,
+    input_tokens: input ?? null,
+    output_tokens: output ?? null,
+    total_tokens: total,
+    duration_ms: durationNs === undefined ? null : Math.round(durationNs / 1_000_000),
+  };
 }
 
 function parseJsonRecord(content: string): Record<string, unknown> {

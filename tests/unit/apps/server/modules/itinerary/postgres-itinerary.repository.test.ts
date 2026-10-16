@@ -11,6 +11,19 @@ const request = {
 };
 
 describe("itinerary persistence", () => {
+  it("looks up only the requesting user's recent complete itinerary", async () => {
+    const cached = { id: "itinerary-1", result: { days: [{ city: "Hanoi" }] } };
+    const query = vi.fn().mockResolvedValue({ rows: [cached] });
+    const repository = new PostgresItineraryRepository({ query });
+    await expect(repository.findReusable({ userId: "user-1", cacheKey: "key-1" }))
+      .resolves.toEqual(cached);
+    const [sql, values] = query.mock.calls[0]!;
+    expect(sql).toContain("user_id = $1");
+    expect(sql).toContain("status = 'complete'");
+    expect(sql).toContain("interval '7 days'");
+    expect(values).toEqual(["user-1", "key-1"]);
+  });
+
   it("stores bounded diagnostics privately as a failed itinerary", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] });
     await new PostgresItineraryRepository({ query }).recordFailure({

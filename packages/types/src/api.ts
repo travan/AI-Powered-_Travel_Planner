@@ -1,4 +1,12 @@
-import type { ItineraryInput, ItineraryStatus, SSEEventType, ItineraryOverview, TripStyle, TransportMode } from "./itinerary";
+import type {
+  ItineraryInput,
+  ItineraryStatus,
+  SSEEventType,
+  ItineraryOverview,
+  TripStyle,
+  TransportMode,
+  AiTokenUsage,
+} from "./itinerary";
 import type { TripStyleKey } from "./constants";
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
@@ -7,6 +15,7 @@ export interface GenerateRequest extends Omit<ItineraryInput, "trip_style"> {
   trip_style: TripStyle | TripStyleKey;
   city_names?: string[];
   prompt_text?: string;
+  force_refresh?: boolean;
 }
 
 export interface QueuedGenerateResponse {
@@ -20,6 +29,7 @@ export interface CachedGenerateResponse {
   status: "cached";
   itinerary_id?: string;
   result?: unknown; // present when status === "cached"
+  cache_hit?: boolean;
 }
 
 export interface UnsupportedGenerateResponse {
@@ -27,6 +37,7 @@ export interface UnsupportedGenerateResponse {
   code: "UNSUPPORTED_DESTINATION" | "NO_ITINERARY" | "AI_UNAVAILABLE";
   message: string;
   unsupported_cities?: string[];
+  ai_usage?: AiTokenUsage[];
 }
 
 export type GenerateResponse =

@@ -5,7 +5,7 @@ import {
 } from "../../../database/database.tokens.js";
 import type { ItineraryDetail } from "../domain/itinerary.entity.js";
 import type { ItineraryRepository } from "../domain/itinerary.repository.js";
-import type { Itinerary, ItineraryInput } from "@travel/types";
+import type { Itinerary, ItineraryInput, AiTokenUsage } from "@travel/types";
 
 type ItineraryRow = {
   id: string;
@@ -25,6 +25,27 @@ type ItineraryRow = {
 @Injectable()
 export class PostgresItineraryRepository implements ItineraryRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
+
+  async findReusable(input: {
+    userId: string;
+    cacheKey: string;
+  }): Promise<{ id: string; result: Itinerary } | null> {
+    const found = await this.sql.query<{ id: string; result: Itinerary }>(
+      `select id::text, result
+       from itineraries
+       where user_id = $1
+         and status = 'complete'
+         and result->>'generation_cache_key' = $2
+         and created_at >= now() - interval '7 days'
+       order by created_at desc
+       limit 1`,
+      [input.userId, input.cacheKey],
+    );
+    const row = found.rows[0];
+    return row && Array.isArray(row.result?.days) && row.result.days.length > 0
+      ? row
+      : null;
+  }
 
   async findVisible(input: {
     itineraryId: string;
@@ -129,6 +150,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     provider: string;
     code: string;
     message: string;
+    usage?: AiTokenUsage[];
   }): Promise<void> {
     await this.sql.query(
       `insert into itineraries
@@ -149,6 +171,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
             code: input.code,
             message: input.message.slice(0, 4000),
           },
+          ...(input.usage?.length ? { ai_usage: input.usage } : {}),
         },
       ],
     );
