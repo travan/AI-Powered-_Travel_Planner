@@ -32,6 +32,8 @@ An intelligent travel planning application that leverages AI to generate persona
 
 This is a pnpm/Turbo monorepo. `apps/server` is the live NestJS API; `apps/api` contains legacy API modules and tests and is not the API process started by the current Docker stack.
 
+The legacy Vercel project rooted at `apps/api` has automatic Git deployments disabled in `apps/api/vercel.json`. Its Fastify build cannot deploy the current NestJS API. Use the Docker deployment for the live API; configure a separate Vercel project rooted at `apps/web` if web previews are needed.
+
 ```
 apps/
 ├── server/       # NestJS API, database adapters, migrations, local DB bootstrap
