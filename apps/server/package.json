@@ -25,7 +25,7 @@
     "@travel/types": "workspace:*",
     "helmet": "^8.0.0",
     "mongodb": "^6.12.0",
-    "next": "^15.5.21",
+    "next": "^15.5.27",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
