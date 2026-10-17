@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { AppModule } from "./app.module.js";
 import { AppConfigService } from "./config/app-config.service.js";
+import { isAllowedCorsOrigin } from "./cors-origin.js";
 
 export async function buildApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -27,7 +28,7 @@ export async function buildApp(): Promise<NestExpressApplication> {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.enableCors({
     origin: (origin: string | undefined, cb: (error: Error | null, allow: boolean) => void) => {
-      if (!origin || config.allowedOrigins.has(origin)) {
+      if (isAllowedCorsOrigin(origin, config.allowedOrigins, config.allowQuickTunnelOrigins)) {
         cb(null, true);
         return;
       }

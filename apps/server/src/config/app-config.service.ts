@@ -23,6 +23,7 @@ type ParsedEnv = {
   WEB_APP_DIR: string;
   NEXT_PUBLIC_APP_URL: string;
   CORS_ORIGINS: string;
+  ALLOW_QUICK_TUNNEL_ORIGINS: boolean;
   RATE_LIMIT_MAX: number;
   RATE_LIMIT_WINDOW_MS: number;
   TRUST_PROXY_HOPS: number;
@@ -81,6 +82,10 @@ export class AppConfigService {
 
   get allowedOrigins() {
     return new Set([this.env.NEXT_PUBLIC_APP_URL, ...csv(this.env.CORS_ORIGINS)]);
+  }
+
+  get allowQuickTunnelOrigins() {
+    return this.env.NODE_ENV === "development" && this.env.ALLOW_QUICK_TUNNEL_ORIGINS;
   }
 
   get rateLimit() {
@@ -161,6 +166,7 @@ function parseEnv(raw: RawEnv): ParsedEnv {
     WEB_APP_DIR: raw.WEB_APP_DIR?.trim() || "../web",
     NEXT_PUBLIC_APP_URL: parseUrl(raw.NEXT_PUBLIC_APP_URL, "http://localhost:3000", "NEXT_PUBLIC_APP_URL"),
     CORS_ORIGINS: raw.CORS_ORIGINS?.trim() || DEFAULT_CORS_ORIGINS,
+    ALLOW_QUICK_TUNNEL_ORIGINS: parseBoolean(raw.ALLOW_QUICK_TUNNEL_ORIGINS, false),
     RATE_LIMIT_MAX: parsePositiveInt(raw.RATE_LIMIT_MAX, 60, "RATE_LIMIT_MAX"),
     RATE_LIMIT_WINDOW_MS: parsePositiveInt(raw.RATE_LIMIT_WINDOW_MS, 60_000, "RATE_LIMIT_WINDOW_MS"),
     TRUST_PROXY_HOPS: parseNonNegativeInt(raw.TRUST_PROXY_HOPS, 0, "TRUST_PROXY_HOPS"),

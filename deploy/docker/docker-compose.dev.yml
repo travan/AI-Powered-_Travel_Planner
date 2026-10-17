@@ -7,6 +7,7 @@ services:
       target: dev
     environment:
       NODE_ENV: development
+      ALLOW_QUICK_TUNNEL_ORIGINS: "true"
     # Compile with tsc first: Nest validation needs emitted decorator metadata.
     command: ["sh", "-c", "pnpm exec tsc && exec pnpm exec tsx dist/index.js"]
     develop:
