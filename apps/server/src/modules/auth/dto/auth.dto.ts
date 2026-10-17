@@ -1,5 +1,11 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsOptional, IsString, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  MinLength,
+  MaxLength,
+} from "class-validator";
 
 function normalizeEmail({ value }: { value: unknown }): unknown {
   return typeof value === "string" ? value.trim().toLowerCase() : value;
@@ -40,5 +46,23 @@ export class LoginDto {
 
   @IsString()
   @MinLength(1)
+  password!: string;
+}
+
+export class ForgotPasswordDto {
+  @Transform(normalizeEmail)
+  @IsEmail()
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MinLength(32)
+  @MaxLength(512)
+  token!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(256)
   password!: string;
 }

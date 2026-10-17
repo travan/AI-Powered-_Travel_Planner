@@ -1,0 +1,57 @@
+# Overlay for docker-compose.stack.yml. Start with: pnpm docker:dev
+# Source edits are synced by Compose Watch; host node_modules never enter containers.
+services:
+  server:
+    image: ai-travel-planner:server-dev
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      ALLOW_QUICK_TUNNEL_ORIGINS: "true"
+    # Compile with tsc first: Nest validation needs emitted decorator metadata.
+    command: ["sh", "-c", "pnpm exec tsc && exec pnpm exec tsx dist/index.js"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ../../apps/server
+          target: /app/apps/server
+          ignore: [node_modules/, dist/, src/database/migrations/, package.json, "*.tsbuildinfo"]
+        - action: sync+restart
+          path: ../../packages
+          target: /app/packages
+          ignore: ["**/node_modules/", "**/dist/", "**/package.json", "**/*.tsbuildinfo"]
+        - action: rebuild
+          path: ../../pnpm-lock.yaml
+        - action: rebuild
+          path: ../../apps/server/package.json
+        - action: rebuild
+          path: ../../deploy/docker/Dockerfile.server
+
+  ui:
+    image: ai-travel-planner:ui-dev
+    build:
+      target: dev
+    working_dir: /app/apps/web
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+    command: ["pnpm", "exec", "next", "dev", "--hostname", "0.0.0.0", "--port", "3000"]
+    develop:
+      watch:
+        - action: sync
+          path: ../../apps/web
+          target: /app/apps/web
+          ignore: [node_modules/, .next/, package.json, "*.tsbuildinfo"]
+        - action: sync
+          path: ../../packages
+          target: /app/packages
+          ignore: ["**/node_modules/", "**/dist/", "**/package.json", "**/*.tsbuildinfo"]
+        - action: sync
+          path: ../../scripts
+          target: /app/scripts
+        - action: rebuild
+          path: ../../pnpm-lock.yaml
+        - action: rebuild
+          path: ../../apps/web/package.json
+        - action: rebuild
+          path: ../../deploy/docker/Dockerfile.ui

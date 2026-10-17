@@ -10,6 +10,7 @@ import { SiteHeader } from "../layout/SiteHeader";
 import type { Itinerary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
 import { getMyTrips, getSavedTripItinerary } from "../../lib/api";
+import { localDateKey } from "../../lib/schedule-preview";
 import { SavedAiPlanPanel } from "./SavedAiPlanPanel";
 import {
   analyzeBillUpload,
@@ -191,7 +192,7 @@ const AUDIT_ENTITY_FILTERS = [
 
 const TABS: Array<{ id: WorkspaceTab; label: string; ready: boolean }> = [
   { id: "overview", label: "Overview", ready: true },
-  { id: "plan", label: "Saved AI plan", ready: true },
+  { id: "plan", label: "Itinerary preview", ready: true },
   { id: "members", label: "Members & share", ready: true },
   { id: "schedule", label: "Schedule", ready: true },
   { id: "transport", label: "Transport", ready: true },
@@ -686,7 +687,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
             category: activity.category,
             scheduled_at: toPlanScheduledAt(day.date, activity.time),
             location_name: day.city,
-            estimated_cost: activity.cost,
+            estimated_cost: activity.cost ?? undefined,
             currency: savedPlan.currency,
           });
           imported.push(created);
@@ -1422,7 +1423,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         )}
 
         {state === "ready" && (
-          <section className="grid gap-5 lg:grid-cols-[240px_1fr]">
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
             <nav className="flex gap-2 overflow-x-auto rounded-3xl border border-outline-variant/30 bg-surface/90 p-2 shadow-sm lg:flex-col">
               {visibleTabs.map((tab) => (
                 <button
@@ -1467,6 +1468,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
               {activeTab === "plan" && (
                 <SavedAiPlanPanel
                   plan={savedPlan}
+                  scheduleActivities={activities}
                   loading={savedPlanLoading}
                   canEdit={canContribute}
                   hasScheduleActivities={activities.length > 0}
@@ -1510,6 +1512,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
               {activeTab === "schedule" && session && (
                 <ActivityPlannerPanel
                   activities={activities}
+                  hasSavedPlan={Boolean(savedPlan)}
                   catalog={activityCatalog}
                   catalogQuery={catalogQuery}
                   form={activityForm}
@@ -1548,6 +1551,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                     void handleUpdateParticipation(activity, status)
                   }
                   onRefresh={() => void refreshActivities()}
+                  onReviewItinerary={() => setActiveTab("plan")}
                 />
               )}
 
@@ -1666,6 +1670,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
 
 function ActivityPlannerPanel(props: {
   activities: TripActivity[];
+  hasSavedPlan: boolean;
   catalog: ActivityCatalogItem[];
   catalogQuery: string;
   form: ActivityFormState;
@@ -1690,6 +1695,7 @@ function ActivityPlannerPanel(props: {
     status: TripActivityParticipant["status"],
   ) => void;
   onRefresh: () => void;
+  onReviewItinerary: () => void;
 }) {
   const groupedActivities = groupActivitiesByDay(props.activities);
   const trackableActivities = props.activities.filter(
@@ -1729,16 +1735,28 @@ function ActivityPlannerPanel(props: {
               complete it. Progress is saved for the shared trip.
             </p>
           </div>
-          <div className="rounded-2xl bg-surface-container-lowest px-4 py-3 text-right">
-            <p
-              className="text-2xl font-black text-primary"
-              data-testid="web-schedule-progress-count"
-            >
-              {completedActivities}/{progressTotal}
-            </p>
-            <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-              completed
-            </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {props.hasSavedPlan && props.activities.length > 0 && (
+              <button
+                type="button"
+                onClick={props.onReviewItinerary}
+                className="rounded-full border border-primary/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-fixed"
+                data-testid="web-review-edited-itinerary"
+              >
+                Review updated itinerary
+              </button>
+            )}
+            <div className="rounded-2xl bg-surface-container-lowest px-4 py-3 text-right">
+              <p
+                className="text-2xl font-black text-primary"
+                data-testid="web-schedule-progress-count"
+              >
+                {completedActivities}/{progressTotal}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                completed
+              </p>
+            </div>
           </div>
         </div>
 
@@ -2622,7 +2640,7 @@ function BillsPanel(props: {
 
   return (
     <section className="space-y-5" data-testid="web-bills-panel">
-      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h2 className="font-headline text-xl font-black">Capture bill</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
@@ -2630,7 +2648,7 @@ function BillsPanel(props: {
             later feed the same bill contract.
           </p>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <select
               value={props.billForm.activityId}
               onChange={(event) =>
@@ -2732,7 +2750,7 @@ function BillsPanel(props: {
             </button>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               value={props.expenseForm.title}
               onChange={(event) =>
@@ -2933,7 +2951,7 @@ function BillsPanel(props: {
                 {formatMoney(expenseAmount, "VND")} · remaining{" "}
                 {formatMoney(customSplitDelta, "VND")}
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {selectedParticipants.map((member) => (
                   <label key={member.userId} className="block">
                     <span className="text-xs font-bold text-on-surface-variant">
@@ -2977,7 +2995,7 @@ function BillsPanel(props: {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h2 className="font-headline text-xl font-black">Captured bills</h2>
           <div className="mt-5 space-y-3" data-testid="web-bill-list">
@@ -4279,10 +4297,9 @@ function groupActivitiesByDay(activities: TripActivity[]) {
 
   for (const activity of activities) {
     const date = activity.scheduledAt ? new Date(activity.scheduledAt) : null;
-    const key =
-      date && !Number.isNaN(date.getTime())
-        ? date.toISOString().slice(0, 10)
-        : "unscheduled";
+    const key = date && !Number.isNaN(date.getTime())
+      ? localDateKey(date)
+      : "unscheduled";
     const label =
       key === "unscheduled"
         ? "Unscheduled"

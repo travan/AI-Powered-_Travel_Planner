@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { notFound, ok, type ServiceResult } from "../../../shared/application/service-result.js";
 import { CITY_REPOSITORY, type CityRepository } from "../domain/city.repository.js";
-import type { City } from "../domain/city.entity.js";
+import type { City, CityPlanningData } from "../domain/city.entity.js";
 
 @Injectable()
 export class CitiesService {
@@ -16,8 +16,16 @@ export class CitiesService {
     return this.cities.popular();
   }
 
-  async getDetail(slug: string): Promise<ServiceResult<City>> {
-    const city = await this.cities.findBySlug(slug);
+  async getDetail(slug: string): Promise<ServiceResult<CityPlanningData>> {
+    const city = await this.cities.findForPlanning(slug);
     return city ? ok(city) : notFound("City not found");
+  }
+
+  remember(name: string): Promise<City> {
+    return this.cities.remember(name);
+  }
+
+  findForPlanning(value: string): Promise<CityPlanningData | null> {
+    return this.cities.findForPlanning(value);
   }
 }

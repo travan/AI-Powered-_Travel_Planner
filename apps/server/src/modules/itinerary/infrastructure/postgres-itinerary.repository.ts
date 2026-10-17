@@ -1,8 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
+import {
+  SQL_CLIENT,
+  type SqlClient,
+} from "../../../database/database.tokens.js";
 import type { ItineraryDetail } from "../domain/itinerary.entity.js";
 import type { ItineraryRepository } from "../domain/itinerary.repository.js";
-import type { Itinerary, ItineraryInput } from "@travel/types";
+import type { Itinerary, ItineraryInput, AiTokenUsage } from "@travel/types";
 
 type ItineraryRow = {
   id: string;
@@ -23,7 +26,31 @@ type ItineraryRow = {
 export class PostgresItineraryRepository implements ItineraryRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
-  async findVisible(input: { itineraryId: string; userId?: string | null }): Promise<ItineraryDetail | null> {
+  async findReusable(input: {
+    userId: string;
+    cacheKey: string;
+  }): Promise<{ id: string; result: Itinerary } | null> {
+    const found = await this.sql.query<{ id: string; result: Itinerary }>(
+      `select id::text, result
+       from itineraries
+       where user_id = $1
+         and status = 'complete'
+         and result->>'generation_cache_key' = $2
+         and created_at >= now() - interval '7 days'
+       order by created_at desc
+       limit 1`,
+      [input.userId, input.cacheKey],
+    );
+    const row = found.rows[0];
+    return row && Array.isArray(row.result?.days) && row.result.days.length > 0
+      ? row
+      : null;
+  }
+
+  async findVisible(input: {
+    itineraryId: string;
+    userId?: string | null;
+  }): Promise<ItineraryDetail | null> {
     const result = await this.sql.query<ItineraryRow>(
       `select i.id::text,
               i.user_id::text,
@@ -41,12 +68,15 @@ export class PostgresItineraryRepository implements ItineraryRepository {
        where i.id = $1
          and (coalesce(i.is_public, false) = true or i.user_id = $2)
        limit 1`,
-      [input.itineraryId, input.userId ?? null]
+      [input.itineraryId, input.userId ?? null],
     );
     return result.rows[0] ? mapItinerary(result.rows[0]) : null;
   }
 
-  async findForTrip(input: { tripId: string; userId: string }): Promise<ItineraryDetail | null> {
+  async findForTrip(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<ItineraryDetail | null> {
     const result = await this.sql.query<ItineraryRow>(
       `select i.id::text,
               i.user_id::text,
@@ -68,7 +98,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
        join itineraries i on i.id = t.source_itinerary_id
        where t.id = $1
        limit 1`,
-      [input.tripId, input.userId]
+      [input.tripId, input.userId],
     );
     return result.rows[0] ? mapItinerary(result.rows[0]) : null;
   }
@@ -77,14 +107,26 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
+    catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string> {
     const saved = await this.sql.query<{ id: string }>(
-      `insert into itineraries (
-         user_id, cities, countries, start_date, end_date, num_days,
-         budget, currency, trip_style, status, result
+      `with saved as (
+         insert into itineraries (
+           user_id, cities, countries, start_date, end_date, num_days,
+           budget, currency, trip_style, status, result
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
+         returning id
+       ),
+       queued as (
+         insert into city_catalog_ingestion_jobs (itinerary_id, payload)
+         select saved.id, jsonb_build_object('cities', $11::jsonb)
+         from saved
+         returning itinerary_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
-       returning id::text`,
+       select saved.id::text
+       from saved
+       inner join queued on queued.itinerary_id = saved.id`,
       [
         input.userId,
         input.request.cities,
@@ -96,9 +138,43 @@ export class PostgresItineraryRepository implements ItineraryRepository {
         input.request.currency,
         input.request.trip_style,
         input.result,
-      ]
+        JSON.stringify(input.catalogCities),
+      ],
     );
     return saved.rows[0]!.id;
+  }
+
+  async recordFailure(input: {
+    userId: string;
+    request: ItineraryInput;
+    provider: string;
+    code: string;
+    message: string;
+    usage?: AiTokenUsage[];
+  }): Promise<void> {
+    await this.sql.query(
+      `insert into itineraries
+       (user_id, cities, start_date, end_date, num_days, budget, currency, trip_style, status, result)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'failed', $9)`,
+      [
+        input.userId,
+        input.request.cities,
+        input.request.start_date ?? null,
+        input.request.end_date ?? null,
+        input.request.num_days ?? null,
+        input.request.budget ?? null,
+        input.request.currency,
+        input.request.trip_style,
+        {
+          error: {
+            provider: input.provider,
+            code: input.code,
+            message: input.message.slice(0, 4000),
+          },
+          ...(input.usage?.length ? { ai_usage: input.usage } : {}),
+        },
+      ],
+    );
   }
 
   async saveAsTrip(input: {
@@ -117,6 +193,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
          from itineraries i
          where i.id = $1
            and i.user_id = $2
+           and i.status = 'complete'
          limit 1
        ),
        saved_itinerary as (
@@ -187,7 +264,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
        select trip_id::text
        from host_member
        limit 1`,
-      [input.itineraryId, input.userId]
+      [input.itineraryId, input.userId],
     );
     return saved.rows[0] ? { tripId: saved.rows[0].trip_id } : null;
   }

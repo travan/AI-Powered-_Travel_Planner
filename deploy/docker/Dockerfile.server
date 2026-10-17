@@ -7,7 +7,9 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/server/package.json ./apps/server/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/api-client/package.json ./packages/api-client/package.json
 COPY packages/config/package.json ./packages/config/package.json
+COPY packages/design-tokens/package.json ./packages/design-tokens/package.json
 COPY packages/hooks/package.json ./packages/hooks/package.json
 COPY packages/scrapers/package.json ./packages/scrapers/package.json
 COPY packages/types/package.json ./packages/types/package.json
@@ -16,25 +18,42 @@ COPY packages/ui/package.json ./packages/ui/package.json
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
   pnpm install --frozen-lockfile --filter @travel/server...
 
+# Development keeps workspace TypeScript sources and dev dependencies.
+FROM deps AS dev
+COPY apps/server ./apps/server
+COPY packages ./packages
+COPY scripts ./scripts
+WORKDIR /app/apps/server
+ENV NODE_ENV=development
+CMD ["sh", "-c", "pnpm exec tsc && exec pnpm exec tsx dist/index.js"]
+
 FROM deps AS builder
 WORKDIR /app
 
 COPY apps/server ./apps/server
 COPY packages ./packages
 
-RUN pnpm --dir apps/server build
+RUN pnpm --dir apps/server build \
+  && pnpm --dir apps/server exec tsc -p ../../packages/types/tsconfig.json --module commonjs --moduleResolution node \
+  && pnpm --dir apps/server exec tsc -p ../../packages/ai/tsconfig.json \
+  && node --input-type=module -e 'import fs from "node:fs"; const path = "packages/types/package.json"; const pkg = JSON.parse(fs.readFileSync(path, "utf8")); pkg.main = "./dist/index.js"; pkg.types = "./dist/index.d.ts"; pkg.exports = { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } }; fs.writeFileSync(path, JSON.stringify(pkg, null, 2));' \
+  && node --input-type=module -e 'import fs from "node:fs"; const path = "packages/ai/package.json"; const pkg = JSON.parse(fs.readFileSync(path, "utf8")); pkg.main = "./dist/index.js"; pkg.types = "./dist/index.d.ts"; pkg.exports = { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } }; fs.writeFileSync(path, JSON.stringify(pkg, null, 2));'
+
+FROM deps AS prod-deps
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+  rm -rf node_modules apps/*/node_modules packages/*/node_modules \
+  && pnpm install --frozen-lockfile --prod --filter @travel/server...
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
-RUN corepack enable
+RUN useradd --create-home --uid 1001 appuser
 
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json ./
-COPY --from=builder /app/apps/server ./apps/server
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/node_modules ./node_modules
-
-RUN useradd --create-home --uid 1001 appuser && chown -R appuser:appuser /app
+COPY --from=builder --chown=1001:1001 /app/apps/server ./apps/server
+COPY --from=builder --chown=1001:1001 /app/packages ./packages
+COPY --from=prod-deps --chown=1001:1001 /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=1001:1001 /app/apps/server/node_modules ./apps/server/node_modules
+COPY --from=prod-deps --chown=1001:1001 /app/packages/ai/node_modules ./packages/ai/node_modules
 
 ENV PORT=3001
 ENV SERVE_WEB=false
@@ -46,4 +65,4 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"
 
-CMD ["pnpm", "--dir", "apps/server", "start"]
+CMD ["node", "apps/server/dist/index.js"]

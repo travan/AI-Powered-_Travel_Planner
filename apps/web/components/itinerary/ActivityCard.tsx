@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import type { Activity, GoldenMoment, TicketOption } from "@travel/types";
 import { Badge } from "@travel/ui";
 
@@ -15,9 +16,7 @@ function TicketChip({ option }: { option: TicketOption }) {
     >
       {option.platform}
       {option.price_from && (
-        <span className="text-gray-400">
-          from {option.price_from}
-        </span>
+        <span className="text-gray-400">from {option.price_from}</span>
       )}
     </a>
   );
@@ -31,9 +30,16 @@ function GoldenBadge({ moment }: { moment: GoldenMoment }) {
     blue_hour: "🌆",
     golden_hour: "✨",
   };
+  const type =
+    typeof moment.type === "string" && moment.type
+      ? moment.type
+      : "special_moment";
+  const bestTime = typeof moment.best_time === "string" ? moment.best_time : "";
+
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-      {icons[moment.type] ?? "⭐"} {moment.type.replace(/_/g, " ")} · {moment.best_time}
+      {icons[type] ?? "⭐"} {type.replace(/_/g, " ")}
+      {bestTime && <> · {bestTime}</>}
     </span>
   );
 }
@@ -45,6 +51,19 @@ interface ActivityCardProps {
 }
 
 export function ActivityCard({ activity, index }: ActivityCardProps) {
+  const scheduleMeta = [activity.time, activity.duration]
+    .filter(Boolean)
+    .join(" · ");
+  const ticketActivities = Array.isArray(activity.ticket_activities)
+    ? activity.ticket_activities.filter(
+        (ticket) =>
+          ticket !== null &&
+          typeof ticket === "object" &&
+          typeof ticket.platform === "string" &&
+          typeof ticket.url === "string",
+      )
+    : [];
+
   return (
     <div className="relative flex gap-4">
       {/* Timeline dot */}
@@ -62,16 +81,19 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-semibold text-gray-900">{activity.name}</h4>
-              {activity.category && (
+              {typeof activity.category === "string" && activity.category && (
                 <Badge variant="default" className="text-xs">
                   {activity.category.replace(/_/g, " ")}
                 </Badge>
               )}
-              {activity.golden_moment && (
-                <GoldenBadge moment={activity.golden_moment} />
-              )}
+              {activity.golden_moment &&
+                typeof activity.golden_moment === "object" && (
+                  <GoldenBadge moment={activity.golden_moment} />
+                )}
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">{activity.time} · {activity.duration}</p>
+            {scheduleMeta && (
+              <p className="text-xs text-gray-400 mt-0.5">{scheduleMeta}</p>
+            )}
           </div>
           {activity.cost != null && (
             <span className="text-sm font-medium text-emerald-700 whitespace-nowrap">
@@ -82,20 +104,24 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
 
         {/* Description */}
         {activity.description && (
-          <p className="text-sm text-gray-700 leading-relaxed">{activity.description}</p>
+          <p className="text-sm text-gray-700 leading-relaxed">
+            {activity.description}
+          </p>
         )}
 
         {/* Tips */}
-        {activity.golden_moment?.tip && (
-          <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
-            <span className="font-semibold">Tip:</span> {activity.golden_moment.tip}
-          </div>
-        )}
+        {typeof activity.golden_moment?.tip === "string" &&
+          activity.golden_moment.tip && (
+            <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              <span className="font-semibold">Tip:</span>{" "}
+              {activity.golden_moment.tip}
+            </div>
+          )}
 
         {/* Ticket options */}
-        {activity.ticket_activities && activity.ticket_activities.length > 0 && (
+        {ticketActivities.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {activity.ticket_activities.map((t, i) => (
+            {ticketActivities.map((t, i) => (
               <TicketChip key={i} option={t} />
             ))}
           </div>
@@ -110,7 +136,11 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
             >
-              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                className="h-3.5 w-3.5"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path
                   fillRule="evenodd"
                   d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"

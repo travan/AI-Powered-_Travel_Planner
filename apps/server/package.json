@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "start:dotenv": "dotenv -e ../../.env -- node dist/index.js",
+    "db:init": "dotenv -e ../../.env -- node scripts/init-local-postgres.mjs",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -17,15 +18,16 @@
     "@nestjs/platform-express": "^11.0.0",
     "@supabase/supabase-js": "^2.49.0",
     "@travel/ai": "workspace:*",
+    "@travel/types": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cors": "^2.8.5",
     "express": "^5.0.1",
     "express-rate-limit": "^7.5.0",
-    "@travel/types": "workspace:*",
     "helmet": "^8.0.0",
     "mongodb": "^6.12.0",
     "next": "^15.5.21",
+    "nodemailer": "^10.1.1",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
@@ -34,6 +36,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^25.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.11.10",
     "dotenv": "^17.4.2",
     "dotenv-cli": "^11.0.0",

@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "predev": "node ../../scripts/generate-design-tokens.mjs",
     "dev": "next dev --port 3000",
+    "prebuild": "node ../../scripts/generate-design-tokens.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -12,6 +14,8 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.0",
+    "@travel/api-client": "workspace:*",
+    "@travel/design-tokens": "workspace:*",
     "@travel/hooks": "workspace:*",
     "@travel/types": "workspace:*",
     "@travel/ui": "workspace:*",

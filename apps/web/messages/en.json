@@ -145,7 +145,7 @@
     "reset_password_submit": "Update password",
     "reset_password_success": "Password updated successfully. Redirecting to login...",
     "reset_password_mismatch": "Passwords do not match.",
-    "reset_password_min": "Password must be at least 6 characters.",
+    "reset_password_min": "Password must be at least 8 characters.",
     "reset_password_missing_session": "Open this page from the reset link in your email to continue.",
     "back_to_login": "Back to login",
     "welcome_back": "Welcome back",

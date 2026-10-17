@@ -181,14 +181,27 @@ export function createLocalBrowserClient(): MockAuthClient {
           error: new Error("OAuth provider is not configured for local auth"),
         };
       },
-      async resetPasswordForEmail() {
-        return { data: {}, error: null };
+      async resetPasswordForEmail(email) {
+        try {
+          const response = await fetch("/api/auth/forgot-password", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          return { data: {}, error: response.ok ? null : new Error(typeof payload.message === "string" ? payload.message : "Password recovery failed") };
+        } catch {
+          return { data: {}, error: new Error("Password recovery failed. Please try again.") };
+        }
       },
       async resend() {
         return { data: {}, error: null };
       },
       async updateUser() {
-        return { data: { user: readSession()?.user ?? null }, error: null };
+        return {
+          data: { user: readSession()?.user ?? null },
+          error: new Error("Open the reset link in your email to change your password."),
+        };
       },
       async signOut() {
         const session = readSession();

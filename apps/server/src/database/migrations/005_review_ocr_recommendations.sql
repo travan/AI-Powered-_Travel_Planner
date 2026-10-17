@@ -34,6 +34,18 @@ create table if not exists public.transport_price_insights (
   updated_at timestamptz not null default now()
 );
 
+-- Existing local databases may have the original transport schema. Add the
+-- workspace-facing columns before creating indexes or inserting route data.
+alter table public.transport_price_insights
+  add column if not exists provider_name text,
+  add column if not exists origin_city text,
+  add column if not exists destination_city text,
+  add column if not exists currency text not null default 'VND',
+  add column if not exists min_price numeric,
+  add column if not exists median_price numeric,
+  add column if not exists best_observed_at timestamptz,
+  add column if not exists sample_size integer not null default 1;
+
 create table if not exists public.data_quality_signals (
   id uuid primary key default uuid_generate_v4(),
   trip_id uuid references public.trips(id) on delete cascade,

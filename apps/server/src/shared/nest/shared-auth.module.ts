@@ -1,11 +1,12 @@
 import { Global, Module } from "@nestjs/common";
 import { AppConfigModule } from "../../config/config.module.js";
+import { DatabaseModule } from "../../database/database.module.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { LocalJwtService } from "./local-jwt.js";
 
 @Global()
 @Module({
-  imports: [AppConfigModule],
+  imports: [AppConfigModule, DatabaseModule],
   providers: [LocalJwtService, JwtAuthGuard],
   exports: [LocalJwtService, JwtAuthGuard],
 })

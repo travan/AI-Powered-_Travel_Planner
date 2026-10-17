@@ -4,25 +4,43 @@ import type { ItineraryRepository } from "../../../../../../apps/server/src/modu
 import type { CitiesService } from "../../../../../../apps/server/src/modules/cities/application/cities.service";
 
 function createRepository(
-  saveAsTrip: ItineraryRepository["saveAsTrip"]
+  saveAsTrip: ItineraryRepository["saveAsTrip"],
 ): ItineraryRepository {
   return {
     findVisible: vi.fn(),
     findForTrip: vi.fn(),
+    findReusable: vi.fn().mockResolvedValue(null),
     createComplete: vi.fn(),
+    recordFailure: vi.fn(),
     saveAsTrip,
   };
+}
+
+function createCitiesService(): CitiesService {
+  return {
+    remember: vi.fn(async (name: string) => ({
+      slug: name.toLowerCase().replace(/\s+/g, "-"),
+      name: { en: name },
+      country: "",
+      timezone: "",
+      currency: "",
+      lat: null,
+      lon: null,
+      popular: false,
+    })),
+    findForPlanning: vi.fn().mockResolvedValue(null),
+  } as unknown as CitiesService;
 }
 
 describe("ItineraryService.save", () => {
   it("returns the workspace trip id after saving", async () => {
     const repository = createRepository(
-      vi.fn().mockResolvedValue({ tripId: "trip-1" })
+      vi.fn().mockResolvedValue({ tripId: "trip-1" }),
     );
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.save({ itineraryId: "itinerary-1", userId: "user-1" })
+      service.save({ itineraryId: "itinerary-1", userId: "user-1" }),
     ).resolves.toEqual({
       ok: true,
       value: { saved: true, trip_id: "trip-1" },
@@ -31,10 +49,10 @@ describe("ItineraryService.save", () => {
 
   it("does not expose another user's itinerary", async () => {
     const repository = createRepository(vi.fn().mockResolvedValue(null));
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.save({ itineraryId: "itinerary-1", userId: "user-2" })
+      service.save({ itineraryId: "itinerary-1", userId: "user-2" }),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -67,31 +85,50 @@ describe("ItineraryService.getForTrip", () => {
         currency: "USD",
         num_days: 5,
         num_travelers: 1,
-        seasonal_notes: { travel_month: "April", daylight_hours: "12h", sunrise_time: "06:00", sunset_time: "18:00", weather_note: "Mild", highlights: [], warnings: [] },
+        seasonal_notes: {
+          travel_month: "April",
+          daylight_hours: "12h",
+          sunrise_time: "06:00",
+          sunset_time: "18:00",
+          weather_note: "Mild",
+          highlights: [],
+          warnings: [],
+        },
         transport_summary: [],
         days: [],
         hotels: [],
         restaurants: [],
         suggestions: [],
-        budget_breakdown: { accommodation: 0, food: 0, activities: 0, transport: 0, contingency: 0, total: 1200, currency: "USD", per_person: 1200, per_day: 240 },
+        budget_breakdown: {
+          accommodation: 0,
+          food: 0,
+          activities: 0,
+          transport: 0,
+          contingency: 0,
+          total: 1200,
+          currency: "USD",
+          per_person: 1200,
+          per_day: 240,
+        },
       },
     } as never;
     const repository = createRepository(vi.fn());
     repository.findForTrip = vi.fn().mockResolvedValue(itinerary);
-    const service = new ItineraryService(repository);
+    const service = new ItineraryService(repository, createCitiesService());
 
     await expect(
-      service.getForTrip({ tripId: "trip-1", userId: "user-1" })
+      service.getForTrip({ tripId: "trip-1", userId: "user-1" }),
     ).resolves.toEqual({ ok: true, value: itinerary });
   });
 
   it("does not expose a missing source itinerary", async () => {
     const repository = createRepository(vi.fn());
     repository.findForTrip = vi.fn().mockResolvedValue(null);
-    const service = new ItineraryService(repository);
+    const cities = createCitiesService();
+    const service = new ItineraryService(repository, cities);
 
     await expect(
-      service.getForTrip({ tripId: "trip-1", userId: "user-1" })
+      service.getForTrip({ tripId: "trip-1", userId: "user-1" }),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -104,18 +141,58 @@ describe("ItineraryService.getForTrip", () => {
 });
 
 describe("ItineraryService.generate", () => {
-  it("returns a supported fallback when a destination is not in the city catalog", async () => {
+  it("reuses an exact saved result without constructing an AI provider", async () => {
+    vi.stubEnv("AI_PROVIDER", "invalid-provider");
     const repository = createRepository(vi.fn());
-    const cities = {
-      getDetail: vi.fn().mockResolvedValue({
-        ok: false,
-        error: { code: "not_found", statusCode: 404, message: "City not found" },
-      }),
-    } as unknown as CitiesService;
+    const stored = { title: "Saved Hanoi trip", days: [{ city: "Hanoi" }] } as never;
+    repository.findReusable = vi.fn().mockResolvedValue({ id: "saved-1", result: stored });
+    try {
+      const response = await new ItineraryService(repository, createCitiesService()).generate({
+        userId: "user-1",
+        dto: {
+          cities: ["hanoi"], city_names: ["Hanoi"], num_days: 7,
+          budget: 500, currency: "USD", trip_style: "budget", num_travelers: 3,
+        },
+      });
+      expect(response).toMatchObject({ status: "cached", cache_hit: true, itinerary_id: "saved-1", result: stored });
+      expect(repository.createComplete).not.toHaveBeenCalled();
+      expect(repository.findReusable).toHaveBeenCalledWith({ userId: "user-1", cacheKey: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("honors force_refresh and calls AI for a new version", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
+    const repository = createRepository(vi.fn());
+    repository.createComplete = vi.fn().mockResolvedValue("fresh-1");
+    repository.findReusable = vi.fn().mockResolvedValue({ id: "saved-1", result: { days: [{}] } });
+    try {
+      const response = await new ItineraryService(repository, createCitiesService()).generate({
+        userId: "user-1",
+        dto: {
+          cities: ["hanoi"], city_names: ["Hanoi"], num_days: 1,
+          budget: 500, currency: "USD", trip_style: "budget", num_travelers: 3,
+          force_refresh: true,
+        },
+      });
+      expect(response).toMatchObject({ status: "cached", cache_hit: false, itinerary_id: "fresh-1" });
+      expect(repository.findReusable).not.toHaveBeenCalled();
+      expect(repository.createComplete).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("generates and saves an itinerary when a destination is not in the city catalog", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
+    const repository = createRepository(vi.fn());
+    repository.createComplete = vi.fn().mockResolvedValue("itinerary-1");
+    const cities = createCitiesService();
     const service = new ItineraryService(repository, cities);
 
-    await expect(
-      service.generate({
+    try {
+      const response = await service.generate({
         userId: "user-1",
         dto: {
           cities: ["unknown-place"],
@@ -126,13 +203,75 @@ describe("ItineraryService.generate", () => {
           trip_style: "adventure",
           num_travelers: 2,
         },
-      }),
-    ).resolves.toEqual({
-      status: "unsupported",
-      code: "UNSUPPORTED_DESTINATION",
-      message: "We don't have enough destination data for Unknown Place yet. Try another destination or search by a nearby supported city.",
-      unsupported_cities: ["Unknown Place"],
-    });
-    expect(repository.createComplete).not.toHaveBeenCalled();
+      });
+
+      expect(response).toMatchObject({
+        status: "cached",
+        itinerary_id: "itinerary-1",
+      });
+      expect(repository.createComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-1",
+          request: expect.objectContaining({
+            cities: ["unknown-place"],
+            currency: "USD",
+          }),
+          catalogCities: [{ slug: "unknown-place", name: "Unknown Place" }],
+          result: expect.objectContaining({
+            days: expect.arrayContaining([
+              expect.objectContaining({ city: "Unknown Place" }),
+            ]),
+          }),
+        }),
+      );
+      expect(cities.remember).toHaveBeenCalledWith("Unknown Place");
+      expect(cities.findForPlanning).toHaveBeenCalledWith("unknown-place");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
+});
+
+describe("AI failure persistence", () => {
+  it.each([false, true])(
+    "returns the original AI failure when diagnostic persistence fails=%s",
+    async (databaseFails) => {
+      vi.stubEnv("AI_PROVIDER", "invalid-provider");
+      const repository = createRepository(vi.fn());
+      if (databaseFails)
+        repository.recordFailure = vi
+          .fn()
+          .mockRejectedValue(new Error("database down"));
+      try {
+        const response = await new ItineraryService(
+          repository,
+          createCitiesService(),
+        ).generate({
+          userId: "user-1",
+          dto: {
+            cities: ["tokyo"],
+            num_days: 2,
+            currency: "USD",
+            trip_style: "mid_range",
+            num_travelers: 1,
+          },
+        });
+        expect(response).toMatchObject({
+          status: "unsupported",
+          code: "AI_UNAVAILABLE",
+        });
+        expect(repository.recordFailure).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: "user-1",
+            provider: "invalid-provider",
+            code: "AI_UNAVAILABLE",
+            message: expect.any(String),
+          }),
+        );
+        expect(repository.createComplete).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

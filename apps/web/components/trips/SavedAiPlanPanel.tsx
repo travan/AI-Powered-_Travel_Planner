@@ -4,9 +4,12 @@ import type { Itinerary } from "@travel/types";
 import { BudgetBreakdown } from "../itinerary/BudgetBreakdown";
 import { DayTimeline } from "../itinerary/DayTimeline";
 import { OverviewCard } from "../itinerary/OverviewCard";
+import type { TripActivity } from "../../lib/workspace-api";
+import { buildEditedScheduleDays, withEditedSchedule } from "../../lib/schedule-preview";
 
 type Props = {
   plan: Itinerary | null;
+  scheduleActivities: TripActivity[];
   loading: boolean;
   canEdit: boolean;
   hasScheduleActivities: boolean;
@@ -17,6 +20,7 @@ type Props = {
 
 export function SavedAiPlanPanel({
   plan,
+  scheduleActivities,
   loading,
   canEdit,
   hasScheduleActivities,
@@ -47,15 +51,26 @@ export function SavedAiPlanPanel({
     );
   }
 
+  const hasEditedSchedule = scheduleActivities.length > 0;
+  const displayPlan = hasEditedSchedule
+    ? withEditedSchedule(plan, buildEditedScheduleDays(plan, scheduleActivities))
+    : plan;
+
   return (
     <section className="space-y-5" data-testid="web-saved-ai-plan">
       <div className="rounded-3xl border border-primary/20 bg-primary-container/30 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-widest text-primary">Saved AI plan</p>
-            <h2 className="mt-2 font-headline text-2xl font-black text-on-surface">Review the original suggestion</h2>
+            <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
+              {hasEditedSchedule ? "Edited itinerary" : "Saved AI plan"}
+            </p>
+            <h2 className="mt-2 font-headline text-2xl font-black text-on-surface">
+              {hasEditedSchedule ? "Review your updated schedule" : "Review the original suggestion"}
+            </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-on-surface-variant">
-              This is the original plan saved into this trip. Add it to Schedule to turn each suggested activity into an editable shared entry for the group, then follow completion from the edited schedule.
+              {hasEditedSchedule
+                ? "This timeline uses the saved Schedule entries, including your edited titles, times, places, and costs."
+                : "This is the original plan saved into this trip. Add it to Schedule to turn each suggested activity into an editable shared entry for the group."}
             </p>
           </div>
           {canEdit && (
@@ -76,14 +91,15 @@ export function SavedAiPlanPanel({
         </div>
       </div>
 
-      <OverviewCard itinerary={plan} />
+      <OverviewCard itinerary={displayPlan} showBudgetSummary={!hasEditedSchedule} />
       <DayTimeline
-        days={plan.days}
-        currency={plan.currency}
-        onEdit={hasScheduleActivities ? onOpenSchedule : onImportToSchedule}
+        days={displayPlan.days}
+        currency={displayPlan.currency}
+        onEdit={hasEditedSchedule ? onOpenSchedule : onImportToSchedule}
         editDisabled={importing}
+        showDailyBudget={!hasEditedSchedule}
       />
-      {plan.budget_breakdown && <BudgetBreakdown breakdown={plan.budget_breakdown} />}
+      {!hasEditedSchedule && plan.budget_breakdown && <BudgetBreakdown breakdown={plan.budget_breakdown} />}
     </section>
   );
 }

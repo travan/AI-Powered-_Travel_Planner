@@ -2,6 +2,7 @@ import type {
   ItineraryInput,
   ItineraryOverview,
   Itinerary,
+  AiTokenUsage,
 } from "@travel/types";
 
 export interface PreFetchedCityData {
@@ -9,8 +10,8 @@ export interface PreFetchedCityData {
   country: string;
   timezone: string;
   currency: string;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   places: unknown[];
   restaurants: unknown[];
   hotels: unknown[];
@@ -25,6 +26,7 @@ export interface PreFetchedCityData {
 }
 
 export interface AIProvider {
+  getUsage?(): AiTokenUsage[];
   /**
    * Phase 1: Generate a lightweight overview (~1,500 tokens output).
    * Called immediately after data fetch to give the first visible render.

@@ -37,7 +37,9 @@ coverage
 playwright-mcp
 .playwright-mcp
 playwright-report
+playwright-report-**
 test-results
+
 
 # Supabase
 supabase/.temp

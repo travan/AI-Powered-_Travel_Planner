@@ -65,6 +65,21 @@ test.describe("mobile web auth contract flows", () => {
     await expect(page.getByTestId("mobile-profile-email")).toHaveText(identity.email);
   });
 
+  test("forgot password confirms that a reset email was requested", async ({ page }) => {
+    const identity = createAuthIdentity();
+    await page.goto("/signup");
+    await signUpOnMobileWeb(page, identity);
+    await clearMobileWebMockAuthSession(page);
+
+    await page.goto("/login");
+    await page.getByTestId("mobile-auth-email").fill(identity.email);
+    await page.getByTestId("mobile-auth-forgot-password").click();
+    await expect(page.getByTestId("mobile-auth-reset-feedback-title")).toHaveText("Reset sent");
+    await expect(page.getByTestId("mobile-auth-reset-feedback-message")).toContainText(
+      "If an account exists for this email",
+    );
+  });
+
   test("unauthenticated mobile user trying to generate redirects to login", async ({ page }) => {
     const identity = createAuthIdentity();
 

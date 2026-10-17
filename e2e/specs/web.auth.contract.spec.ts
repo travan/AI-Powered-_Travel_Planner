@@ -130,6 +130,50 @@ test.describe("web auth contract flows", () => {
     );
   });
 
+  test("password recovery updates the password and allows sign-in with the new one", async ({ page }) => {
+    const identity = createAuthIdentity();
+    const newPassword = "Horizon-Recovered-456!";
+
+    await page.goto("/signup");
+    await signUpOnWeb(page, identity);
+    await expect(page).toHaveURL(/\/plan$/);
+    await clearWebMockAuthSession(page);
+
+    await page.goto("/login");
+    await page.getByTestId("web-auth-email").fill(identity.email);
+    await page.getByTestId("web-auth-password").focus();
+    await expect(page.getByTestId("web-auth-account-checking")).not.toBeVisible();
+    await page.getByTestId("web-auth-forgot-password").click();
+    await expect(page.getByTestId("web-auth-success")).toContainText(/password reset email sent/i);
+
+    // The mock provider creates the recovery session an emailed link would
+    // establish when the user opens /reset-password.
+    await page.goto("/reset-password");
+    const submit = page.getByTestId("reset-password-submit");
+    await expect(submit).toBeEnabled();
+
+    await page.getByTestId("reset-password-new-password").fill(newPassword);
+    await page.getByTestId("reset-password-confirm-password").fill(`${newPassword}-mismatch`);
+    await submit.click();
+    await expect(page.getByTestId("reset-password-error")).toContainText("Passwords do not match");
+
+    await page.getByTestId("reset-password-confirm-password").fill(newPassword);
+    await submit.click();
+    await expect(page.getByTestId("reset-password-success")).toContainText("Password updated successfully");
+    await expect(page).toHaveURL(/\/plan$/, { timeout: 5_000 });
+    await clearWebMockAuthSession(page);
+    await page.goto("/login");
+
+    await page.getByTestId("web-auth-email").fill(identity.email);
+    await page.getByTestId("web-auth-password").fill(identity.password);
+    await page.getByTestId("web-auth-submit-login").click();
+    await expect(page.getByTestId("web-auth-error")).toBeVisible();
+
+    await page.getByTestId("web-auth-password").fill(newPassword);
+    await page.getByTestId("web-auth-submit-login").click();
+    await expect(page).toHaveURL(/\/plan$/);
+  });
+
   test("sign out from account menu redirects to login", async ({ page }) => {
     const identity = createAuthIdentity();
 
@@ -181,4 +225,58 @@ test.describe("web auth contract flows", () => {
       queuedScenario.itinerary.itineraries[0].title
     );
   });
+});
+
+test("missing server draft falls back to browser intent and does not repeat claim on reload", async ({ page }) => {
+  await page.goto("/signup");
+  await signUpOnWeb(page, createAuthIdentity());
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.evaluate(() => {
+    sessionStorage.setItem("horizon.search.intent", JSON.stringify({
+      request: { cities: ["tokyo"], city_names: ["Tokyo"], num_days: 3, budget: 1200, currency: "USD", trip_style: "mid_range", num_travelers: 2, locale: "en" },
+      draftId: "missing-draft", guestKey: "guest-test-key", createdAt: Date.now(),
+    }));
+  });
+  let claims = 0;
+  let generations = 0;
+  await page.route("**/api/search-drafts/*/claim", async route => {
+    claims++;
+    await route.fulfill({ status: 404, json: { message: "Search draft not found or expired" } });
+  });
+  await page.route("**/api/itinerary/generate", async route => {
+    generations++;
+    expect(route.request().postDataJSON()).toMatchObject({ cities: ["tokyo"], num_days: 3 });
+    await route.fulfill({ status: 503, json: { message: "AI temporarily unavailable" } });
+  });
+  await page.goto("/plan?resumeGenerate=1&draftId=missing-draft");
+  await expect(page.locator('[data-testid="web-plan-error"]:visible')).toHaveText("Generate failed: 503");
+  await expect(page).toHaveURL(/\/plan$/);
+  await expect(page.getByTestId("web-plan-selected-city")).toContainText("Tokyo");
+  expect(claims).toBe(1);
+  expect(generations).toBe(1);
+  await page.reload();
+  await expect(page.getByText("Claim search draft failed: 404")).toHaveCount(0);
+  expect(claims).toBe(1);
+  expect(generations).toBe(1);
+});
+
+test("missing draft without a browser copy clears stale resume parameters", async ({ page }) => {
+  await page.goto("/signup");
+  await signUpOnWeb(page, createAuthIdentity());
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.evaluate(() => {
+    sessionStorage.removeItem("horizon.search.intent");
+    localStorage.setItem("horizon.search.guest_key", "guest-test-key");
+  });
+  let claims = 0;
+  await page.route("**/api/search-drafts/*/claim", async route => {
+    claims++;
+    await route.fulfill({ status: 404, json: {} });
+  });
+  await page.goto("/plan?resumeGenerate=1&draftId=missing-draft");
+  await expect(page.locator('[data-testid="web-plan-error"]:visible')).toHaveText("Your saved search is no longer available. Please choose a destination and try again.");
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.reload();
+  await expect(page.getByText("Your saved search is no longer available. Please choose a destination and try again.")).toHaveCount(0);
+  expect(claims).toBe(1);
 });

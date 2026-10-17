@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
+import { requestPasswordRecovery } from "@/lib/password-recovery";
 import { createClient } from "@/lib/supabase/client";
 import { checkAccountExists } from "@/lib/api";
 import { normalizeSupabaseAuthError } from "@travel/types";
@@ -185,17 +186,8 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
     }
 
     setLoading(true);
-
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
-        return;
-      }
+      await requestPasswordRecovery(email.trim());
 
       setSuccessMessage(t("forgot_sent"));
     } catch (error) {
@@ -338,9 +330,9 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                 )}
               </label>
 
-              <label className="block space-y-1.5">
+              <div className="block space-y-1.5">
                 <div className="ml-1 flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">
-                  <span>{t("password")}</span>
+                  <label htmlFor="web-auth-password-input">{t("password")}</label>
                   {isLogin && (
                     <button
                       type="button"
@@ -356,6 +348,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                 <span className="relative block">
                   <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
                   <input
+                    id="web-auth-password-input"
                     required
                     minLength={6}
                     type={showPassword ? "text" : "password"}
@@ -373,7 +366,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     <span className="material-symbols-outlined text-[20px]">{showPassword ? "visibility_off" : "visibility"}</span>
                   </button>
                 </span>
-              </label>
+              </div>
 
               {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container" data-testid="web-auth-error">{errorMessage}</p>}
               {successMessage && (

@@ -1,17 +1,18 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import type { Request } from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { AppModule } from "./app.module.js";
 import { AppConfigService } from "./config/app-config.service.js";
+import { isAllowedCorsOrigin } from "./cors-origin.js";
 
 export async function buildApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
   const config = app.get(AppConfigService);
+  app.set("trust proxy", config.trustProxyHops);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -27,7 +28,7 @@ export async function buildApp(): Promise<NestExpressApplication> {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.enableCors({
     origin: (origin: string | undefined, cb: (error: Error | null, allow: boolean) => void) => {
-      if (!origin || config.allowedOrigins.has(origin)) {
+      if (isAllowedCorsOrigin(origin, config.allowedOrigins, config.allowQuickTunnelOrigins)) {
         cb(null, true);
         return;
       }
@@ -35,12 +36,12 @@ export async function buildApp(): Promise<NestExpressApplication> {
     },
     credentials: true,
   });
+  app.use("/api/auth/forgot-password", rateLimit({ max: 5, windowMs: 15 * 60_000 }));
+  app.use("/api/auth/reset-password", rateLimit({ max: 20, windowMs: 15 * 60_000 }));
   app.use(
     rateLimit({
       max: config.rateLimit.max,
       windowMs: config.rateLimit.windowMs,
-      keyGenerator: (request: Request) =>
-        (request.headers["x-forwarded-for"] as string | undefined) ?? request.ip ?? "unknown",
     })
   );
 

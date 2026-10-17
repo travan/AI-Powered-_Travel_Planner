@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
+import { normalizeOllamaItinerary } from "@travel/ai";
 import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { getBearerToken, JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
@@ -34,7 +35,7 @@ export class ItineraryController {
     const detail = result.value;
     return {
       itinerary: detail.result
-        ? { id: detail.id, ...detail.result }
+        ? { id: detail.id, ...normalizeOllamaItinerary(detail.result) }
         : null,
     };
   }
@@ -66,7 +67,7 @@ export class ItineraryController {
     const detail = result.value;
     return {
       itineraries: detail.result
-        ? [{ id: detail.id, ...detail.result }]
+        ? [{ id: detail.id, ...normalizeOllamaItinerary(detail.result) }]
         : [],
     };
   }

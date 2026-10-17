@@ -10,17 +10,17 @@ x-app-image: &app-image
   image: ai-travel-planner:server-web
 
 x-server-env: &server-env
-  NODE_ENV: production
+  NODE_ENV: ${API_NODE_ENV:-development}
   PORT: 3001
   SERVE_WEB: "false"
-  NEXT_PUBLIC_APP_URL: http://localhost:3000
-  CORS_ORIGINS: http://localhost:3000,http://localhost:8081
+  NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8081}
   DATABASE_PROVIDER: postgres
-  POSTGRES_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
-  DATABASE_URL: postgres://travel_planner:travel_planner@postgres:5432/travel_planner
+  POSTGRES_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
+  DATABASE_URL: postgres://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
   MONGODB_URI: mongodb://mongo:27017/travel_planner
   MONGODB_DB_NAME: travel_planner
-  JWT_SECRET: local-docker-change-me-please-32-chars
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or shell}
   TEST_ENABLE_MOCK_TOKENS: "false"
 
 services:
@@ -28,26 +28,45 @@ services:
     image: postgres:16-alpine
     container_name: travel-planner-postgres
     environment:
-      POSTGRES_USER: travel_planner
-      POSTGRES_PASSWORD: travel_planner
-      POSTGRES_DB: travel_planner
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-travel_planner}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-travel_planner}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-travel_planner}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ../../apps/server/src/database/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U travel_planner -d travel_planner"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.server
+    image: ai-travel-planner:server
+    working_dir: /app/apps/server
+    command: ["node", "scripts/init-local-postgres.mjs"]
+    environment:
+      DATABASE_PROVIDER: postgres
+      POSTGRES_URL: postgresql://${POSTGRES_APP_USER:-travel_planner}:${POSTGRES_APP_PASSWORD:-travel_planner}@postgres:5432/${POSTGRES_DB:-travel_planner}
+      POSTGRES_ADMIN_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+    volumes:
+      - ../../apps/server/src/database/migrations:/app/apps/server/src/database/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   mongo:
     image: mongo:7
     container_name: travel-planner-mongo
     ports:
-      - "27017:27017"
+      - "127.0.0.1:${MONGODB_PORT:-27017}:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -61,6 +80,8 @@ services:
     <<: *app-image
     container_name: travel-planner-server
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       mongo:
@@ -71,7 +92,7 @@ services:
       <<: *server-env
     ports:
       - "3001:3001"
-    command: ["pnpm", "--dir", "apps/server", "start"]
+    command: ["node", "apps/server/dist/index.js"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
       interval: 30s
@@ -90,14 +111,14 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_PROXY_TARGET: http://server:3001
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_URL: ""
       AUTH_PROVIDER: local
       NEXT_PUBLIC_AUTH_PROVIDER: local
       ENABLE_MOCK_AUTH_SERVER: "false"
     ports:
       - "3000:3000"
-    command: ["pnpm", "--dir", "apps/web", "start", "--hostname", "0.0.0.0", "--port", "3000"]
+    command: ["node", "apps/web/node_modules/next/dist/bin/next", "start", "apps/web", "--hostname", "0.0.0.0", "--port", "3000"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1));"]
       interval: 30s

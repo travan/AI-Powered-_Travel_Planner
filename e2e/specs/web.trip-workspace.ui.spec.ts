@@ -445,6 +445,14 @@ test("host can capture bills, create custom expense splits, and settle balances"
   await expect(page.getByTestId("web-custom-split-summary")).toContainText(
     "remaining",
   );
+  // Inputs must not expand the mobile layout viewport and shift click targets.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    )
+    .toBe(true);
   const createExpenseButton = page.getByTestId("web-create-expense");
   await createExpenseButton.evaluate((element) =>
     element.scrollIntoView({ block: "center" }),

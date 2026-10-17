@@ -2,37 +2,46 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicat
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import type { AuthenticatedSessionUser } from "@travel/types";
 import {
-  isSupabaseConfigured,
-  requireSupabase,
-  SUPABASE_CONFIG_ERROR,
-} from "../../lib/supabase";
+  AUTH_CONFIG_ERROR,
+  AUTH_PROVIDER,
+  isAuthConfigured,
+  getAuthUser,
+  onAuthStateChange,
+  signOut,
+  supportsGoogleAuth,
+} from "../../lib/auth-provider";
 import { signInWithGoogleOnMobile } from "../../lib/auth";
 import { mobileTheme } from "../../lib/theme";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState<AuthenticatedSessionUser | null>(null);
+  const [user, setUser] = useState<Awaited<ReturnType<typeof getAuthUser>>>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!isAuthConfigured) {
       setLoading(false);
       return;
     }
 
-    const supabase = requireSupabase();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
+    let active = true;
+    void getAuthUser().then((currentUser) => {
+      if (!active) return;
+      setUser(currentUser);
       setLoading(false);
+    }).catch(() => {
+      if (active) setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const subscription = onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSignIn = async () => {
@@ -44,7 +53,11 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    await requireSupabase().auth.signOut();
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert("Sign out error", error instanceof Error ? error.message : "Please try again");
+    }
   };
 
   if (loading) {
@@ -60,17 +73,19 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <Ionicons name="person-circle-outline" size={72} color="#c9d3de" />
         <Text style={styles.title} testID="mobile-profile-state">
-          {isSupabaseConfigured ? "Not signed in" : "Auth unavailable"}
+          {isAuthConfigured ? "Not signed in" : "Auth unavailable"}
         </Text>
         <Text style={styles.sub}>
-          {isSupabaseConfigured
-            ? "Sign in to save trips and sync across devices."
-            : SUPABASE_CONFIG_ERROR}
+          {isAuthConfigured
+            ? AUTH_PROVIDER === "local"
+              ? "Sign in with a local account to use trip planning."
+              : "Sign in to save trips and sync across devices."
+            : AUTH_CONFIG_ERROR}
         </Text>
         <TouchableOpacity
           style={[styles.btn, styles.primaryBtn]}
           onPress={() => router.push("/login")}
-          disabled={!isSupabaseConfigured}
+          disabled={!isAuthConfigured}
           activeOpacity={0.85}
         >
           <Text style={styles.btnText}>Sign in with email</Text>
@@ -78,19 +93,21 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={[styles.btn, styles.secondaryBtn]}
           onPress={() => router.push("/signup")}
-          disabled={!isSupabaseConfigured}
+          disabled={!isAuthConfigured}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryBtnText}>Create account</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.btn, styles.secondaryBtn]}
-          onPress={handleSignIn}
-          disabled={!isSupabaseConfigured}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.secondaryBtnText}>Continue with Google</Text>
-        </TouchableOpacity>
+        {supportsGoogleAuth && (
+          <TouchableOpacity
+            style={[styles.btn, styles.secondaryBtn]}
+            onPress={handleSignIn}
+            disabled={!isAuthConfigured}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

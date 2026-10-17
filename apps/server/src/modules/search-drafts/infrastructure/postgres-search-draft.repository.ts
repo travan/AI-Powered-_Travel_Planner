@@ -32,7 +32,8 @@ export class PostgresSearchDraftRepository implements SearchDraftRepository {
     const result = await this.sql.query<SearchDraftRow>(
       `update search_drafts
        set user_id = $3, status = 'claimed'
-       where id = $1 and guest_key = $2 and status = 'pending'
+       where id = $1 and guest_key = $2
+         and (status = 'pending' or (status = 'claimed' and user_id = $3))
        returning id::text, user_id::text, guest_key, email_hint, prompt_text, search_payload, status, created_at::text`,
       [input.draftId, input.guestKey, input.userId]
     );

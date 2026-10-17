@@ -23,8 +23,14 @@ type ParsedEnv = {
   WEB_APP_DIR: string;
   NEXT_PUBLIC_APP_URL: string;
   CORS_ORIGINS: string;
+  ALLOW_QUICK_TUNNEL_ORIGINS: boolean;
   RATE_LIMIT_MAX: number;
   RATE_LIMIT_WINDOW_MS: number;
+  TRUST_PROXY_HOPS: number;
+  DB_POOL_MAX: number;
+  DB_CONNECT_TIMEOUT_MS: number;
+  DB_QUERY_TIMEOUT_MS: number;
+  DB_IDLE_TIMEOUT_MS: number;
   JWT_SECRET: string;
   TEST_ENABLE_MOCK_TOKENS: boolean;
   DATABASE_PROVIDER: "postgres" | "supabase";
@@ -78,10 +84,27 @@ export class AppConfigService {
     return new Set([this.env.NEXT_PUBLIC_APP_URL, ...csv(this.env.CORS_ORIGINS)]);
   }
 
+  get allowQuickTunnelOrigins() {
+    return this.env.NODE_ENV === "development" && this.env.ALLOW_QUICK_TUNNEL_ORIGINS;
+  }
+
   get rateLimit() {
     return {
       max: this.env.RATE_LIMIT_MAX,
       windowMs: this.env.RATE_LIMIT_WINDOW_MS,
+    };
+  }
+
+  get trustProxyHops() {
+    return this.env.TRUST_PROXY_HOPS;
+  }
+
+  get databasePool() {
+    return {
+      max: this.env.DB_POOL_MAX,
+      connectionTimeoutMillis: this.env.DB_CONNECT_TIMEOUT_MS,
+      query_timeout: this.env.DB_QUERY_TIMEOUT_MS,
+      idleTimeoutMillis: this.env.DB_IDLE_TIMEOUT_MS,
     };
   }
 
@@ -109,6 +132,24 @@ export class AppConfigService {
     };
   }
 
+  get passwordRecovery() {
+    const provider = parseEnum(process.env.AUTH_PROVIDER, ["local", "supabase"], "local", "AUTH_PROVIDER");
+    const appUrl = new URL(this.env.NEXT_PUBLIC_APP_URL);
+    if (!["http:", "https:"].includes(appUrl.protocol) || (this.nodeEnv === "production" && appUrl.protocol !== "https:")) {
+      throw new Error("Password recovery requires a valid HTTP(S) app URL (HTTPS in production)");
+    }
+    return {
+      provider,
+      resetUrl: new URL("/reset-password", appUrl).toString(),
+      smtpHost: process.env.SMTP_HOST?.trim(),
+      smtpPort: parsePositiveInt(process.env.SMTP_PORT, 587, "SMTP_PORT"),
+      smtpSecure: parseBoolean(process.env.SMTP_SECURE, false),
+      smtpUser: process.env.SMTP_USER,
+      smtpPassword: process.env.SMTP_PASSWORD,
+      from: process.env.SMTP_FROM?.trim(),
+    };
+  }
+
   get mongo() {
     return {
       uri: this.env.MONGODB_URI,
@@ -125,8 +166,14 @@ function parseEnv(raw: RawEnv): ParsedEnv {
     WEB_APP_DIR: raw.WEB_APP_DIR?.trim() || "../web",
     NEXT_PUBLIC_APP_URL: parseUrl(raw.NEXT_PUBLIC_APP_URL, "http://localhost:3000", "NEXT_PUBLIC_APP_URL"),
     CORS_ORIGINS: raw.CORS_ORIGINS?.trim() || DEFAULT_CORS_ORIGINS,
+    ALLOW_QUICK_TUNNEL_ORIGINS: parseBoolean(raw.ALLOW_QUICK_TUNNEL_ORIGINS, false),
     RATE_LIMIT_MAX: parsePositiveInt(raw.RATE_LIMIT_MAX, 60, "RATE_LIMIT_MAX"),
     RATE_LIMIT_WINDOW_MS: parsePositiveInt(raw.RATE_LIMIT_WINDOW_MS, 60_000, "RATE_LIMIT_WINDOW_MS"),
+    TRUST_PROXY_HOPS: parseNonNegativeInt(raw.TRUST_PROXY_HOPS, 0, "TRUST_PROXY_HOPS"),
+    DB_POOL_MAX: parsePositiveInt(raw.DB_POOL_MAX, 10, "DB_POOL_MAX"),
+    DB_CONNECT_TIMEOUT_MS: parsePositiveInt(raw.DB_CONNECT_TIMEOUT_MS, 5_000, "DB_CONNECT_TIMEOUT_MS"),
+    DB_QUERY_TIMEOUT_MS: parsePositiveInt(raw.DB_QUERY_TIMEOUT_MS, 15_000, "DB_QUERY_TIMEOUT_MS"),
+    DB_IDLE_TIMEOUT_MS: parsePositiveInt(raw.DB_IDLE_TIMEOUT_MS, 30_000, "DB_IDLE_TIMEOUT_MS"),
     JWT_SECRET: requiredMin(raw.JWT_SECRET, 32, "JWT_SECRET"),
     TEST_ENABLE_MOCK_TOKENS: parseBoolean(raw.TEST_ENABLE_MOCK_TOKENS, false),
     DATABASE_PROVIDER: parseEnum(raw.DATABASE_PROVIDER, ["postgres", "supabase"], "postgres", "DATABASE_PROVIDER"),
@@ -144,6 +191,10 @@ function parseEnv(raw: RawEnv): ParsedEnv {
     throw new Error(
       `Invalid server environment: ${key} or DATABASE_URL is required when DATABASE_PROVIDER=${env.DATABASE_PROVIDER}`
     );
+  }
+
+  if (env.NODE_ENV === "production" && isKnownDevelopmentSecret(env.JWT_SECRET)) {
+    throw new Error("Invalid server environment: JWT_SECRET must be replaced with a unique production secret.");
   }
 
   return env;
@@ -169,6 +220,19 @@ function parsePositiveInt(value: string | undefined, fallback: number, key: stri
     throw new Error(`Invalid server environment: ${key} must be a positive integer`);
   }
   return parsed;
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number, key: string): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid server environment: ${key} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function isKnownDevelopmentSecret(value: string) {
+  return /change.?this|change.?me|development|example|placeholder|local.?docker/i.test(value);
 }
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {

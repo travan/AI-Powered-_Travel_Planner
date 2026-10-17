@@ -147,6 +147,7 @@ export default function PlanPage() {
   const [tripStyle, setTripStyle] = useState<TripStyleKey>("mid_range");
   const [numTravelers, setNumTravelers] = useState(2);
   const [loading, setLoading] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ── Data from API ──────────────────────────────────────────────────────────
@@ -213,14 +214,38 @@ export default function PlanPage() {
         const guestKey = parsed?.guestKey ?? window.localStorage.getItem(SEARCH_DRAFT_GUEST_KEY);
 
         if (draftId && guestKey) {
-          const draft = await claimSearchDraft(draftId, guestKey, session.access_token);
-          requestToGenerate = draft.search_payload;
+          try {
+            const draft = await claimSearchDraft(draftId, guestKey, session.access_token);
+            requestToGenerate = draft.search_payload;
+          } catch (claimError) {
+            // A removed draft must not discard the request saved in this browser.
+            // Auth and server failures still propagate; only missing drafts allow fallback.
+            if (!(claimError instanceof ApiRequestError) || claimError.status !== 404) throw claimError;
+          }
         }
+
+        // Consume the resume URL once, including when the server draft no longer exists.
+        // Reload must not automatically repeat a failed or already-started generation.
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("resumeGenerate");
+        cleanUrl.searchParams.delete("draftId");
+        window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
 
         if (!requestToGenerate) {
-          throw new Error("No pending search draft was found.");
+          window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
+          throw new Error("Your saved search is no longer available. Please choose a destination and try again.");
         }
 
+        // Keep the recovered form editable if AI generation fails.
+        setCities(requestToGenerate.cities.map((slug, index) => ({ slug, name: requestToGenerate.city_names?.[index] ?? slug })));
+        setNumDays(requestToGenerate.num_days ?? 7);
+        setStartDate(requestToGenerate.start_date ?? "");
+        setEndDate(requestToGenerate.end_date ?? "");
+        setUseDateRange(Boolean(requestToGenerate.start_date));
+        setBudgetValue(requestToGenerate.budget ?? 3500);
+        setCurrency(requestToGenerate.currency ?? "USD");
+        setTripStyle(requestToGenerate.trip_style as TripStyleKey);
+        setNumTravelers(requestToGenerate.num_travelers ?? 2);
         window.sessionStorage.removeItem(PENDING_SEARCH_INTENT_KEY);
         const response = await generateItinerary(requestToGenerate, session.access_token);
         if (response.status === "unsupported") {
@@ -230,7 +255,7 @@ export default function PlanPage() {
         if (!target) {
           throw new Error("Generation response is missing the next route target.");
         }
-        router.replace(`/trips?source=${target.kind}&id=${target.id}`);
+        router.replace(`/trips?source=${target.kind}&id=${target.id}${response.status === "cached" && response.cache_hit ? "&reused=1" : ""}`);
       } catch (e: unknown) {
         if (serializedIntent && shouldRestorePendingSearchIntent(e)) {
           window.sessionStorage.setItem(PENDING_SEARCH_INTENT_KEY, serializedIntent);
@@ -326,6 +351,7 @@ export default function PlanPage() {
       locale: "en",
     });
     requestPayload.prompt_text = buildPromptText(requestPayload);
+    if (forceRefresh) requestPayload.force_refresh = true;
 
     try {
       const supabase = createClient();
@@ -366,7 +392,7 @@ export default function PlanPage() {
         throw new Error("Generation response is missing the next route target.");
       }
 
-      router.push(`/trips?source=${target.kind}&id=${target.id}`);
+      router.push(`/trips?source=${target.kind}&id=${target.id}${response.status === "cached" && response.cache_hit ? "&reused=1" : ""}`);
     } catch (e: unknown) {
       if (isUnauthorizedError(e) && typeof window !== "undefined") {
         const intent = await createServerBackedIntent(requestPayload);
@@ -523,9 +549,11 @@ export default function PlanPage() {
                       >
                         <span className="material-symbols-outlined text-primary text-base">location_on</span>
                         <span className="font-semibold text-sm">{s.name["en"] ?? s.slug}</span>
-                        <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
-                          {s.country}
-                        </span>
+                        {s.country && (
+                          <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
+                            {s.country}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -534,7 +562,7 @@ export default function PlanPage() {
 
               {/* Duration */}
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
+                <div className="flex h-6 items-center justify-between">
                   <label className="block text-sm font-bold uppercase tracking-widest text-outline">Duration</label>
                   <button
                     className="text-xs font-bold text-primary uppercase tracking-widest"
@@ -597,10 +625,10 @@ export default function PlanPage() {
               {/* Trip Style */}
               <div className="space-y-4">
                 <label className="block text-sm font-bold uppercase tracking-widest text-outline">Trip Style</label>
-                <div className="flex overflow-x-auto gap-2 pb-1 -mx-1 px-1 scrollbar-hide">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-4">
                   {TRIP_STYLES.map((s) => (
                     <button key={s.key} onClick={() => setTripStyle(s.key)}
-                      className={`flex-none flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                      className={`flex w-full items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
                         tripStyle === s.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant"
                       }`}>
                       <span>{s.emoji}</span> {s.label}
@@ -620,6 +648,10 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input type="checkbox" checked={forceRefresh} onChange={(event) => setForceRefresh(event.target.checked)} disabled={loading} />
+                Generate a new version with AI, even if this exact trip was saved
+              </label>
               <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary py-5 rounded-full font-headline font-extrabold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                 {loading ? (
@@ -632,7 +664,7 @@ export default function PlanPage() {
                     auto_awesome
                   </span>
                 )}
-                {loading ? "Building your journey…" : "Generate Magic Itinerary"}
+                {loading ? "Finding or building your journey…" : "Generate Magic Itinerary"}
               </button>
             </div>
           </section>
@@ -735,7 +767,11 @@ export default function PlanPage() {
                           onClick={() => addCity(s.slug, s.name["en"] ?? s.slug)}>
                           <span className="material-symbols-outlined text-primary text-base">location_on</span>
                           <span className="font-semibold text-sm">{s.name["en"] ?? s.slug}</span>
-                          <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">{s.country}</span>
+                          {s.country && (
+                            <span className="ml-auto text-xs font-bold text-outline bg-surface-container px-2 py-0.5 rounded-full">
+                              {s.country}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -770,7 +806,7 @@ export default function PlanPage() {
                     )}
                   </div>
                   <div className="space-y-3">
-                    <label className="text-sm font-bold uppercase tracking-widest text-outline">Budget</label>
+                    <label className="flex h-6 items-center text-sm font-bold uppercase tracking-widest text-outline">Budget</label>
                     <div className="flex gap-2">
                       <div className="relative flex-1 flex items-center bg-surface-container-high rounded-lg p-4">
                         <span className="material-symbols-outlined text-primary mr-3">payments</span>
@@ -791,10 +827,10 @@ export default function PlanPage() {
                 {/* Trip Style */}
                 <div className="space-y-3">
                   <label className="text-sm font-bold uppercase tracking-widest text-outline">Trip Style</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-4">
                     {TRIP_STYLES.map((s) => (
                       <button key={s.key} onClick={() => setTripStyle(s.key)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                        className={`flex w-full items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
                           tripStyle === s.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
                         }`}>
                         <span>{s.emoji}</span> {s.label}
@@ -828,6 +864,10 @@ export default function PlanPage() {
               )}
 
               {/* CTA */}
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input type="checkbox" checked={forceRefresh} onChange={(event) => setForceRefresh(event.target.checked)} disabled={loading} />
+                Generate a new version with AI, even if this exact trip was saved
+              </label>
               <button onClick={handleGenerate} disabled={loading || (cities.length === 0 && !cityInput.trim())} data-testid="web-plan-generate"
                 className="w-full bg-linear-to-br from-primary to-primary-container text-on-primary font-bold py-5 rounded-full text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed font-headline">
                 {loading ? (
@@ -836,7 +876,7 @@ export default function PlanPage() {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 ) : null}
-                {loading ? "Building your journey…" : "Generate Magic Itinerary"}
+                {loading ? "Finding or building your journey…" : "Generate Magic Itinerary"}
                 {!loading && <span className="material-symbols-outlined">auto_awesome</span>}
               </button>
             </div>

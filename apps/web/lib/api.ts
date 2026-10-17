@@ -22,6 +22,7 @@ import type {
   UserProfileSummary,
   UserPlaceSubmissionSummary,
 } from "@travel/types";
+import { resolveApiUrl } from "@travel/api-client";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
 const SERVER_API_URL =
@@ -30,11 +31,12 @@ const SERVER_API_URL =
   "http://127.0.0.1:3001";
 
 function getApiUrl(path: string) {
-  if (API_URL) return `${API_URL.replace(/\/$/, "")}${path}`;
-  if (typeof window === "undefined") {
-    return `${SERVER_API_URL.replace(/\/$/, "")}${path}`;
-  }
-  return path;
+  const isServer = typeof window === "undefined";
+  return resolveApiUrl(path, {
+    publicBaseUrl: isServer ? undefined : API_URL,
+    serverBaseUrl: SERVER_API_URL,
+    isServer,
+  });
 }
 
 export class ApiRequestError extends Error {
@@ -117,7 +119,7 @@ export async function getItinerary(id: string, authToken?: string): Promise<Itin
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
   const res = await fetch(getApiUrl(`/api/itinerary/${id}`), {
     headers,
-    next: { revalidate: 3600 },
+    cache: "no-store",
   });
   if (!res.ok) throw new ApiRequestError(`Fetch failed: ${res.status}`, res.status);
   return res.json() as Promise<ItineraryOutput>;
@@ -140,6 +142,18 @@ export async function searchCities(q: string): Promise<CitySuggestion[]> {
   const res = await fetch(getApiUrl(`/api/cities/search?q=${encodeURIComponent(q)}`));
   if (!res.ok) return [];
   return res.json() as Promise<CitySuggestion[]>;
+}
+
+export async function rememberCity(name: string, authToken: string): Promise<void> {
+  const res = await fetch(getApiUrl("/api/cities"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throwApiRequestError("Save city failed", res);
 }
 
 export async function getPopularCities(): Promise<CitySuggestion[]> {

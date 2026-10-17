@@ -6,6 +6,12 @@ const openAuthSessionAsyncMock = vi.fn();
 const signInWithOAuthMock = vi.fn();
 const exchangeCodeForSessionMock = vi.fn();
 
+// Keep this OAuth unit test independent of React Native's Flow runtime.
+vi.mock("../../../../../apps/mobile/lib/auth-provider", () => ({
+  AUTH_PROVIDER: "supabase",
+  supportsGoogleAuth: true,
+}));
+
 vi.mock("expo-linking", () => ({
   default: undefined,
   createURL: createURLMock,

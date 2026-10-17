@@ -1,4 +1,9 @@
-import type { ItineraryInput, ItineraryOverview, Itinerary } from "@travel/types";
+import type {
+  ItineraryInput,
+  ItineraryOverview,
+  Itinerary,
+  AiTokenUsage,
+} from "@travel/types";
 import type { AIProvider, PreFetchedCityData } from "../provider.js";
 import {
   buildOverviewPrompt,
@@ -8,28 +13,63 @@ import {
 } from "../prompts/itinerary.js";
 import OpenAI from "openai";
 
+type ChatCompletionRequest = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+  think?: boolean;
+};
+
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
   private model: string;
+  private naturalInputModel: string;
+  private maxTokens?: number;
+  private disableThinking: boolean;
+  private readonly usage: AiTokenUsage[] = [];
 
-  constructor(apiKey: string, model = "gpt-4o") {
-    this.client = new OpenAI({ apiKey });
+  getUsage(): AiTokenUsage[] {
+    return [...this.usage];
+  }
+
+  constructor(
+    apiKey: string,
+    model = "gpt-4o",
+    options: {
+      baseURL?: string;
+      naturalInputModel?: string;
+      maxTokens?: number;
+      disableThinking?: boolean;
+      timeoutMs?: number;
+    } = {}
+  ) {
+    this.client = new OpenAI({
+      apiKey,
+      ...(options.baseURL ? { baseURL: options.baseURL } : {}),
+      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+      ...(options.baseURL ? { maxRetries: 0 } : {}),
+    });
     this.model = model;
+    this.naturalInputModel = options.naturalInputModel ?? "gpt-4o-mini";
+    this.maxTokens = options.maxTokens;
+    this.disableThinking = options.disableThinking ?? false;
   }
 
   async generateOverview(
     input: ItineraryInput,
     cityData: PreFetchedCityData[]
   ): Promise<ItineraryOverview> {
-    const response = await this.client.chat.completions.create({
+    const request: ChatCompletionRequest = {
       model: this.model,
-      temperature: 0.7,
+      temperature: this.disableThinking ? 0.2 : 0.7,
       response_format: { type: "json_object" },
+      stream: false,
+      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+      ...(this.disableThinking ? { think: false } : {}),
       messages: [
         { role: "system", content: SYSTEM_PROMPT(input.locale) },
         { role: "user", content: buildOverviewPrompt(input, cityData) },
       ],
-    });
+    };
+    const response = await this.client.chat.completions.create(request);
+    this.recordUsage(response, "overview");
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty overview response");
@@ -41,15 +81,20 @@ export class OpenAIProvider implements AIProvider {
     overview: ItineraryOverview,
     cityData: PreFetchedCityData[]
   ): Promise<Itinerary> {
-    const response = await this.client.chat.completions.create({
+    const request: ChatCompletionRequest = {
       model: this.model,
-      temperature: 0.7,
+      temperature: this.disableThinking ? 0.2 : 0.7,
       response_format: { type: "json_object" },
+      stream: false,
+      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+      ...(this.disableThinking ? { think: false } : {}),
       messages: [
         { role: "system", content: SYSTEM_PROMPT(input.locale) },
         { role: "user", content: buildDetailPrompt(input, overview, cityData) },
       ],
-    });
+    };
+    const response = await this.client.chat.completions.create(request);
+    this.recordUsage(response, "detail");
 
     const content = response.choices[0]?.message.content;
     if (!content) throw new Error("OpenAI returned empty detail response");
@@ -78,7 +123,7 @@ export class OpenAIProvider implements AIProvider {
 
   async parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>> {
     const response = await this.client.chat.completions.create({
-      model: "gpt-4o-mini", // cheaper model for NLP parsing
+      model: this.naturalInputModel,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
@@ -90,5 +135,23 @@ export class OpenAIProvider implements AIProvider {
     const content = response.choices[0]?.message.content;
     if (!content) return {};
     return JSON.parse(content) as Partial<ItineraryInput>;
+  }
+
+  private recordUsage(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+    operation: AiTokenUsage["operation"],
+  ): void {
+    const input = response.usage?.prompt_tokens ?? null;
+    const output = response.usage?.completion_tokens ?? null;
+    this.usage.push({
+      operation,
+      provider: "openai",
+      model: response.model || this.model,
+      input_tokens: input,
+      output_tokens: output,
+      total_tokens:
+        response.usage?.total_tokens ??
+        (input !== null && output !== null ? input + output : null),
+    });
   }
 }

@@ -145,7 +145,7 @@
     "reset_password_submit": "Cập nhật mật khẩu",
     "reset_password_success": "Đã cập nhật mật khẩu. Đang chuyển về đăng nhập...",
     "reset_password_mismatch": "Mật khẩu xác nhận không khớp.",
-    "reset_password_min": "Mật khẩu phải có ít nhất 6 ký tự.",
+    "reset_password_min": "Mật khẩu phải có ít nhất 8 ký tự.",
     "reset_password_missing_session": "Hãy mở trang này từ link đặt lại mật khẩu trong email của bạn.",
     "back_to_login": "Quay lại đăng nhập",
     "welcome_back": "Chào mừng trở lại",
