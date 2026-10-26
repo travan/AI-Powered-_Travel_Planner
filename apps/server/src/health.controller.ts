@@ -7,19 +7,19 @@ import { MONGO_CLIENT, POSTGRES_POOL } from "./database/database.tokens.js";
 export class HealthController {
   constructor(
     @Inject(POSTGRES_POOL) private readonly postgres: Pool,
-    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient
+    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient | null
   ) {}
 
   @Get("health")
   async health() {
     await this.postgres.query("select 1");
-    await this.mongo.db().admin().ping();
+    await this.mongo?.db().admin().ping();
 
     return {
       status: "ok",
       services: {
         postgres: "ok",
-        mongo: "ok",
+        ...(this.mongo ? { mongo: "ok" } : { documents: "postgres" }),
       },
       timestamp: new Date().toISOString(),
     };

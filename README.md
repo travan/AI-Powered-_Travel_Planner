@@ -129,6 +129,12 @@ To expose both frontend and backend under one domain, this project supports prox
 
 A [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/) can publish the Docker API from a machine you control, but the containers and data stay on that machine and stop serving when it or the tunnel stops. Use a stable hostname for an API target. [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) change hostname on restart and do not support SSE, which the itinerary flow uses. Cloudflare's free Workers hosting does not run this Docker Compose stack or its database volumes.
 
+### Temporary demo from a Mac (no domain needed)
+
+Keep Docker Desktop running, create `.env` from `.env.example` if needed, and run `pnpm demo:up`. This starts the web app, API, PostgreSQL, MongoDB, Redis, and a Cloudflare Quick Tunnel. The command prints the public `/signup` link only after the public `/health` endpoint reports both databases healthy. It reuses a working link when run again. The demo uses same-origin `/api/*` requests, so visitors do not need access to your Mac's `localhost` port. The data remains in local Docker volumes.
+
+Run `pnpm demo:url` to check the current link and replace an expired tunnel. Each replacement gets a different URL. For source changes, keep `pnpm demo:watch` running in another terminal; Compose syncs web and API edits into the containers. Without the watcher, reloading the page does not pick up changed source files; use `pnpm demo:rebuild` to rebuild images instead. This is a temporary demo: it is unavailable while the Mac, Docker, or tunnel is stopped. The main itinerary generation flow uses a normal HTTP response and has been verified through the tunnel. Quick Tunnels do not support SSE, so the older queued-job progress screens may not update through the public link; use `http://localhost:3000` for those screens.
+
 1. Configure web env in `apps/web/.env.local`:
    ```env
    NEXT_PUBLIC_API_URL=

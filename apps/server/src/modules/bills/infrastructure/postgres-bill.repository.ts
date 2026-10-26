@@ -34,7 +34,7 @@ type TripMemberRow = {
 export class PostgresBillRepository implements BillRepository {
   constructor(
     @Inject(SQL_CLIENT) private readonly sql: SqlClient,
-    @Inject(MONGO_DATABASE) private readonly mongo: Db
+    @Inject(MONGO_DATABASE) private readonly mongo: Db | null
   ) {}
 
   async findById(id: string): Promise<BillUpload | null> {
@@ -183,6 +183,14 @@ export class PostgresBillRepository implements BillRepository {
     rawText: string | null;
     parsed: Record<string, unknown>;
   }): Promise<void> {
+    if (!this.mongo) {
+      await this.sql.query(
+        `insert into bill_ocr_documents (bill_id, trip_id, actor_user_id, raw_text, parsed)
+         values ($1, $2, $3, $4, $5)`,
+        [input.billId, input.tripId, input.actorUserId, input.rawText, input.parsed],
+      );
+      return;
+    }
     await this.mongo.collection("bill_ocr_documents").insertOne({
       bill_id: input.billId,
       trip_id: input.tripId,

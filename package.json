@@ -49,7 +49,11 @@
     "test:e2e:auth": "pnpm test:e2e:auth:local && pnpm test:e2e:auth:flow && pnpm test:e2e:auth:error-http",
     "test:e2e:install": "playwright install chromium",
     "test:regression:local-auth": "node e2e/regression/local-postgres-auth.mjs",
-    "docker:dev": "docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml -f deploy/docker/docker-compose.dev.yml up --build --watch"
+    "docker:dev": "docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml -f deploy/docker/docker-compose.dev.yml up --build --watch",
+    "demo:up": "node scripts/demo-tunnel.mjs up",
+    "demo:url": "node scripts/demo-tunnel.mjs url",
+    "demo:rebuild": "node scripts/demo-tunnel.mjs rebuild",
+    "demo:watch": "NEXT_PUBLIC_API_URL= docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml -f deploy/docker/docker-compose.dev.yml --profile demo watch --no-up"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",
