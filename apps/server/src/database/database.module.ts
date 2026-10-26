@@ -7,6 +7,7 @@ import { AppConfigService } from "../config/app-config.service.js";
 import { MONGO_CLIENT, MONGO_DATABASE, POSTGRES_POOL, SQL_CLIENT, SUPABASE_CLIENT } from "./database.tokens.js";
 import { PostgresSqlClient } from "./postgres-sql.client.js";
 import { DatabaseLifecycleService } from "./database-lifecycle.service.js";
+import { workerPool } from "../cloudflare/request-context.js";
 
 @Global()
 @Module({
@@ -16,7 +17,7 @@ import { DatabaseLifecycleService } from "./database-lifecycle.service.js";
       provide: POSTGRES_POOL,
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) =>
-        new Pool({
+        process.env.RUNTIME_TARGET === "cloudflare" ? workerPool : new Pool({
           connectionString: config.postgresUrl,
           application_name: `horizon-nest-${config.databaseProvider}`,
           ...config.databasePool,
@@ -41,12 +42,12 @@ import { DatabaseLifecycleService } from "./database-lifecycle.service.js";
     {
       provide: MONGO_CLIENT,
       inject: [AppConfigService],
-      useFactory: (config: AppConfigService) => new MongoClient(config.mongo.uri),
+      useFactory: (config: AppConfigService) => config.documentStore === "postgres" ? null : new MongoClient(config.mongo.uri),
     },
     {
       provide: MONGO_DATABASE,
       inject: [MONGO_CLIENT, AppConfigService],
-      useFactory: (client: MongoClient, config: AppConfigService) => client.db(config.mongo.dbName),
+      useFactory: (client: MongoClient | null, config: AppConfigService) => client?.db(config.mongo.dbName) ?? null,
     },
     DatabaseLifecycleService,
   ],

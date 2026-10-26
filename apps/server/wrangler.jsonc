@@ -1,0 +1,57 @@
+{
+	"$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+	"name": "travel-planner-api",
+	"main": "cloudflare/worker.mjs",
+	"account_id": "6b34ff1e99d15ffdbbb503dac4423549",
+	"compatibility_date": "2026-10-25",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"workers_dev": true,
+	"build": {
+		"command": "pnpm build"
+	},
+	"rules": [
+		{
+			"type": "Text",
+			"globs": [
+				"**/*.crt"
+			],
+			"fallthrough": true
+		}
+	],
+	"alias": {
+		"@nestjs/websockets/socket-module": "./cloudflare/unused-nest-module.cjs",
+		"@nestjs/microservices/microservices-module": "./cloudflare/unused-nest-module.cjs",
+		"@nestjs/microservices": "./cloudflare/unused-nest-module.cjs"
+	},
+	"vars": {
+		"NODE_ENV": "production",
+		"RUNTIME_TARGET": "cloudflare",
+		"DOCUMENT_STORE": "postgres",
+		"DATABASE_PROVIDER": "postgres",
+		"AUTH_PROVIDER": "local",
+		"AI_PROVIDER": "cloudflare",
+		"CLOUDFLARE_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+		"NEXT_PUBLIC_APP_URL": "https://ai-powered-travel-planner-api.vercel.app",
+		"CORS_ORIGINS": "https://ai-powered-travel-planner-api.vercel.app,https://ai-powered-travel-planner-api-git-code-f15b26-travan1s-projects.vercel.app",
+		"TRUST_PROXY_HOPS": "1"
+	},
+	"ai": {
+		"binding": "AI"
+	},
+	"triggers": {
+		"crons": [
+			"* * * * *"
+		]
+	},
+	"observability": {
+		"enabled": true
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "99a6db02fb8b4c6e8bcc732fa3749fc6"
+		}
+	]
+}

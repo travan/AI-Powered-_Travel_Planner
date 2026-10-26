@@ -28,6 +28,7 @@ import type {
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 import { CitiesService } from "../../cities/application/cities.service.js";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
+import { workerRequestContext } from "../../../cloudflare/request-context.js";
 
 @Injectable()
 export class ItineraryService {
@@ -133,7 +134,7 @@ export class ItineraryService {
       provider =
         providerName === "mock"
           ? new MockAIProvider()
-          : createAIProvider(providerName as AIProviderName);
+          : createAIProvider(providerName as AIProviderName, { workersAI: workerRequestContext.getStore()?.ai });
       overview = await provider.generateOverview(request, cityData);
       detail = await provider.generateDetail(request, overview, cityData);
       const usage = provider.getUsage?.() ?? [];
@@ -238,7 +239,7 @@ function generationCacheKey(
   // Bump the version when the itinerary prompt or response contract changes.
   const model = provider === "ollama"
     ? process.env["OLLAMA_DETAIL_MODEL"]?.trim() || "qwen3.5:9b"
-    : provider;
+    : provider === "cloudflare" ? process.env.CLOUDFLARE_AI_MODEL ?? "@cf/meta/llama-3.3-70b-instruct-fp8-fast" : provider;
   return createHash("sha256").update(JSON.stringify({
     version: 1,
     provider,

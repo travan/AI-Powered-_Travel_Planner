@@ -7,10 +7,10 @@ import { MONGO_CLIENT, POSTGRES_POOL } from "./database.tokens.js";
 export class DatabaseLifecycleService implements OnApplicationShutdown {
   constructor(
     @Inject(POSTGRES_POOL) private readonly postgres: Pool,
-    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient
+    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient | null
   ) {}
 
   async onApplicationShutdown() {
-    await Promise.allSettled([this.postgres.end(), this.mongo.close()]);
+    await Promise.allSettled([this.postgres.end(), this.mongo?.close()]);
   }
 }

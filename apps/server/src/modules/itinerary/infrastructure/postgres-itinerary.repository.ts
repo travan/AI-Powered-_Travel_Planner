@@ -141,6 +141,12 @@ export class PostgresItineraryRepository implements ItineraryRepository {
         JSON.stringify(input.catalogCities),
       ],
     );
+    if (process.env.DOCUMENT_STORE === "postgres") {
+      await this.sql.query(
+        `insert into user_prompt_history (user_id, prompt_text, normalized_query) values ($1, $2, $3)`,
+        [input.userId, input.request.prompt_text ?? "", input.request],
+      );
+    }
     return saved.rows[0]!.id;
   }
 

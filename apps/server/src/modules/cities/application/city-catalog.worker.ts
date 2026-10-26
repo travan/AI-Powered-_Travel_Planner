@@ -51,6 +51,8 @@ export class CityCatalogWorker implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
   onModuleInit(): void {
+    // Workers run this queue from their scheduled handler instead of a timer.
+    if (process.env.RUNTIME_TARGET === "cloudflare") return;
     this.timer = setInterval(() => {
       void this.processNextJob();
     }, POLL_INTERVAL_MS);

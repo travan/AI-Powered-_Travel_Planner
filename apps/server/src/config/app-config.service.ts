@@ -156,6 +156,10 @@ export class AppConfigService {
       dbName: this.env.MONGODB_DB_NAME,
     };
   }
+
+  get documentStore() {
+    return parseEnum(process.env.DOCUMENT_STORE, ["mongo", "postgres"], "mongo", "DOCUMENT_STORE");
+  }
 }
 
 function parseEnv(raw: RawEnv): ParsedEnv {
@@ -182,7 +186,7 @@ function parseEnv(raw: RawEnv): ParsedEnv {
     SUPABASE_DATABASE_URL: optionalTrim(raw.SUPABASE_DATABASE_URL),
     SUPABASE_URL: optionalUrl(raw.SUPABASE_URL, "SUPABASE_URL"),
     SUPABASE_SERVICE_KEY: optionalTrim(raw.SUPABASE_SERVICE_KEY),
-    MONGODB_URI: requiredMin(raw.MONGODB_URI, 1, "MONGODB_URI"),
+    MONGODB_URI: raw.DOCUMENT_STORE === "postgres" ? "" : requiredMin(raw.MONGODB_URI, 1, "MONGODB_URI"),
     MONGODB_DB_NAME: raw.MONGODB_DB_NAME?.trim() || "travel_planner",
   };
 

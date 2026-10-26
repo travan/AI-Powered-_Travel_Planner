@@ -8,7 +8,9 @@ export type { OllamaProviderOptions } from "./providers/ollama.js";
 export { normalizeOllamaItinerary } from "./providers/ollama.js";
 
 import type { AIProvider } from "./provider.js";
-export type AIProviderName = "openai" | "gemini" | "claude" | "ollama";
+export type AIProviderName = "openai" | "gemini" | "claude" | "ollama" | "cloudflare";
+import { CloudflareAIProvider, type WorkersAIBinding } from "./providers/cloudflare.js";
+export { CloudflareAIProvider } from "./providers/cloudflare.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import { GeminiProvider } from "./providers/gemini.js";
 import { ClaudeProvider } from "./providers/claude.js";
@@ -29,11 +31,15 @@ function resolveKey(envVar: string, isDev: boolean): string | null {
 }
 
 export function createAIProvider(
-  provider: AIProviderName = "openai"
+  provider: AIProviderName = "openai",
+  options: { workersAI?: WorkersAIBinding } = {},
 ): AIProvider {
   const isDev = process.env["NODE_ENV"] !== "production";
 
   switch (provider) {
+    case "cloudflare":
+      if (!options.workersAI) throw new Error("Cloudflare AI binding is required");
+      return new CloudflareAIProvider(options.workersAI, process.env.CLOUDFLARE_AI_MODEL);
     case "openai": {
       const key = resolveKey("OPENAI_API_KEY", isDev);
       return key === null ? new MockAIProvider() : new OpenAIProvider(key);
