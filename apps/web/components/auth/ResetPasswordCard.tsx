@@ -1,4 +1,5 @@
 "use client";
+import { UiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -24,11 +25,17 @@ export function ResetPasswordCard() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.hash.slice(1)).get("recovery_token");
+    const token = new URLSearchParams(window.location.hash.slice(1)).get(
+      "recovery_token",
+    );
     if (token) {
       setRecoveryToken(token);
       setIsRecoverySession(true);
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
       return;
     }
     if (!MOCK_AUTH_ENABLED) return;
@@ -69,7 +76,10 @@ export function ResetPasswordCard() {
 
     try {
       await completePasswordRecovery(recoveryToken, password);
-      if (!MOCK_AUTH_ENABLED) await createClient().auth.signOut().catch(() => undefined);
+      if (!MOCK_AUTH_ENABLED)
+        await createClient()
+          .auth.signOut()
+          .catch(() => undefined);
       setRecoveryToken("");
       setIsRecoverySession(false);
       setSuccessMessage(t("reset_password_success"));
@@ -77,7 +87,9 @@ export function ResetPasswordCard() {
         router.replace("/login");
       }, 900);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : t("error_generic"));
+      setErrorMessage(
+        error instanceof Error ? error.message : t("error_generic"),
+      );
     } finally {
       setLoading(false);
     }
@@ -89,9 +101,15 @@ export function ResetPasswordCard() {
 
       <section className="relative z-10 w-full max-w-xl rounded-2xl bg-surface-container-lowest p-8 shadow-[0_32px_64px_-12px_rgba(0,93,144,0.18)] md:p-10">
         <div className="mb-8 space-y-2">
-          <p className="font-headline text-3xl font-extrabold tracking-tight text-primary">{t("brand")}</p>
-          <h1 className="font-headline text-3xl font-bold text-on-surface">{t("reset_password_title")}</h1>
-          <p className="text-on-surface-variant">{t("reset_password_subtitle")}</p>
+          <p className="font-headline text-3xl font-extrabold tracking-tight text-primary">
+            {t("brand")}
+          </p>
+          <h1 className="font-headline text-3xl font-bold text-on-surface">
+            {t("reset_password_title")}
+          </h1>
+          <p className="text-on-surface-variant">
+            {t("reset_password_subtitle")}
+          </p>
         </div>
 
         {!isRecoverySession && (
@@ -102,9 +120,13 @@ export function ResetPasswordCard() {
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <label className="block space-y-1.5">
-            <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">{t("password")}</span>
+            <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">
+              {t("password")}
+            </span>
             <span className="relative block">
-              <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
+              <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                lock
+              </span>
               <input
                 required
                 minLength={8}
@@ -120,15 +142,25 @@ export function ResetPasswordCard() {
                 onClick={() => setShowPassword((value) => !value)}
                 className="absolute top-1/2 right-4 -translate-y-1/2 text-outline transition hover:text-on-surface"
               >
-                <span className="material-symbols-outlined text-[20px]">{showPassword ? "visibility_off" : "visibility"}</span>
+                <span className="material-symbols-outlined text-[20px]">
+                  {showPassword ? (
+                    "visibility_off"
+                  ) : (
+                    <UiText id="t70ef4adb6243" fallback="visibility" />
+                  )}
+                </span>
               </button>
             </span>
           </label>
 
           <label className="block space-y-1.5">
-            <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">{t("confirm_password")}</span>
+            <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">
+              {t("confirm_password")}
+            </span>
             <span className="relative block">
-              <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
+              <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                lock
+              </span>
               <input
                 required
                 minLength={8}
@@ -144,13 +176,33 @@ export function ResetPasswordCard() {
                 onClick={() => setShowConfirmPassword((value) => !value)}
                 className="absolute top-1/2 right-4 -translate-y-1/2 text-outline transition hover:text-on-surface"
               >
-                <span className="material-symbols-outlined text-[20px]">{showConfirmPassword ? "visibility_off" : "visibility"}</span>
+                <span className="material-symbols-outlined text-[20px]">
+                  {showConfirmPassword ? (
+                    "visibility_off"
+                  ) : (
+                    <UiText id="t70ef4adb6243" fallback="visibility" />
+                  )}
+                </span>
               </button>
             </span>
           </label>
 
-          {errorMessage && <p className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container" data-testid="reset-password-error">{errorMessage}</p>}
-          {successMessage && <p className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant" data-testid="reset-password-success">{successMessage}</p>}
+          {errorMessage && (
+            <p
+              className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container"
+              data-testid="reset-password-error"
+            >
+              {errorMessage}
+            </p>
+          )}
+          {successMessage && (
+            <p
+              className="rounded-xl bg-primary-fixed px-4 py-3 text-sm font-medium text-on-primary-fixed-variant"
+              data-testid="reset-password-success"
+            >
+              {successMessage}
+            </p>
+          )}
 
           <button
             type="submit"
@@ -163,7 +215,10 @@ export function ResetPasswordCard() {
         </form>
 
         <div className="mt-8 text-center text-sm text-on-surface-variant">
-          <Link href="/login" className="font-semibold text-primary transition hover:text-primary-container">
+          <Link
+            href="/login"
+            className="font-semibold text-primary transition hover:text-primary-container"
+          >
             {t("back_to_login")}
           </Link>
         </div>

@@ -1,3 +1,7 @@
+import {
+  translationPrompt,
+  TRANSLATION_SYSTEM,
+} from "../prompts/translation.js";
 import type {
   ItineraryInput,
   ItineraryOverview,
@@ -18,6 +22,17 @@ export class GeminiProvider implements AIProvider {
   private model: string;
   private readonly usage: AiTokenUsage[] = [];
 
+  async translateTexts(texts: Record<string, string>, target: "en" | "vi") {
+    const text = await this.callModel(
+      TRANSLATION_SYSTEM,
+      translationPrompt(texts, target),
+      "translate",
+    );
+    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, "")) as Record<
+      string,
+      string
+    >;
+  }
   getUsage(): AiTokenUsage[] {
     return [...this.usage];
   }
@@ -41,7 +56,8 @@ export class GeminiProvider implements AIProvider {
     const result = await genModel.generateContent(userPrompt);
     if (operation) {
       const input = result.response.usageMetadata?.promptTokenCount ?? null;
-      const output = result.response.usageMetadata?.candidatesTokenCount ?? null;
+      const output =
+        result.response.usageMetadata?.candidatesTokenCount ?? null;
       this.usage.push({
         operation,
         provider: "gemini",
@@ -60,7 +76,7 @@ export class GeminiProvider implements AIProvider {
 
   async generateOverview(
     input: ItineraryInput,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<ItineraryOverview> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
@@ -73,7 +89,7 @@ export class GeminiProvider implements AIProvider {
   async generateDetail(
     input: ItineraryInput,
     overview: ItineraryOverview,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<Itinerary> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
@@ -86,15 +102,18 @@ export class GeminiProvider implements AIProvider {
   async transcribeVideo(videoUrl: string): Promise<string> {
     const text = await this.callModel(
       "You are a travel content extractor.",
-      `Extract travel information from: ${videoUrl}`
+      `Extract travel information from: ${videoUrl}`,
     );
     return text;
   }
 
-  async parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>> {
+  async parseNaturalInput(
+    text: string,
+    locale: string,
+  ): Promise<Partial<ItineraryInput>> {
     const result = await this.callModel(
       SYSTEM_PROMPT(locale),
-      buildNLPPrompt(text)
+      buildNLPPrompt(text),
     );
     return JSON.parse(result) as Partial<ItineraryInput>;
   }

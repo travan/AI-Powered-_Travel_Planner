@@ -71,6 +71,7 @@ export type TripActivityParticipant = {
 };
 
 export type TripActivity = {
+  sourcePlanItemId?: string;
   id: string;
   tripId: string;
   activityCatalogId: string | null;
@@ -90,6 +91,7 @@ export type TripActivity = {
 };
 
 export type CreateTripActivityInput = {
+  source_plan_item_id?: string;
   activity_catalog_id?: string;
   title: string;
   category?: string;

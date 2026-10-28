@@ -1,10 +1,17 @@
 import type { TripMember } from "../../trips/domain/trip.entity.js";
-import type { ActivityCatalogItem, TripActivity, TripActivityParticipant } from "./activity.entity.js";
+import type {
+  ActivityCatalogItem,
+  TripActivity,
+  TripActivityParticipant,
+} from "./activity.entity.js";
 
 export const ACTIVITY_REPOSITORY = Symbol("ACTIVITY_REPOSITORY");
 
 export type ActivityRepository = {
-  findTripMember(input: { tripId: string; userId: string }): Promise<TripMember | null>;
+  findTripMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null>;
   searchCatalog(input: {
     citySlug?: string;
     category?: string;
@@ -12,10 +19,14 @@ export type ActivityRepository = {
     limit: number;
   }): Promise<ActivityCatalogItem[]>;
   listTripActivities(tripId: string): Promise<TripActivity[]>;
-  findTripActivity(input: { tripId: string; activityId: string }): Promise<TripActivity | null>;
+  findTripActivity(input: {
+    tripId: string;
+    activityId: string;
+  }): Promise<TripActivity | null>;
   createTripActivity(input: {
     tripId: string;
     activityCatalogId?: string | null;
+    sourcePlanItemId?: string;
     title: string;
     category: string;
     scheduledAt?: string | null;

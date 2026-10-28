@@ -1,4 +1,7 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+
+import { UiText } from "../i18n/UiText";
 
 import type {
   Activity,
@@ -17,18 +20,18 @@ interface Props {
   showDailyBudget?: boolean;
 }
 
-function formatMoney(value: number, currency: string) {
+function formatMoney(value: number, currency: string, formattingLocale = "en") {
   const code = currency?.trim().toUpperCase() || "USD";
 
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(formattingLocale, {
       style: "currency",
       currency: code,
       currencyDisplay: "code",
       maximumFractionDigits: 0,
     }).format(value);
   } catch {
-    return `${code} ${value.toLocaleString("en-US")}`;
+    return `${code} ${value.toLocaleString(formattingLocale)}`;
   }
 }
 
@@ -83,12 +86,14 @@ function ticketOptionsValue(value: unknown): TicketOption[] {
     if (!platform || !url) return [];
     const priceFrom = stringValue(ticket["price_from"]);
     const note = stringValue(ticket["note"]);
-    return [{
-      platform,
-      url,
-      ...(priceFrom ? { price_from: priceFrom } : {}),
-      ...(note ? { note } : {}),
-    }];
+    return [
+      {
+        platform,
+        url,
+        ...(priceFrom ? { price_from: priceFrom } : {}),
+        ...(note ? { note } : {}),
+      },
+    ];
   });
 }
 
@@ -111,9 +116,7 @@ function activitiesForDay(day: ItineraryDay, currency: string): Activity[] {
       return {
         ...value,
         time:
-          stringValue(value["time"]) ??
-          stringValue(value["time_slot"]) ??
-          "",
+          stringValue(value["time"]) ?? stringValue(value["time_slot"]) ?? "",
         name:
           stringValue(value["name"]) ??
           stringValue(value["activity"]) ??
@@ -142,6 +145,8 @@ export function DayTimeline({
   editDisabled = false,
   showDailyBudget = true,
 }: Props) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   if (!days || days.length === 0) return null;
 
   return (
@@ -159,7 +164,8 @@ export function DayTimeline({
               aria-label={`Day ${day.day_number}`}
             >
               <span className="text-[9px] font-extrabold uppercase leading-none tracking-[0.16em]">
-                Day
+                {" "}
+                <UiText id="t987b9ced08d4" fallback="Day" />{" "}
               </span>
               <span className="mt-1 text-lg font-black leading-none">
                 {day.day_number}
@@ -168,7 +174,8 @@ export function DayTimeline({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="rounded-full bg-primary-fixed px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-on-primary-fixed-variant">
-                  Day {day.day_number}
+                  {" "}
+                  <UiText id="t987b9ced08d4" fallback="Day" /> {day.day_number}
                 </span>
                 <h3 className="font-semibold text-gray-900 text-lg">
                   {day.title ||
@@ -177,7 +184,7 @@ export function DayTimeline({
               </div>
               {day.date && (
                 <p className="mt-1 text-sm font-medium text-on-surface-variant">
-                  {new Date(day.date).toLocaleDateString("en-US", {
+                  {new Date(day.date).toLocaleDateString(formattingLocale, {
                     weekday: "long",
                     month: "short",
                     day: "numeric",
@@ -197,7 +204,11 @@ export function DayTimeline({
                   className="rounded-full border border-primary/40 bg-surface-container-lowest px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary-fixed disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid={`itinerary-day-edit-${day.day_number}`}
                 >
-                  {editDisabled ? "Opening..." : "Edit day"}
+                  {editDisabled ? (
+                    <UiText id="t3337b7fd28ce" fallback="Opening..." />
+                  ) : (
+                    <UiText id="te7e0c72aef47" fallback="Edit day" />
+                  )}
                 </button>
               )}
             </div>
@@ -207,7 +218,11 @@ export function DayTimeline({
             <div className="ml-14 flex items-center justify-between gap-4 rounded-xl border border-primary/25 bg-primary-fixed/40 px-4 py-3">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-on-primary-fixed-variant">
-                  Estimated daily budget
+                  {" "}
+                  <UiText
+                    id="t3ecae6cbba22"
+                    fallback="Estimated daily budget"
+                  />{" "}
                 </p>
                 <p className="mt-0.5 text-xl font-black text-on-surface">
                   {formatMoney(
@@ -217,11 +232,13 @@ export function DayTimeline({
                         0,
                       ),
                     currency,
+                    formattingLocale,
                   )}
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-on-primary">
-                Day {day.day_number}
+                {" "}
+                <UiText id="t987b9ced08d4" fallback="Day" /> {day.day_number}
               </span>
             </div>
           )}

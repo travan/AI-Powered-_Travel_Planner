@@ -1,5 +1,15 @@
 import { Transform, Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import {
+  IsIn,
+  IsInt,
+  IsNumber,
+  MaxLength,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from "class-validator";
 
 export const transportModes = [
   "flight",
@@ -20,6 +30,12 @@ function trimOptionalString({ value }: { value: unknown }): unknown {
 }
 
 export class PlaceRecommendationQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) q?: string;
+  @IsOptional() @IsString() @MaxLength(500) tags?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) maxPrice?: number;
+  @IsOptional() @IsIn(["true", "false"]) independentOnly?: string;
+  @IsOptional() @IsString() @MaxLength(3) currency?: string;
+
   @Transform(trimOptionalString)
   @IsOptional()
   @IsString()

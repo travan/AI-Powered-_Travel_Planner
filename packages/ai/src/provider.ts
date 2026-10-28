@@ -26,6 +26,10 @@ export interface PreFetchedCityData {
 }
 
 export interface AIProvider {
+  translateTexts?(
+    texts: Record<string, string>,
+    target: "en" | "vi",
+  ): Promise<Record<string, string>>;
   getUsage?(): AiTokenUsage[];
   /**
    * Phase 1: Generate a lightweight overview (~1,500 tokens output).
@@ -33,7 +37,7 @@ export interface AIProvider {
    */
   generateOverview(
     input: ItineraryInput,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<ItineraryOverview>;
 
   /**
@@ -43,7 +47,7 @@ export interface AIProvider {
   generateDetail(
     input: ItineraryInput,
     overview: ItineraryOverview,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<Itinerary>;
 
   /**
@@ -56,5 +60,8 @@ export interface AIProvider {
    * Parse a natural-language travel query into structured ItineraryInput.
    * e.g. "5 days Da Lat in June, 5 million budget" → ItineraryInput
    */
-  parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>>;
+  parseNaturalInput(
+    text: string,
+    locale: string,
+  ): Promise<Partial<ItineraryInput>>;
 }

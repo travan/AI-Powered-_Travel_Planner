@@ -1,4 +1,5 @@
 "use client";
+import { UiText } from "../../../../../components/i18n/UiText";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -80,7 +81,10 @@ export default function GeneratingPage() {
   const completedSet = new Set(steps.map((s) => s.type));
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6" data-testid="web-generating-screen">
+    <div
+      className="min-h-screen bg-background flex items-center justify-center p-6"
+      data-testid="web-generating-screen"
+    >
       <div className="w-full max-w-lg space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -89,30 +93,52 @@ export default function GeneratingPage() {
               <div className="w-20 h-20 mx-auto rounded-full bg-primary-fixed flex items-center justify-center">
                 <span
                   className="material-symbols-outlined text-primary text-4xl"
-                  style={{ fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48" }}
+                  style={{
+                    fontVariationSettings:
+                      "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48",
+                  }}
                 >
                   check_circle
                 </span>
               </div>
               <h1 className="text-2xl font-headline font-extrabold text-on-surface">
-                Your itinerary is ready!
+                {" "}
+                <UiText
+                  id="tb077be6c5131"
+                  fallback="Your itinerary is ready!"
+                />{" "}
               </h1>
-              <p className="text-on-surface-variant">Redirecting you now…</p>
+              <p className="text-on-surface-variant">
+                {" "}
+                <UiText
+                  id="td7080fc9953f"
+                  fallback="Redirecting you now…"
+                />{" "}
+              </p>
             </>
           ) : error ? (
             <>
               <div className="w-20 h-20 mx-auto rounded-full bg-error/10 flex items-center justify-center">
-                <span className="material-symbols-outlined text-error text-4xl">error</span>
+                <span className="material-symbols-outlined text-error text-4xl">
+                  error
+                </span>
               </div>
               <h1 className="text-2xl font-headline font-extrabold text-on-surface">
-                Something went wrong
+                {" "}
+                <UiText
+                  id="t8d886c0ba6f2"
+                  fallback="Something went wrong"
+                />{" "}
               </h1>
-              <p className="text-error text-sm">{error}</p>
+              <p className="text-error text-sm">
+                <UiText text={error} />
+              </p>
               <a
                 href="/plan"
                 className="mt-4 inline-block bg-primary text-on-primary px-6 py-3 rounded-full font-bold text-sm"
               >
-                Try again
+                {" "}
+                <UiText id="t042c862e4467" fallback="Try again" />{" "}
               </a>
             </>
           ) : (
@@ -120,16 +146,27 @@ export default function GeneratingPage() {
               <div className="w-20 h-20 mx-auto rounded-full bg-primary-fixed flex items-center justify-center">
                 <span
                   className="material-symbols-outlined text-primary text-4xl animate-spin"
-                  style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48" }}
+                  style={{
+                    fontVariationSettings:
+                      "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48",
+                  }}
                 >
                   progress_activity
                 </span>
               </div>
               <h1 className="text-2xl font-headline font-extrabold text-on-surface">
-                Crafting your journey…
+                {" "}
+                <UiText
+                  id="t63d506123063"
+                  fallback="Crafting your journey…"
+                />{" "}
               </h1>
               <p className="text-on-surface-variant text-sm">
-                Our AI is personalizing every detail. This usually takes 15–30 seconds.
+                {" "}
+                <UiText
+                  id="t34036578e163"
+                  fallback="Our AI is personalizing every detail. This usually takes 15–30 seconds."
+                />{" "}
               </p>
             </>
           )}
@@ -144,7 +181,9 @@ export default function GeneratingPage() {
               const label = STEP_LABELS[stepType] ?? stepType;
 
               // Show next upcoming step as pulsing
-              const nextIdx = completedOrder.findIndex((t) => !completedSet.has(t));
+              const nextIdx = completedOrder.findIndex(
+                (t) => !completedSet.has(t),
+              );
               const isActive = !isComplete && idx === nextIdx;
 
               return (
@@ -154,28 +193,39 @@ export default function GeneratingPage() {
                       isComplete
                         ? "bg-primary text-on-primary"
                         : isActive
-                        ? "bg-primary-fixed border-2 border-primary animate-pulse"
-                        : "bg-surface-container-high text-outline"
+                          ? "bg-primary-fixed border-2 border-primary animate-pulse"
+                          : "bg-surface-container-high text-outline"
                     }`}
                   >
                     {isComplete ? (
-                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      <span
+                        className="material-symbols-outlined text-base"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
                         check
                       </span>
                     ) : (
-                      <span className="text-xs font-bold text-current">{idx + 1}</span>
+                      <span className="text-xs font-bold text-current">
+                        {idx + 1}
+                      </span>
                     )}
                   </div>
                   <div className="flex-1">
                     <p
                       className={`text-sm font-semibold ${
-                        isComplete ? "text-on-surface" : isActive ? "text-on-surface animate-pulse" : "text-outline"
+                        isComplete
+                          ? "text-on-surface"
+                          : isActive
+                            ? "text-on-surface animate-pulse"
+                            : "text-outline"
                       }`}
                     >
-                      {label}
+                      <UiText text={label} />
                     </p>
                     {detail && isComplete && (
-                      <p className="text-xs text-on-surface-variant">{detail}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        {detail}
+                      </p>
                     )}
                   </div>
                 </div>

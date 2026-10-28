@@ -26,6 +26,9 @@ export class OllamaProvider implements AIProvider {
   private readonly openAICompatible: OpenAIProvider;
   private readonly usage: AiTokenUsage[] = [];
 
+  translateTexts(texts: Record<string, string>, target: "en" | "vi") {
+    return this.openAICompatible.translateTexts(texts, target);
+  }
   getUsage(): AiTokenUsage[] {
     return [...this.usage];
   }
@@ -82,7 +85,8 @@ export class OllamaProvider implements AIProvider {
       buildDetailPrompt(input, overview, cityData),
       Math.min(32768, Math.max(8192, 4096 + overview.total_days * 2500)),
       Math.min(900_000, Math.max(180_000, overview.total_days * 60_000)),
-      (payload) => this.usage.push(toUsage(payload, this.detailModel, "detail")),
+      (payload) =>
+        this.usage.push(toUsage(payload, this.detailModel, "detail")),
     );
     return normalizeOllamaItinerary(parseJsonRecord(content));
   }
@@ -164,7 +168,8 @@ function toUsage(
 ): AiTokenUsage {
   const input = nonNegativeNumber(payload["prompt_eval_count"]);
   const output = nonNegativeNumber(payload["eval_count"]);
-  const total = input !== undefined && output !== undefined ? input + output : null;
+  const total =
+    input !== undefined && output !== undefined ? input + output : null;
   const durationNs = nonNegativeNumber(payload["total_duration"]);
   return {
     operation,
@@ -173,7 +178,8 @@ function toUsage(
     input_tokens: input ?? null,
     output_tokens: output ?? null,
     total_tokens: total,
-    duration_ms: durationNs === undefined ? null : Math.round(durationNs / 1_000_000),
+    duration_ms:
+      durationNs === undefined ? null : Math.round(durationNs / 1_000_000),
   };
 }
 

@@ -89,7 +89,7 @@ export class PostgresItineraryRepository implements ItineraryRepository {
               i.trip_style,
               coalesce(i.is_public, false) as is_public,
               i.created_at::text,
-              coalesce(to_jsonb(i)->'result', to_jsonb(i)->'output') as result
+              coalesce(t.current_plan, to_jsonb(i)->'result', to_jsonb(i)->'output') || jsonb_build_object('version',t.planning_version,'locked_ids',to_jsonb(t.planning_locked_ids)) as result
        from trips t
        join trip_members tm
          on tm.trip_id = t.id

@@ -42,7 +42,9 @@ function getApiUrl(path: string) {
 export class ApiRequestError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly code?: string,
+    readonly params?: Record<string, string | number>,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -55,9 +57,11 @@ function throwApiRequestError(action: string, response: Response): never {
 
 export async function generateItinerary(
   body: GenerateRequest,
-  authToken?: string
+  authToken?: string,
 ): Promise<GenerateResponse> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
   const res = await fetch(getApiUrl("/api/itinerary/generate"), {
@@ -69,9 +73,13 @@ export async function generateItinerary(
   return res.json() as Promise<GenerateResponse>;
 }
 
-export async function checkAccountExists(email: string): Promise<boolean | null> {
+export async function checkAccountExists(
+  email: string,
+): Promise<boolean | null> {
   try {
-    const res = await fetch(getApiUrl(`/api/auth/account-exists?email=${encodeURIComponent(email)}`));
+    const res = await fetch(
+      getApiUrl(`/api/auth/account-exists?email=${encodeURIComponent(email)}`),
+    );
     if (!res.ok) return null;
     const payload = (await res.json()) as { exists?: boolean };
     return typeof payload.exists === "boolean" ? payload.exists : null;
@@ -100,7 +108,7 @@ export async function createSearchDraft(body: {
 export async function claimSearchDraft(
   draftId: string,
   guestKey: string,
-  authToken: string
+  authToken: string,
 ): Promise<SearchDraftRecord> {
   const res = await fetch(getApiUrl(`/api/search-drafts/${draftId}/claim`), {
     method: "POST",
@@ -114,14 +122,18 @@ export async function claimSearchDraft(
   return res.json() as Promise<SearchDraftRecord>;
 }
 
-export async function getItinerary(id: string, authToken?: string): Promise<ItineraryOutput> {
+export async function getItinerary(
+  id: string,
+  authToken?: string,
+): Promise<ItineraryOutput> {
   const headers: Record<string, string> = {};
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
   const res = await fetch(getApiUrl(`/api/itinerary/${id}`), {
     headers,
     cache: "no-store",
   });
-  if (!res.ok) throw new ApiRequestError(`Fetch failed: ${res.status}`, res.status);
+  if (!res.ok)
+    throw new ApiRequestError(`Fetch failed: ${res.status}`, res.status);
   return res.json() as Promise<ItineraryOutput>;
 }
 
@@ -139,12 +151,17 @@ export async function getSavedTripItinerary(
 }
 
 export async function searchCities(q: string): Promise<CitySuggestion[]> {
-  const res = await fetch(getApiUrl(`/api/cities/search?q=${encodeURIComponent(q)}`));
+  const res = await fetch(
+    getApiUrl(`/api/cities/search?q=${encodeURIComponent(q)}`),
+  );
   if (!res.ok) return [];
   return res.json() as Promise<CitySuggestion[]>;
 }
 
-export async function rememberCity(name: string, authToken: string): Promise<void> {
+export async function rememberCity(
+  name: string,
+  authToken: string,
+): Promise<void> {
   const res = await fetch(getApiUrl("/api/cities"), {
     method: "POST",
     headers: {
@@ -166,16 +183,21 @@ export async function getPopularCities(): Promise<CitySuggestion[]> {
 
 export async function getPromptHistory(
   authToken: string,
-  limit = 5
+  limit = 5,
 ): Promise<PromptHistoryEntry[]> {
-  const res = await fetch(getApiUrl(`/api/users/me/prompt-history?limit=${limit}`), {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
+  const res = await fetch(
+    getApiUrl(`/api/users/me/prompt-history?limit=${limit}`),
+    {
+      headers: { Authorization: `Bearer ${authToken}` },
+    },
+  );
   if (!res.ok) return [];
   return res.json() as Promise<PromptHistoryEntry[]>;
 }
 
-export async function getMyProfile(authToken: string): Promise<UserProfileSummary> {
+export async function getMyProfile(
+  authToken: string,
+): Promise<UserProfileSummary> {
   const res = await fetch(getApiUrl("/api/profile/me"), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
@@ -193,7 +215,7 @@ export async function getMyTrips(authToken: string): Promise<TripSummary[]> {
 
 export async function getTripDetail(
   tripId: string,
-  authToken: string
+  authToken: string,
 ): Promise<TripDetail> {
   const res = await fetch(getApiUrl(`/api/trips/${tripId}`), {
     headers: { Authorization: `Bearer ${authToken}` },
@@ -206,16 +228,19 @@ export async function updateTripActivityStatus(
   tripId: string,
   activityId: string,
   status: TripActivitySummary["status"],
-  authToken: string
+  authToken: string,
 ): Promise<TripActivitySummary> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/activities/${activityId}/status`), {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetch(
+    getApiUrl(`/api/trips/${tripId}/activities/${activityId}/status`),
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ status }),
     },
-    body: JSON.stringify({ status }),
-  });
+  );
   if (!res.ok) throw new Error(`Activity update failed: ${res.status}`);
   return res.json() as Promise<TripActivitySummary>;
 }
@@ -224,16 +249,19 @@ export async function updateTripChecklistStatus(
   tripId: string,
   itemId: string,
   status: TripChecklistItem["status"],
-  authToken: string
+  authToken: string,
 ): Promise<TripChecklistItem> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/checklist/${itemId}/status`), {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetch(
+    getApiUrl(`/api/trips/${tripId}/checklist/${itemId}/status`),
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ status }),
     },
-    body: JSON.stringify({ status }),
-  });
+  );
   if (!res.ok) throw new Error(`Checklist update failed: ${res.status}`);
   return res.json() as Promise<TripChecklistItem>;
 }
@@ -241,7 +269,7 @@ export async function updateTripChecklistStatus(
 export async function createTripActivity(
   tripId: string,
   body: CreateTripActivityRequest,
-  authToken: string
+  authToken: string,
 ): Promise<TripActivitySummary> {
   const res = await fetch(getApiUrl(`/api/trips/${tripId}/activities`), {
     method: "POST",
@@ -258,7 +286,7 @@ export async function createTripActivity(
 export async function createPlaceSubmission(
   tripId: string,
   body: CreatePlaceSubmissionRequest,
-  authToken: string
+  authToken: string,
 ): Promise<UserPlaceSubmissionSummary> {
   const res = await fetch(getApiUrl(`/api/trips/${tripId}/place-submissions`), {
     method: "POST",
@@ -275,7 +303,7 @@ export async function createPlaceSubmission(
 export async function createTripExpense(
   tripId: string,
   body: CreateTripExpenseRequest,
-  authToken: string
+  authToken: string,
 ): Promise<TripDetail["expenses"][number]> {
   const res = await fetch(getApiUrl(`/api/trips/${tripId}/expenses`), {
     method: "POST",
@@ -292,7 +320,7 @@ export async function createTripExpense(
 export async function createBillUpload(
   tripId: string,
   body: CreateBillUploadRequest,
-  authToken: string
+  authToken: string,
 ): Promise<BillUploadSummary> {
   const res = await fetch(getApiUrl(`/api/trips/${tripId}/bills`), {
     method: "POST",
@@ -310,16 +338,19 @@ export async function reviewTripChangeRequest(
   tripId: string,
   requestId: string,
   status: "approved" | "rejected",
-  authToken: string
+  authToken: string,
 ): Promise<TripChangeRequestSummary> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/change-requests/${requestId}/review`), {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetch(
+    getApiUrl(`/api/trips/${tripId}/change-requests/${requestId}/review`),
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ status }),
     },
-    body: JSON.stringify({ status }),
-  });
+  );
   if (!res.ok) throw new Error(`Change request review failed: ${res.status}`);
   return res.json() as Promise<TripChangeRequestSummary>;
 }
@@ -353,14 +384,16 @@ export async function getTransportPriceRecommendations(params: {
   if (params.month) query.set("month", String(params.month));
   if (params.limit) query.set("limit", String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const res = await fetch(getApiUrl(`/api/recommendations/transport-prices${suffix}`));
+  const res = await fetch(
+    getApiUrl(`/api/recommendations/transport-prices${suffix}`),
+  );
   if (!res.ok) return [];
   return res.json() as Promise<TransportPriceRecommendationSummary[]>;
 }
 
 export async function saveTrip(
   itineraryId: string,
-  authToken: string
+  authToken: string,
 ): Promise<{ saved: true; trip_id: string }> {
   const res = await fetch(getApiUrl(`/api/itinerary/${itineraryId}/save`), {
     method: "POST",
@@ -372,7 +405,7 @@ export async function saveTrip(
 
 export async function shareItinerary(
   itineraryId: string,
-  authToken: string
+  authToken: string,
 ): Promise<{ share_token: string; share_url: string }> {
   const res = await fetch(getApiUrl(`/api/itinerary/${itineraryId}/share`), {
     method: "PATCH",

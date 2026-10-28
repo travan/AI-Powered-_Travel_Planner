@@ -119,7 +119,9 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
   );
   await client.query(`grant usage on schema public to ${role}`);
   await client.query(`grant usage on schema private to ${role}`);
-  await client.query(`grant select, insert, update, delete on private.password_resets to ${role}`);
+  await client.query(
+    `grant select, insert, update, delete on private.password_resets to ${role}`,
+  );
   await client.query(
     `grant select, insert, update, delete on all tables in schema public to ${role}`,
   );
@@ -129,6 +131,26 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
   await client.query(
     `grant execute on all functions in schema public to ${role}`,
   );
+  await client.query(`grant usage on schema journey_internal to ${role}`);
+  await client.query(
+    `grant execute on all functions in schema journey_internal to ${role}`,
+  );
+  // Browser roles receive no grants. The dedicated server role needs explicit
+  // policies for server-only tables protected by RLS.
+  for (const table of [
+    "itinerary_jobs",
+    "trip_plan_revisions",
+    "accommodations",
+    "user_prompt_history",
+    "itinerary_translations",
+  ]) {
+    const relation = quoteIdentifier(table);
+    const policy = quoteIdentifier(`backend_${appUser}`);
+    await client.query(`drop policy if exists ${policy} on public.${relation}`);
+    await client.query(
+      `create policy ${policy} on public.${relation} to ${role} using (true) with check (true)`,
+    );
+  }
   await client.query(
     `alter default privileges for role ${admin} in schema public grant select, insert, update, delete on tables to ${role}`,
   );

@@ -1,3 +1,5 @@
+import { JourneyController } from "./journey/journey.controller.js";
+import { JourneyService } from "./journey/journey.service.js";
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module.js";
 import { CitiesModule } from "../cities/cities.module.js";
@@ -8,14 +10,15 @@ import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
 
 @Module({
   imports: [DatabaseModule, CitiesModule],
-  controllers: [ItineraryController],
+  controllers: [JourneyController, ItineraryController],
   providers: [
     ItineraryService,
+    JourneyService,
     {
       provide: ITINERARY_REPOSITORY,
       useClass: PostgresItineraryRepository,
     },
   ],
-  exports: [ItineraryService],
+  exports: [ItineraryService, JourneyService],
 })
 export class ItineraryModule {}

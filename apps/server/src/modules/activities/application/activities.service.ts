@@ -68,6 +68,7 @@ export class ActivitiesService {
 
     const activity = await this.activities.createTripActivity({
       tripId: input.tripId,
+      sourcePlanItemId: input.dto.source_plan_item_id,
       activityCatalogId: input.dto.activity_catalog_id ?? null,
       title: input.dto.title.trim(),
       category: input.dto.category.trim(),

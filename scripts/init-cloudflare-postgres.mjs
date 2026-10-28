@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 
-const require = createRequire(new URL("../apps/server/package.json", import.meta.url));
+const require = createRequire(
+  new URL("../apps/server/package.json", import.meta.url),
+);
 const { Client } = require("pg");
 const dotenv = require("dotenv");
 const root = new URL("../", import.meta.url);
@@ -11,39 +13,71 @@ const originalEnv = await fs.readFile(envFile, "utf8");
 const env = dotenv.parse(originalEnv);
 const adminUrl = new URL(env.SUPABASE_DATABASE_URL);
 if (adminUrl.hostname !== "db.cvlvzfkoarlwhvjwwppn.supabase.co") {
-  throw new Error("Refusing to initialize a database outside the selected Travel Planner Supabase project");
+  throw new Error(
+    "Refusing to initialize a database outside the selected Travel Planner Supabase project",
+  );
 }
-const ca = await fs.readFile(new URL("apps/server/cloudflare/supabase-ca.crt", root), "utf8");
-const client = new Client({ connectionString: adminUrl.toString(), ssl: { ca, rejectUnauthorized: true } });
+const ca = await fs.readFile(
+  new URL("apps/server/cloudflare/supabase-ca.crt", root),
+  "utf8",
+);
+const client = new Client({
+  connectionString: adminUrl.toString(),
+  ssl: { ca, rejectUnauthorized: true },
+});
 const role = "travel_worker_app";
-const password = env.POSTGRES_URL ? decodeURIComponent(new URL(env.POSTGRES_URL).password) : randomBytes(32).toString("hex");
+const password = env.POSTGRES_URL
+  ? decodeURIComponent(new URL(env.POSTGRES_URL).password)
+  : randomBytes(32).toString("hex");
 const apply = process.argv.includes("--apply");
 await client.connect();
 try {
   await client.query("begin");
-  await client.query("select pg_advisory_xact_lock(hashtext('travel-cloud-bootstrap'))");
+  await client.query(
+    "select pg_advisory_xact_lock(hashtext('travel-cloud-bootstrap'))",
+  );
   await client.query("create schema if not exists travel_cloud");
-  await client.query("set local search_path to travel_cloud, extensions, public");
-  const roleExists = await client.query("select 1 from pg_roles where rolname = $1", [role]);
+  await client.query(
+    "set local search_path to travel_cloud, extensions, public",
+  );
+  const roleExists = await client.query(
+    "select 1 from pg_roles where rolname = $1",
+    [role],
+  );
   if (!roleExists.rowCount) {
     // Only generated hexadecimal passwords are used in this DDL literal.
-    if (!/^[a-f0-9]{64}$/.test(password)) throw new Error("Expected generated runtime password");
-    await client.query(`create role ${role} login password '${password}' nosuperuser nocreatedb nocreaterole noinherit`);
+    if (!/^[a-f0-9]{64}$/.test(password))
+      throw new Error("Expected generated runtime password");
+    await client.query(
+      `create role ${role} login password '${password}' nosuperuser nocreatedb nocreaterole noinherit`,
+    );
   } else if (!env.POSTGRES_URL) {
-    throw new Error("Runtime role already exists but its local credentials are missing; refusing to rotate it");
+    throw new Error(
+      "Runtime role already exists but its local credentials are missing; refusing to rotate it",
+    );
   }
   await client.query(`create table if not exists travel_cloud.schema_migrations
     (name text primary key, applied_at timestamptz not null default now())`);
   const folder = new URL("apps/server/src/database/migrations/", root);
-  const files = (await fs.readdir(folder)).filter(name => name.endsWith(".sql")).sort();
+  const files = (await fs.readdir(folder))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
   for (const name of files) {
-    const done = await client.query("select 1 from travel_cloud.schema_migrations where name=$1", [name]);
+    const done = await client.query(
+      "select 1 from travel_cloud.schema_migrations where name=$1",
+      [name],
+    );
     if (done.rowCount) continue;
     let sql = await fs.readFile(new URL(name, folder), "utf8");
     // Keep the source migrations unchanged; isolate their explicit table references.
-    sql = sql.replace(/\bpublic\./g, "travel_cloud.").replace(/^\s*(begin|commit);\s*$/gmi, "");
+    sql = sql
+      .replace(/\bpublic\./g, "travel_cloud.")
+      .replace(/^\s*(begin|commit);\s*$/gim, "");
     await client.query(sql);
-    await client.query("insert into travel_cloud.schema_migrations(name) values($1)", [name]);
+    await client.query(
+      "insert into travel_cloud.schema_migrations(name) values($1)",
+      [name],
+    );
     console.log(`Validated migration: ${name}`);
   }
   await client.query(`create table if not exists travel_cloud.user_prompt_history (
@@ -60,42 +94,83 @@ try {
     grant select, insert, update, delete on all tables in schema travel_cloud to ${role};
     revoke all on travel_cloud.schema_migrations from ${role};
     grant usage, select on all sequences in schema travel_cloud to ${role};
+    grant usage on schema journey_internal to ${role};
+    grant execute on all functions in schema journey_internal to ${role};
     grant usage on schema private to ${role};
     grant select, insert, update, delete on private.password_resets to ${role};
     alter role ${role} set search_path to travel_cloud, extensions, public;`);
-  const tables = await client.query("select tablename from pg_tables where schemaname='travel_cloud' and tablename <> 'schema_migrations'");
+  const tables = await client.query(
+    "select tablename from pg_tables where schemaname='travel_cloud' and tablename <> 'schema_migrations'",
+  );
   for (const { tablename } of tables.rows) {
     if (!/^[a-z_]+$/.test(tablename)) throw new Error("Unexpected table name");
-    await client.query(`alter table travel_cloud.${tablename} enable row level security`);
-    const policy = await client.query("select 1 from pg_policies where schemaname='travel_cloud' and tablename=$1 and policyname='backend_access'", [tablename]);
-    if (!policy.rowCount) await client.query(`create policy backend_access on travel_cloud.${tablename} to ${role} using(true) with check(true)`);
+    await client.query(
+      `alter table travel_cloud.${tablename} enable row level security`,
+    );
+    const policy = await client.query(
+      "select 1 from pg_policies where schemaname='travel_cloud' and tablename=$1 and policyname='backend_access'",
+      [tablename],
+    );
+    if (!policy.rowCount)
+      await client.query(
+        `create policy backend_access on travel_cloud.${tablename} to ${role} using(true) with check(true)`,
+      );
   }
-  await client.query("alter table private.password_resets enable row level security");
-  const resetPolicy = await client.query("select 1 from pg_policies where schemaname='private' and tablename='password_resets' and policyname='travel_backend_access'");
-  if (!resetPolicy.rowCount) await client.query(`create policy travel_backend_access on private.password_resets to ${role} using(true) with check(true)`);
+  await client.query(
+    "alter table private.password_resets enable row level security",
+  );
+  const resetPolicy = await client.query(
+    "select 1 from pg_policies where schemaname='private' and tablename='password_resets' and policyname='travel_backend_access'",
+  );
+  if (!resetPolicy.rowCount)
+    await client.query(
+      `create policy travel_backend_access on private.password_resets to ${role} using(true) with check(true)`,
+    );
   await client.query(apply ? "commit" : "rollback");
-  console.log(`${apply ? "Initialized" : "Dry run passed; rolled back"}: ${tables.rowCount} isolated application tables`);
+  console.log(
+    `${apply ? "Initialized" : "Dry run passed; rolled back"}: ${tables.rowCount} isolated application tables`,
+  );
   if (apply) {
     const runtimeUrl = new URL(env.POSTGRES_URL || adminUrl);
-    runtimeUrl.username = runtimeUrl.hostname.endsWith(".pooler.supabase.com") ? `${role}.cvlvzfkoarlwhvjwwppn` : role;
+    runtimeUrl.username = runtimeUrl.hostname.endsWith(".pooler.supabase.com")
+      ? `${role}.cvlvzfkoarlwhvjwwppn`
+      : role;
     runtimeUrl.password = password;
     runtimeUrl.search = "";
-    const updates = { POSTGRES_URL: runtimeUrl.toString(), JWT_SECRET: env.JWT_SECRET || randomBytes(48).toString("hex") };
+    const updates = {
+      POSTGRES_URL: runtimeUrl.toString(),
+      JWT_SECRET: env.JWT_SECRET || randomBytes(48).toString("hex"),
+    };
     let saved = originalEnv;
     for (const [key, value] of Object.entries(updates)) {
       const line = `${key}=${JSON.stringify(value)}`;
-      saved = new RegExp(`^${key}=.*$`, "m").test(saved) ? saved.replace(new RegExp(`^${key}=.*$`, "m"), line) : `${saved.trimEnd()}\n${line}\n`;
+      saved = new RegExp(`^${key}=.*$`, "m").test(saved)
+        ? saved.replace(new RegExp(`^${key}=.*$`, "m"), line)
+        : `${saved.trimEnd()}\n${line}\n`;
     }
     await fs.writeFile(envFile, saved, { mode: 0o600 });
-    const verify = new Client({ connectionString: runtimeUrl.toString(), ssl: { ca, rejectUnauthorized: true } });
+    const verify = new Client({
+      connectionString: runtimeUrl.toString(),
+      ssl: { ca, rejectUnauthorized: true },
+    });
     await verify.connect();
     try {
-      const result = await verify.query("select current_user as role, count(*)::int as users from users");
-      console.log(JSON.stringify({ runtimeConnectionVerified: true, ...result.rows[0] }));
-    } finally { await verify.end(); }
+      const result = await verify.query(
+        "select current_user as role, count(*)::int as users from users",
+      );
+      console.log(
+        JSON.stringify({ runtimeConnectionVerified: true, ...result.rows[0] }),
+      );
+    } finally {
+      await verify.end();
+    }
   }
 } catch (error) {
   await client.query("rollback").catch(() => {});
-  console.error(`Cloud bootstrap failed (${error.code ?? "validation"}): ${error.message}`);
+  console.error(
+    `Cloud bootstrap failed (${error.code ?? "validation"}): ${error.message}`,
+  );
   process.exitCode = 1;
-} finally { await client.end(); }
+} finally {
+  await client.end();
+}

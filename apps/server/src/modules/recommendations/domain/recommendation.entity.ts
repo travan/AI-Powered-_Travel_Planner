@@ -1,4 +1,9 @@
 export type PlaceRecommendation = {
+  source?: string;
+  tags?: string[];
+  estimatedPrice?: number | null;
+  currency?: string;
+  matchReasons?: string[];
   id: string;
   name: string;
   category: string;

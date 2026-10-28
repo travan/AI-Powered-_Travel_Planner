@@ -10,6 +10,8 @@ export type City = {
 };
 
 export type CityPlace = {
+  id?: string;
+  last_verified_at?: string;
   name: string;
   type: string;
   category: string | null;
@@ -22,6 +24,8 @@ export type CityPlace = {
 };
 
 export type CityActivity = {
+  id?: string;
+  last_verified_at?: string;
   title: string;
   category: string | null;
   tags: string[];

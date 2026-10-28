@@ -1,3 +1,10 @@
+import type {
+  PlanningCriteria,
+  PlanningIssue,
+  TimelineKind,
+  ScopedPrice,
+  PlaceEvidence,
+} from "./journey";
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export type TripStyle =
@@ -55,7 +62,12 @@ export type TicketPlatform =
   | "Viator"
   | "Official"
   | string;
-export type SuggestionType = "tour" | "activity" | "experience" | "transport" | "combo";
+export type SuggestionType =
+  | "tour"
+  | "activity"
+  | "experience"
+  | "transport"
+  | "combo";
 export type GoldenMomentType =
   | "sunrise"
   | "sunset"
@@ -116,6 +128,7 @@ export interface TransportOption {
 }
 
 export interface TransportSegment {
+  id?: string;
   segment: string;
   from: string;
   to: string;
@@ -126,6 +139,15 @@ export interface TransportSegment {
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 export interface Activity {
+  id?: string;
+  kind?: TimelineKind;
+  duration_minutes?: number;
+  travel_minutes?: number;
+  reason?: string;
+  alternative?: string;
+  evidence?: PlaceEvidence;
+  price?: ScopedPrice;
+  locked?: boolean;
   time: string;
   name: string;
   description: string;
@@ -142,6 +164,7 @@ export interface Activity {
 // ─── Day ──────────────────────────────────────────────────────────────────────
 
 export interface ItineraryDay {
+  id?: string;
   day_number: number;
   date: string;
   city: string;
@@ -154,6 +177,12 @@ export interface ItineraryDay {
 // ─── Hotels & Restaurants ─────────────────────────────────────────────────────
 
 export interface Hotel {
+  id?: string;
+  city?: string;
+  rooms?: number;
+  nights?: number;
+  nightly_estimate?: number;
+  evidence?: PlaceEvidence;
   name: string;
   stars?: number;
   price_per_night: string;
@@ -166,6 +195,13 @@ export interface Hotel {
 }
 
 export interface Restaurant {
+  id?: string;
+  city?: string;
+  day_number?: number;
+  estimated_per_person?: number;
+  time?: string;
+  kind?: "meal" | "cafe";
+  evidence?: PlaceEvidence;
   name: string;
   cuisine: string;
   price_range: string;
@@ -207,6 +243,13 @@ export interface BudgetBreakdown {
 // ─── Itinerary ────────────────────────────────────────────────────────────────
 
 export interface Itinerary {
+  locale?: "en" | "vi";
+  trip_style?: TripStyle;
+  schema_version?: number;
+  version?: number;
+  planning?: PlanningCriteria;
+  issues?: PlanningIssue[];
+  locked_ids?: string[];
   id?: string;
   ai_usage?: AiTokenUsage[];
   generation_cache_key?: string;
@@ -226,7 +269,7 @@ export interface Itinerary {
 }
 
 export interface AiTokenUsage {
-  operation: "overview" | "detail";
+  operation: "overview" | "detail" | "translate";
   provider: string;
   model: string;
   input_tokens: number | null;
@@ -255,6 +298,7 @@ export interface ItineraryOutput {
 // ─── Input ────────────────────────────────────────────────────────────────────
 
 export interface ItineraryInput {
+  planning?: PlanningCriteria;
   cities: string[];
   prompt_text?: string;
   start_date?: string;
