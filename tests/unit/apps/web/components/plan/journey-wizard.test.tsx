@@ -14,6 +14,7 @@ const mock = vi.hoisted(() => ({
   replace: vi.fn(),
   generate: vi.fn(),
   validate: vi.fn(),
+  signOut: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mock.push, replace: mock.replace }),
@@ -29,13 +30,17 @@ vi.mock("../../../../../../apps/web/components/layout/SiteHeader", () => ({
 vi.mock("../../../../../../apps/web/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
+      signOut: mock.signOut,
       getSession: async () => ({
         data: { session: { access_token: "test-token" } },
       }),
     },
   }),
 }));
-vi.mock("../../../../../../apps/web/lib/api", () => ({
+vi.mock("../../../../../../apps/web/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../../../../../apps/web/lib/api")
+  >()),
   generateItinerary: mock.generate,
   createSearchDraft: vi.fn(),
   claimSearchDraft: vi.fn(),
@@ -46,6 +51,7 @@ vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
 }));
 import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";
 import { emptyPlanner } from "../../../../../../apps/web/lib/planner-model";
+import { ApiRequestError } from "../../../../../../apps/web/lib/api";
 import { JourneyWizard } from "../../../../../../apps/web/components/plan/JourneyWizard";
 
 beforeEach(() => {
@@ -61,6 +67,7 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", storage());
   vi.stubGlobal("sessionStorage", storage());
   mock.push.mockReset();
+  mock.signOut.mockClear();
   mock.generate
     .mockReset()
     .mockResolvedValue({ status: "queued", job_id: "job-1" });
@@ -68,6 +75,36 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("unified bilingual planner", () => {
+  it("preserves structured criteria when an expired session requires signing in again", async () => {
+    mock.generate.mockRejectedValueOnce(
+      new ApiRequestError("Generate failed: 401", 401),
+    );
+    const draft = emptyPlanner();
+    draft.cities = [{ slug: "da-nang", name: "Đà Nẵng" }];
+    draft.planning.journey.origin.label = "Hà Nội";
+    draft.planning.budget.total = 8000000;
+    localStorage.setItem("horizon.planner.draft.v3", JSON.stringify(draft));
+    render(
+      <LanguageProvider initialLocale="en">
+        <JourneyWizard />
+      </LanguageProvider>,
+    );
+    await screen.findByLabelText("Origin");
+    fireEvent.click(screen.getByRole("button", { name: "Generate itinerary" }));
+    await waitFor(() =>
+      expect(mock.push).toHaveBeenCalledWith(
+        expect.stringContaining("/login?redirectTo="),
+      ),
+    );
+    expect(mock.signOut).toHaveBeenCalledOnce();
+    const intent = JSON.parse(sessionStorage.getItem("horizon.search.intent")!);
+    expect(intent.request).toMatchObject({
+      cities: ["da-nang"],
+      budget: 8000000,
+      planning: { journey: { origin: { label: "Hà Nội" } } },
+    });
+    expect(screen.queryByText("Generate failed: 401")).toBeNull();
+  });
   it("generates with unbooked conflicting draft times and optional accommodation", async () => {
     const draft = emptyPlanner();
     draft.cities = [{ slug: "taiwan", name: "Taiwan" }];

@@ -37,6 +37,7 @@ import {
   createSearchDraft,
   claimSearchDraft,
   generateItinerary,
+  ApiRequestError,
 } from "../../lib/api";
 import {
   resolveJourneyLocation,
@@ -196,13 +197,46 @@ export function UnifiedPlanner() {
       },
     }));
   const requestFor = (f: PlannerDraft) => buildPlannerRequest(f, locale);
+  const redirectToSignIn = async (request: GenerateRequest) => {
+    const guestKey =
+      localStorage.getItem("horizon.search.guest_key") ??
+      `guest-${crypto.randomUUID()}`;
+    localStorage.setItem("horizon.search.guest_key", guestKey);
+    const intent: {
+      request: GenerateRequest;
+      guestKey: string;
+      createdAt: number;
+      draftId?: string;
+    } = { request, guestKey, createdAt: Date.now() };
+    try {
+      intent.draftId = (
+        await createSearchDraft({
+          guest_key: guestKey,
+          prompt_text: request.prompt_text ?? "Lập hành trình",
+          search_payload: request,
+        })
+      ).id;
+    } catch {
+      /* Session storage preserves the intent when drafts are unavailable. */
+    }
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
+    const resume = `/plan?resumeGenerate=1${intent.draftId ? `&draftId=${intent.draftId}` : ""}`;
+    router.push(`/login?redirectTo=${encodeURIComponent(resume)}`);
+  };
   const navigateResult = (
     result: Awaited<ReturnType<typeof generateItinerary>>,
   ) => {
     if (result.status === "unsupported") throw new Error(result.message);
-    if (result.status === "queued") router.push(`/plan/jobs/${result.job_id}`);
+    if (result.status === "queued")
+      router.push(
+        result.stream_url?.includes("/stream/")
+          ? `/trips?source=queued&id=${encodeURIComponent(result.job_id)}`
+          : `/plan/jobs/${result.job_id}`,
+      );
     else if (result.itinerary_id)
-      router.push(`/itinerary/${result.itinerary_id}`);
+      router.push(
+        `/trips?source=cached&id=${encodeURIComponent(result.itinerary_id)}`,
+      );
     else throw new Error("Chưa có mã lịch trình.");
   };
   useEffect(() => {
@@ -231,7 +265,8 @@ export function UnifiedPlanner() {
             throw new Error("Invalid interests");
           setForm(migratePlannerDraft(recovered));
         }
-      } else if (params.get("city")) {
+      }
+      if (params.get("city")) {
         const slug = params.get("city")!;
         setForm((f) => ({ ...f, cities: [{ slug, name: slug }] }));
       }
@@ -287,7 +322,11 @@ export function UnifiedPlanner() {
             if (!request) throw e;
           }
         }
-        if (!request) return;
+        window.history.replaceState(null, "", "/plan");
+        if (!request) {
+          setError(ux("draft_expired"));
+          return;
+        }
         const restored = restorePlannerRequest(request);
         setForm(restored);
         request = buildPlannerRequest(restored, locale);
@@ -301,7 +340,10 @@ export function UnifiedPlanner() {
         navigateResult(await generateItinerary(request, session.access_token));
         sessionStorage.removeItem(INTENT_KEY);
       } catch (e) {
-        setError(apiErrorText(e, "Không thể khôi phục nháp."));
+        window.history.replaceState(null, "", "/plan");
+        if (e instanceof ApiRequestError && e.status === 404)
+          setError(ux("draft_expired"));
+        else setError(apiErrorText(e, "Không thể khôi phục nháp."));
       } finally {
         setBusy(false);
       }
@@ -391,34 +433,16 @@ export function UnifiedPlanner() {
         data: { session },
       } = await createClient().auth.getSession();
       if (!session?.access_token) {
-        const guestKey =
-          localStorage.getItem("horizon.search.guest_key") ??
-          `guest-${crypto.randomUUID()}`;
-        localStorage.setItem("horizon.search.guest_key", guestKey);
-        const intent: {
-          request: GenerateRequest;
-          guestKey: string;
-          createdAt: number;
-          draftId?: string;
-        } = { request, guestKey, createdAt: Date.now() };
-        try {
-          intent.draftId = (
-            await createSearchDraft({
-              guest_key: guestKey,
-              prompt_text: request.prompt_text ?? "Lập hành trình",
-              search_payload: request,
-            })
-          ).id;
-        } catch {
-          /* Session storage preserves the intent when drafts are unavailable. */
-        }
-        sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
-        const resume = `/plan?resumeGenerate=1${intent.draftId ? `&draftId=${intent.draftId}` : ""}`;
-        router.push(`/login?redirectTo=${encodeURIComponent(resume)}`);
+        await redirectToSignIn(request);
         return;
       }
       navigateResult(await generateItinerary(request, session.access_token));
     } catch (e) {
+      if (e instanceof ApiRequestError && e.status === 401) {
+        await createClient().auth.signOut();
+        await redirectToSignIn(request);
+        return;
+      }
       setError(
         apiErrorText(e, "Không thể tạo lịch trình. Bạn có thể thử lại."),
       );
@@ -792,6 +816,7 @@ export function UnifiedPlanner() {
                       <input
                         className={fieldClass}
                         aria-label={t("Điểm đến")}
+                        data-testid="web-plan-city-input"
                         aria-required={form.cities.length === 0 || undefined}
                         required={form.cities.length === 0}
                         value={cityQuery}
@@ -862,6 +887,7 @@ export function UnifiedPlanner() {
                       {form.cities.map((c, i) => (
                         <li
                           key={c.slug}
+                          data-testid="web-plan-selected-city"
                           className="flex items-center justify-between rounded-lg bg-surface-container-low p-3"
                         >
                           <span>
@@ -1146,6 +1172,7 @@ export function UnifiedPlanner() {
                 {error && (
                   <p
                     role="alert"
+                    data-testid="web-plan-error"
                     className="rounded-xl bg-error/10 p-3 text-sm text-error"
                   >
                     <UiText text={error} />
@@ -1170,6 +1197,7 @@ export function UnifiedPlanner() {
                   <button
                     type="button"
                     onClick={generate}
+                    data-testid="web-plan-generate"
                     className="min-h-16 w-full rounded-full bg-primary px-6 py-4 text-lg font-bold text-on-primary shadow-md transition-colors hover:bg-primary/90"
                   >
                     {busy ? (

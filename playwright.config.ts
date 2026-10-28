@@ -108,6 +108,7 @@ export default defineConfig({
             testMatch: SKIP_AUTH_CONTRACTS
               ? [
                   "**/web.contract.spec.ts",
+                  "**/web.planner.spec.ts",
                   "**/web.share-save.contract.spec.ts",
                   "**/web.trip-business.contract.spec.ts",
                   "**/web.full-flow.spec.ts",
@@ -118,6 +119,7 @@ export default defineConfig({
                 ]
               : [
                   "**/web.contract.spec.ts",
+                  "**/web.planner.spec.ts",
                   "**/web.auth.contract.spec.ts",
                   "**/web.auth.error.contract.spec.ts",
                   "**/web.auth.oauth.spec.ts",
@@ -136,7 +138,10 @@ export default defineConfig({
           },
           {
             name: "web-mobile-responsive",
-            testMatch: ["**/web.trip-workspace.ui.spec.ts"],
+            testMatch: [
+              "**/web.trip-workspace.ui.spec.ts",
+              "**/web.planner.spec.ts",
+            ],
             use: {
               ...devices["Pixel 5"],
               baseURL: WEB_URL,

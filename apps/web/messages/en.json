@@ -1103,6 +1103,7 @@
     "return_after_departure": "Return dates start from the day after departure.",
     "return_adjusted": "Return date set to the next day. You can choose a later date.",
     "calendar_for": "Calendar: {field}",
-    "calendar_month": "Month {month}"
+    "calendar_month": "Month {month}",
+    "draft_expired": "Your saved search is no longer available. Please choose a destination and try again."
   }
 }

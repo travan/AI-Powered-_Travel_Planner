@@ -60,7 +60,8 @@ jobs:
 
   e2e_tests:
     name: E2E Tests (${{ matrix.target }})
-    runs-on: ubuntu-latest
+    # Playwright 1.59 does not support the Ubuntu 26.04 ubuntu-latest image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -89,7 +90,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}
-        run: pnpm test:e2e:install
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright ${{ matrix.target }} tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e == true }}

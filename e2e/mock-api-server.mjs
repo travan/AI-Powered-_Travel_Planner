@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { validatePlanning } from "../packages/types/src/journey.ts";
 import { randomUUID } from "node:crypto";
 import {
   createShareToken,
@@ -16,6 +17,7 @@ import {
 
 const port = Number(process.env.PORT ?? 3101);
 const localAuthAccounts = new Map();
+const planningDrafts = new Map();
 const localAuthSessions = new Map();
 
 const server = createServer(async (req, res) => {
@@ -45,22 +47,33 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && pathname === "/api/auth/register") {
     const body = await readJsonBody(req);
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const email =
+      typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return sendJson(res, 400, { code: "invalid_email", message: "Please enter a valid email address." });
+      return sendJson(res, 400, {
+        code: "invalid_email",
+        message: "Please enter a valid email address.",
+      });
     }
     if (password.length < 8) {
-      return sendJson(res, 400, { code: "weak_password", message: "Password must be at least 8 characters." });
+      return sendJson(res, 400, {
+        code: "weak_password",
+        message: "Password must be at least 8 characters.",
+      });
     }
     if (localAuthAccounts.has(email)) {
-      return sendJson(res, 409, { code: "user_already_exists", message: "User already registered" });
+      return sendJson(res, 409, {
+        code: "user_already_exists",
+        message: "User already registered",
+      });
     }
     const user = {
       id: `local-e2e-${randomUUID()}`,
       email,
       user_metadata: {
-        full_name: typeof body.full_name === "string" ? body.full_name.trim() : null,
+        full_name:
+          typeof body.full_name === "string" ? body.full_name.trim() : null,
         avatar_url: null,
       },
     };
@@ -70,10 +83,14 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && pathname === "/api/auth/session") {
     const body = await readJsonBody(req);
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const email =
+      typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const account = localAuthAccounts.get(email);
     if (!account || account.password !== body.password) {
-      return sendJson(res, 401, { code: "invalid_credentials", message: "Invalid login credentials" });
+      return sendJson(res, 401, {
+        code: "invalid_credentials",
+        message: "Invalid login credentials",
+      });
     }
     return sendJson(res, 200, createLocalAuthResponse(account.user));
   }
@@ -82,7 +99,11 @@ const server = createServer(async (req, res) => {
     const token = getLocalAuthToken(req.headers.authorization);
     const email = token ? localAuthSessions.get(token) : undefined;
     const account = email ? localAuthAccounts.get(email) : undefined;
-    if (!account) return sendJson(res, 401, { code: "invalid_credentials", message: "Invalid or missing token" });
+    if (!account)
+      return sendJson(res, 401, {
+        code: "invalid_credentials",
+        message: "Invalid or missing token",
+      });
     return sendJson(res, 200, { user: account.user });
   }
 
@@ -107,28 +128,43 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && pathname === "/api/activities/catalog") {
-    return sendJson(res, 200, tripBusiness.searchActivityCatalog({
-      citySlug: url.searchParams.get("citySlug") ?? undefined,
-      category: url.searchParams.get("category") ?? undefined,
-      q: url.searchParams.get("q") ?? undefined,
-    }));
+    return sendJson(
+      res,
+      200,
+      tripBusiness.searchActivityCatalog({
+        citySlug: url.searchParams.get("citySlug") ?? undefined,
+        category: url.searchParams.get("category") ?? undefined,
+        q: url.searchParams.get("q") ?? undefined,
+      }),
+    );
   }
 
   if (req.method === "GET" && pathname === "/api/recommendations/places") {
-    return sendJson(res, 200, tripBusiness.listPlaceRecommendations({
-      citySlug: url.searchParams.get("citySlug") ?? undefined,
-      category: url.searchParams.get("category") ?? undefined,
-      limit: Number(url.searchParams.get("limit") ?? 20),
-    }));
+    return sendJson(
+      res,
+      200,
+      tripBusiness.listPlaceRecommendations({
+        citySlug: url.searchParams.get("citySlug") ?? undefined,
+        category: url.searchParams.get("category") ?? undefined,
+        limit: Number(url.searchParams.get("limit") ?? 20),
+      }),
+    );
   }
 
-  if (req.method === "GET" && pathname === "/api/recommendations/transport-prices") {
-    return sendJson(res, 200, tripBusiness.listTransportPriceRecommendations({
-      mode: url.searchParams.get("mode") ?? undefined,
-      originCity: url.searchParams.get("originCity") ?? undefined,
-      destinationCity: url.searchParams.get("destinationCity") ?? undefined,
-      limit: Number(url.searchParams.get("limit") ?? 20),
-    }));
+  if (
+    req.method === "GET" &&
+    pathname === "/api/recommendations/transport-prices"
+  ) {
+    return sendJson(
+      res,
+      200,
+      tripBusiness.listTransportPriceRecommendations({
+        mode: url.searchParams.get("mode") ?? undefined,
+        originCity: url.searchParams.get("originCity") ?? undefined,
+        destinationCity: url.searchParams.get("destinationCity") ?? undefined,
+        limit: Number(url.searchParams.get("limit") ?? 20),
+      }),
+    );
   }
 
   if (req.method === "GET" && pathname === "/api/trips") {
@@ -154,11 +190,18 @@ const server = createServer(async (req, res) => {
     const userId = getUserIdFromAuth(req.headers.authorization);
     if (!userId) return unauthorized(res);
     const billId = pathname.split("/")[3];
-    const result = tripBusiness.updateBill({ billId, actorUserId: userId, body: await readJsonBody(req) });
+    const result = tripBusiness.updateBill({
+      billId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
     return sendJson(res, result.status, result.body);
   }
 
-  if (req.method === "POST" && pathname.match(/^\/api\/bills\/[^/]+\/analyze$/)) {
+  if (
+    req.method === "POST" &&
+    pathname.match(/^\/api\/bills\/[^/]+\/analyze$/)
+  ) {
     const userId = getUserIdFromAuth(req.headers.authorization);
     if (!userId) return unauthorized(res);
     const billId = pathname.split("/")[3];
@@ -166,6 +209,28 @@ const server = createServer(async (req, res) => {
     return sendJson(res, result.status, result.body);
   }
 
+  if (req.method === "POST" && pathname === "/api/planning/validate") {
+    return sendJson(res, 200, validatePlanning(await readJsonBody(req)));
+  }
+  if (req.method === "POST" && pathname === "/api/search-drafts") {
+    const body = await readJsonBody(req);
+    const draft = { ...body, id: randomUUID() };
+    planningDrafts.set(draft.id, draft);
+    return sendJson(res, 201, draft);
+  }
+  if (
+    req.method === "POST" &&
+    /^\/api\/search-drafts\/[^/]+\/claim$/.test(pathname)
+  ) {
+    if (!getUserIdFromAuth(req.headers.authorization)) return unauthorized(res);
+    const draft = planningDrafts.get(pathname.split("/")[3]);
+    const body = await readJsonBody(req);
+    if (!draft || draft.guest_key !== body.guest_key)
+      return sendJson(res, 404, {
+        message: "Search draft not found or expired",
+      });
+    return sendJson(res, 200, draft);
+  }
   if (req.method === "POST" && pathname === "/api/itinerary/generate") {
     const body = await readJsonBody(req);
     const scenario = resolveGenerateScenario(body);
@@ -180,11 +245,15 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && pathname.startsWith("/api/itinerary/job/")) {
     const jobId = pathname.split("/").at(-1);
     const itinerary = getItineraryByJobId(jobId);
-    if (!itinerary) return sendJson(res, 404, { message: "Itinerary for job not found" });
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Itinerary for job not found" });
     return sendJson(res, 200, itinerary);
   }
 
-  if (req.method === "POST" && pathname.match(/^\/api\/itinerary\/[^/]+\/save$/)) {
+  if (
+    req.method === "POST" &&
+    pathname.match(/^\/api\/itinerary\/[^/]+\/save$/)
+  ) {
     const userId = getUserIdFromAuth(req.headers.authorization);
     if (!userId) {
       return sendJson(res, 401, {
@@ -196,7 +265,8 @@ const server = createServer(async (req, res) => {
 
     const itineraryId = pathname.split("/")[3];
     const itinerary = getItineraryById(itineraryId);
-    if (!itinerary) return sendJson(res, 404, { message: "Itinerary not found" });
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Itinerary not found" });
 
     saveTripForUser(userId, itineraryId);
     tripBusiness.ensureSavedTripMember({
@@ -209,7 +279,10 @@ const server = createServer(async (req, res) => {
     });
   }
 
-  if (req.method === "PATCH" && pathname.match(/^\/api\/itinerary\/[^/]+\/share$/)) {
+  if (
+    req.method === "PATCH" &&
+    pathname.match(/^\/api\/itinerary\/[^/]+\/share$/)
+  ) {
     const userId = getUserIdFromAuth(req.headers.authorization);
     if (!userId) {
       return sendJson(res, 401, {
@@ -221,7 +294,8 @@ const server = createServer(async (req, res) => {
 
     const itineraryId = pathname.split("/")[3];
     const itinerary = getItineraryById(itineraryId);
-    if (!itinerary) return sendJson(res, 404, { message: "Itinerary not found" });
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Itinerary not found" });
 
     const body = await readJsonBody(req);
     const isPublic = body?.is_public !== false;
@@ -242,14 +316,16 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && pathname.startsWith("/api/itinerary/shared/")) {
     const shareToken = pathname.split("/").at(-1);
     const itinerary = getSharedItinerary(shareToken);
-    if (!itinerary) return sendJson(res, 404, { message: "Shared itinerary not found" });
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Shared itinerary not found" });
     return sendJson(res, 200, itinerary);
   }
 
   if (req.method === "GET" && pathname.startsWith("/api/itinerary/")) {
     const itineraryId = pathname.split("/").at(-1);
     const itinerary = getItineraryById(itineraryId);
-    if (!itinerary) return sendJson(res, 404, { message: "Itinerary not found" });
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Itinerary not found" });
     return sendJson(res, 200, itinerary);
   }
 
@@ -270,7 +346,9 @@ function setCors(res) {
 }
 
 function sendJson(res, statusCode, body) {
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -291,7 +369,7 @@ function createLocalAuthResponse(user) {
 
 function getLocalAuthToken(authorization) {
   return typeof authorization === "string"
-    ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
+    ? (authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? null)
     : null;
 }
 
@@ -322,12 +400,15 @@ function sendSSE(res, events) {
     setTimeout(() => {
       res.write(`event: ${event}\n`);
       res.write(`data: ${JSON.stringify(data)}\n\n`);
-    }, delayMs)
+    }, delayMs),
   );
 
-  const endTimer = setTimeout(() => {
-    res.end();
-  }, Math.max(...events.map((event) => event.delayMs), 0) + 120);
+  const endTimer = setTimeout(
+    () => {
+      res.end();
+    },
+    Math.max(...events.map((event) => event.delayMs), 0) + 120,
+  );
 
   res.on("close", () => {
     for (const timer of timers) clearTimeout(timer);
@@ -353,7 +434,11 @@ async function routeTripBusiness(req, pathname) {
   if (!userId) {
     return {
       status: 401,
-      body: { statusCode: 401, error: "Unauthorized", message: "Invalid or missing token" },
+      body: {
+        statusCode: 401,
+        error: "Unauthorized",
+        message: "Invalid or missing token",
+      },
     };
   }
 
@@ -372,19 +457,37 @@ async function routeTripBusiness(req, pathname) {
   }
 
   if (req.method === "POST" && parts.length === 4 && parts[3] === "invites") {
-    return tripBusiness.createInvite({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+    return tripBusiness.createInvite({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
   if (req.method === "POST" && pathname === "/api/trips/join/invite") {
-    return tripBusiness.joinInvite({ actorUserId: userId, body: await readJsonBody(req) });
+    return tripBusiness.joinInvite({
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
-  if (req.method === "PATCH" && parts.length === 4 && parts[3] === "share-link") {
-    return tripBusiness.setShareLink({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  if (
+    req.method === "PATCH" &&
+    parts.length === 4 &&
+    parts[3] === "share-link"
+  ) {
+    return tripBusiness.setShareLink({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
   if (req.method === "POST" && pathname === "/api/trips/join/share-link") {
-    return tripBusiness.joinShareLink({ actorUserId: userId, body: await readJsonBody(req) });
+    return tripBusiness.joinShareLink({
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
   if (req.method === "PATCH" && parts.length === 5 && parts[3] === "members") {
@@ -400,15 +503,31 @@ async function routeTripBusiness(req, pathname) {
     return tripBusiness.listAuditLogs({ tripId, actorUserId: userId });
   }
 
-  if (req.method === "GET" && parts.length === 4 && parts[3] === "review-queue") {
+  if (
+    req.method === "GET" &&
+    parts.length === 4 &&
+    parts[3] === "review-queue"
+  ) {
     return tripBusiness.listReviewQueue({ tripId, actorUserId: userId });
   }
 
-  if (req.method === "PATCH" && parts.length === 4 && parts[3] === "review-submissions") {
-    return tripBusiness.reviewSubmission({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  if (
+    req.method === "PATCH" &&
+    parts.length === 4 &&
+    parts[3] === "review-submissions"
+  ) {
+    return tripBusiness.reviewSubmission({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
-  if (req.method === "GET" && parts.length === 4 && parts[3] === "data-quality-signals") {
+  if (
+    req.method === "GET" &&
+    parts.length === 4 &&
+    parts[3] === "data-quality-signals"
+  ) {
     return tripBusiness.listDataQualitySignals({ tripId, actorUserId: userId });
   }
 
@@ -416,11 +535,23 @@ async function routeTripBusiness(req, pathname) {
     return tripBusiness.listActivities({ tripId, actorUserId: userId });
   }
 
-  if (req.method === "POST" && parts.length === 4 && parts[3] === "activities") {
-    return tripBusiness.createActivity({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  if (
+    req.method === "POST" &&
+    parts.length === 4 &&
+    parts[3] === "activities"
+  ) {
+    return tripBusiness.createActivity({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
-  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "activities") {
+  if (
+    req.method === "PATCH" &&
+    parts.length === 5 &&
+    parts[3] === "activities"
+  ) {
     return tripBusiness.updateActivity({
       tripId,
       activityId: parts[4],
@@ -429,7 +560,12 @@ async function routeTripBusiness(req, pathname) {
     });
   }
 
-  if (req.method === "PATCH" && parts.length === 7 && parts[3] === "activities" && parts[5] === "participants") {
+  if (
+    req.method === "PATCH" &&
+    parts.length === 7 &&
+    parts[3] === "activities" &&
+    parts[5] === "participants"
+  ) {
     return tripBusiness.updateActivityParticipant({
       tripId,
       activityId: parts[4],
@@ -439,15 +575,31 @@ async function routeTripBusiness(req, pathname) {
     });
   }
 
-  if (req.method === "GET" && parts.length === 4 && parts[3] === "transport-bookings") {
+  if (
+    req.method === "GET" &&
+    parts.length === 4 &&
+    parts[3] === "transport-bookings"
+  ) {
     return tripBusiness.listTransport({ tripId, actorUserId: userId });
   }
 
-  if (req.method === "POST" && parts.length === 4 && parts[3] === "transport-bookings") {
-    return tripBusiness.createTransport({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+  if (
+    req.method === "POST" &&
+    parts.length === 4 &&
+    parts[3] === "transport-bookings"
+  ) {
+    return tripBusiness.createTransport({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
-  if (req.method === "PATCH" && parts.length === 5 && parts[3] === "transport-bookings") {
+  if (
+    req.method === "PATCH" &&
+    parts.length === 5 &&
+    parts[3] === "transport-bookings"
+  ) {
     return tripBusiness.updateTransport({
       tripId,
       bookingId: parts[4],
@@ -457,7 +609,11 @@ async function routeTripBusiness(req, pathname) {
   }
 
   if (req.method === "POST" && parts.length === 4 && parts[3] === "bills") {
-    return tripBusiness.createBill({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+    return tripBusiness.createBill({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
   if (req.method === "GET" && parts.length === 4 && parts[3] === "expenses") {
@@ -465,7 +621,11 @@ async function routeTripBusiness(req, pathname) {
   }
 
   if (req.method === "POST" && parts.length === 4 && parts[3] === "expenses") {
-    return tripBusiness.createExpense({ tripId, actorUserId: userId, body: await readJsonBody(req) });
+    return tripBusiness.createExpense({
+      tripId,
+      actorUserId: userId,
+      body: await readJsonBody(req),
+    });
   }
 
   if (req.method === "PATCH" && parts.length === 5 && parts[3] === "expenses") {
@@ -477,7 +637,12 @@ async function routeTripBusiness(req, pathname) {
     });
   }
 
-  if (req.method === "PATCH" && parts.length === 7 && parts[3] === "expenses" && parts[5] === "splits") {
+  if (
+    req.method === "PATCH" &&
+    parts.length === 7 &&
+    parts[3] === "expenses" &&
+    parts[5] === "splits"
+  ) {
     return tripBusiness.updateExpenseSplit({
       tripId,
       expenseId: parts[4],

@@ -48,3 +48,21 @@ one-day scenario uses `num_days: 1` without equal start/end dates.
 Verified on 2026-10-28 after the calendar update: 213 unit tests passed; both
 browser viewports passed; all API/PostgreSQL scenarios passed. Live AI quality
 and a single browser run through real sign-in/generation remain separate checks.
+
+## CI suite after the unified planner migration
+
+GitHub E2E jobs pin `ubuntu-24.04` because Playwright 1.59 cannot install Chromium
+on the Ubuntu 26.04 image now selected by `ubuntu-latest`. Browser installation
+uses `playwright install --with-deps chromium`; no test jobs are skipped.
+
+The regular Playwright test list now includes `web.planner.spec.ts` on desktop
+and responsive mobile. It exercises structured criteria, the date calendar,
+automatic return-date adjustment, locale preservation, durable-job polling,
+result rendering and saving into the workspace. Legacy cached/SSE generation,
+expired sessions, draft fallback and Explore preselection are retained.
+
+Local verification with Node 22 after the CI fix: `pnpm lint`, `pnpm type-check`,
+`pnpm test:coverage` (214 tests), `pnpm build:unified`, web E2E (49 tests) and
+mobile-web E2E (14 tests) passed. The mock server provides planning validation
+and guest-draft endpoints for these browser contracts; live AI/provider behavior
+remains a separate integration check.

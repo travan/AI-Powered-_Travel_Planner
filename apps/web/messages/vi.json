@@ -1103,6 +1103,7 @@
     "return_after_departure": "Chỉ chọn ngày về từ ngày sau ngày đi.",
     "return_adjusted": "Ngày về đã được chuyển sang ngày tiếp theo. Bạn có thể chọn ngày muộn hơn.",
     "calendar_for": "Lịch: {field}",
-    "calendar_month": "Tháng {month}"
+    "calendar_month": "Tháng {month}",
+    "draft_expired": "Yêu cầu đã lưu không còn khả dụng. Hãy chọn điểm đến và thử lại."
   }
 }

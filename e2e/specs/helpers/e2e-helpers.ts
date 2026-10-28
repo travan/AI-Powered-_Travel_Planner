@@ -2,7 +2,8 @@ import { expect, Page, APIRequestContext } from "@playwright/test";
 
 export const API_BASE_URL = `http://127.0.0.1:${process.env.E2E_MOCK_API_PORT ?? "3301"}`;
 export const WEB_PLAN_CITY_INPUT = "web-plan-city-input";
-export const WEB_PLAN_GENERATE_BUTTON = "[data-testid='web-plan-generate']:visible";
+export const WEB_PLAN_GENERATE_BUTTON =
+  "[data-testid='web-plan-generate']:visible";
 export const WEB_ITINERARY_TITLE = "web-itinerary-title";
 export const WEB_GENERATING_SCREEN = "web-generating-screen";
 export const WEB_TRIPS_OVERVIEW_CARD = "web-trips-overview-card";
@@ -39,10 +40,8 @@ export async function clearWebMockAuthSession(page: Page) {
     window.localStorage.removeItem("horizon.mock.auth.session");
     window.localStorage.removeItem("horizon.local.auth.session");
     window.localStorage.removeItem("horizon.e2e.signup.force_error");
-    document.cookie =
-      "horizon_mock_auth=; Path=/; Max-Age=0; SameSite=Lax";
-    document.cookie =
-      "horizon_local_auth=; Path=/; Max-Age=0; SameSite=Lax";
+    document.cookie = "horizon_mock_auth=; Path=/; Max-Age=0; SameSite=Lax";
+    document.cookie = "horizon_local_auth=; Path=/; Max-Age=0; SameSite=Lax";
   });
   // Clear context cookies last so an active page cannot rehydrate the old
   // localStorage session back into a server-readable cookie between steps.
@@ -81,7 +80,8 @@ export async function triggerGoogleOAuthOnWeb(
   await page.route("**/auth/callback**", async (route) => {
     const url = new URL(route.request().url());
     const next = url.searchParams.get("next") ?? landingPath;
-    const target = next.startsWith("/") && !next.startsWith("//") ? next : landingPath;
+    const target =
+      next.startsWith("/") && !next.startsWith("//") ? next : landingPath;
     await route.fulfill({
       status: 302,
       headers: { Location: `${baseUrl}${target}` },
@@ -95,7 +95,10 @@ export async function triggerGoogleOAuthOnWeb(
   await page.unrouteAll({ behavior: "ignoreErrors" });
 }
 
-export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-user") {
+export async function injectWebMockAuthSession(
+  page: Page,
+  userId = "e2e-trips-user",
+) {
   const session = await page.evaluate((uid) => {
     const session = {
       access_token: `mock-access-mock-${uid}`,
@@ -109,7 +112,10 @@ export async function injectWebMockAuthSession(page: Page, userId = "e2e-trips-u
         user_metadata: {},
       },
     };
-    window.localStorage.setItem("horizon.mock.auth.session", JSON.stringify(session));
+    window.localStorage.setItem(
+      "horizon.mock.auth.session",
+      JSON.stringify(session),
+    );
     window.localStorage.removeItem("horizon.local.auth.session");
     document.cookie = `horizon_mock_auth=${encodeURIComponent(JSON.stringify(session))}; Path=/; Max-Age=86400; SameSite=Lax`;
     document.cookie = "horizon_local_auth=; Path=/; Max-Age=0; SameSite=Lax";
@@ -133,7 +139,10 @@ export async function clearMobileWebMockAuthSession(page: Page) {
   await page.context().clearCookies();
 }
 
-export async function injectMobileMockAuthSession(page: Page, userId = "e2e-trips-user") {
+export async function injectMobileMockAuthSession(
+  page: Page,
+  userId = "e2e-trips-user",
+) {
   await page.evaluate((uid) => {
     const session = {
       access_token: `mock-mobile-access-mock-${uid}`,
@@ -147,24 +156,36 @@ export async function injectMobileMockAuthSession(page: Page, userId = "e2e-trip
         user_metadata: {},
       },
     };
-    window.localStorage.setItem("horizon.mobile.mock.session", JSON.stringify(session));
+    window.localStorage.setItem(
+      "horizon.mobile.mock.session",
+      JSON.stringify(session),
+    );
   }, userId);
 }
 
-export async function signUpOnWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+export async function signUpOnWeb(
+  page: Page,
+  details: { fullName: string; email: string; password: string },
+) {
   await page.getByTestId(WEB_AUTH_FULL_NAME).fill(details.fullName);
   await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
   await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
   await page.getByTestId("web-auth-submit-signup").click();
 }
 
-export async function signInOnWeb(page: Page, details: { email: string; password: string }) {
+export async function signInOnWeb(
+  page: Page,
+  details: { email: string; password: string },
+) {
   await page.getByTestId(WEB_AUTH_EMAIL).fill(details.email);
   await page.getByTestId(WEB_AUTH_PASSWORD).fill(details.password);
   await page.getByTestId("web-auth-submit-login").click();
 }
 
-export async function signUpOnMobileWeb(page: Page, details: { fullName: string; email: string; password: string }) {
+export async function signUpOnMobileWeb(
+  page: Page,
+  details: { fullName: string; email: string; password: string },
+) {
   await page.getByTestId("mobile-auth-full-name").fill(details.fullName);
   await page.getByTestId("mobile-auth-email").fill(details.email);
   await page.getByTestId("mobile-auth-password").fill(details.password);
@@ -172,7 +193,10 @@ export async function signUpOnMobileWeb(page: Page, details: { fullName: string;
   await waitForMobileMockAuthToSettle(page);
 }
 
-export async function signInOnMobileWeb(page: Page, details: { email: string; password: string }) {
+export async function signInOnMobileWeb(
+  page: Page,
+  details: { email: string; password: string },
+) {
   await page.getByTestId("mobile-auth-email").fill(details.email);
   await page.getByTestId("mobile-auth-password").fill(details.password);
   await page.getByTestId("mobile-auth-submit-login").click();
@@ -202,7 +226,9 @@ export async function clickGenerateOnMobileWeb(page: Page) {
 }
 
 export async function expectTripsOverviewPageMobile(page: Page) {
-  await expect(page).toHaveURL(/\/trips/, { timeout: WEB_NAVIGATION_TIMEOUT_MS });
+  await expect(page).toHaveURL(/\/trips/, {
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
   await expect(page.getByTestId("mobile-trips-overview-card")).toBeVisible({
     timeout: WEB_NAVIGATION_TIMEOUT_MS,
   });
@@ -213,6 +239,9 @@ export async function clickDetailFromTripsOverviewMobile(page: Page) {
 }
 
 export async function searchCity(page: Page, city: string) {
+  await page
+    .getByRole("textbox", { name: "Origin", exact: true })
+    .fill("Hà Nội");
   const input = page.getByTestId(WEB_PLAN_CITY_INPUT);
   await input.fill(city);
   await input.press("Enter");
@@ -230,11 +259,17 @@ export async function searchAndGenerate(page: Page, city: string) {
 
 export async function expectGeneratingPage(page: Page, jobId: string) {
   const escapedJobId = escapeRegExp(jobId);
-  await expect(page).toHaveURL(new RegExp(`/itinerary/generating/${escapedJobId}`));
+  await expect(page).toHaveURL(
+    new RegExp(`/itinerary/generating/${escapedJobId}`),
+  );
   await expect(page.getByTestId(WEB_GENERATING_SCREEN)).toBeVisible();
 }
 
-export async function expectItineraryPage(page: Page, itineraryId: string, expectedTitle: string) {
+export async function expectItineraryPage(
+  page: Page,
+  itineraryId: string,
+  expectedTitle: string,
+) {
   const escapedItineraryId = escapeRegExp(itineraryId);
   await expect(page).toHaveURL(new RegExp(`/itinerary/${escapedItineraryId}`), {
     timeout: WEB_NAVIGATION_TIMEOUT_MS,
@@ -242,16 +277,24 @@ export async function expectItineraryPage(page: Page, itineraryId: string, expec
   await expect(page.getByTestId(WEB_ITINERARY_TITLE)).toHaveText(expectedTitle);
 }
 
-export async function expectItineraryPageMobile(page: Page, itineraryId: string, expectedTitle: string) {
+export async function expectItineraryPageMobile(
+  page: Page,
+  itineraryId: string,
+  expectedTitle: string,
+) {
   const escapedItineraryId = escapeRegExp(itineraryId);
   await expect(page).toHaveURL(new RegExp(`/itinerary/${escapedItineraryId}`), {
     timeout: WEB_NAVIGATION_TIMEOUT_MS,
   });
-  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(expectedTitle);
+  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(
+    expectedTitle,
+  );
 }
 
 export async function expectTripsOverviewPage(page: Page) {
-  await expect(page).toHaveURL(/\/trips/, { timeout: WEB_NAVIGATION_TIMEOUT_MS });
+  await expect(page).toHaveURL(/\/trips/, {
+    timeout: WEB_NAVIGATION_TIMEOUT_MS,
+  });
   await expect(page.getByTestId(WEB_TRIPS_OVERVIEW_CARD)).toBeVisible({
     timeout: WEB_NAVIGATION_TIMEOUT_MS,
   });
@@ -261,48 +304,73 @@ export async function clickDetailFromTripsOverview(page: Page) {
   await page.getByTestId(WEB_TRIPS_DETAIL_LINK).first().click();
 }
 
-export async function expectTripsWithCachedResult(page: Page, itineraryId: string) {
+export async function expectTripsWithCachedResult(
+  page: Page,
+  itineraryId: string,
+) {
   const escapedItineraryId = escapeRegExp(itineraryId);
   await expect(page).toHaveURL(
     new RegExp(`/trips.*source=cached.*id=${escapedItineraryId}`),
-    { timeout: WEB_NAVIGATION_TIMEOUT_MS }
+    { timeout: WEB_NAVIGATION_TIMEOUT_MS },
   );
 }
 
-export async function verifyQueuedMobileRoute(page: Page, jobId: string, expectedTitle: string) {
+export async function verifyQueuedMobileRoute(
+  page: Page,
+  jobId: string,
+  expectedTitle: string,
+) {
   await page.goto(`/itinerary/${jobId}?source=queued`);
-  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(expectedTitle, {
-    timeout: MOBILE_ASSERT_TIMEOUT_MS,
-  });
+  await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(
+    expectedTitle,
+    {
+      timeout: MOBILE_ASSERT_TIMEOUT_MS,
+    },
+  );
 }
 
 export async function verifyMobileProfileFallback(page: Page) {
   await page.goto("/profile");
-  await expect(page.getByTestId("mobile-profile-state")).toHaveText(/^(Not signed in|Auth unavailable)$/i, {
-    timeout: MOBILE_ASSERT_TIMEOUT_MS,
-  });
+  await expect(page.getByTestId("mobile-profile-state")).toHaveText(
+    /^(Not signed in|Auth unavailable)$/i,
+    {
+      timeout: MOBILE_ASSERT_TIMEOUT_MS,
+    },
+  );
 }
 
 export async function verifyMobileSavedFallback(page: Page) {
   await page.goto("/saved");
-  await expect(page.getByTestId("mobile-saved-state")).toHaveText(/^(No saved trips yet|Saved trips unavailable)$/i, {
-    timeout: MOBILE_ASSERT_TIMEOUT_MS,
-  });
+  await expect(page.getByTestId("mobile-saved-state")).toHaveText(
+    /^(No saved trips yet|Saved trips unavailable)$/i,
+    {
+      timeout: MOBILE_ASSERT_TIMEOUT_MS,
+    },
+  );
 }
 
-export async function postSaveItinerary(request: APIRequestContext, itineraryId: string) {
+export async function postSaveItinerary(
+  request: APIRequestContext,
+  itineraryId: string,
+) {
   return request.post(`${API_BASE_URL}/api/itinerary/${itineraryId}/save`, {
     headers: apiAuthHeaders(),
   });
 }
 
-export async function patchShareItinerary(request: APIRequestContext, itineraryId: string) {
+export async function patchShareItinerary(
+  request: APIRequestContext,
+  itineraryId: string,
+) {
   return request.patch(`${API_BASE_URL}/api/itinerary/${itineraryId}/share`, {
     headers: apiJsonHeaders(),
     data: { is_public: true },
   });
 }
 
-export async function getSharedItinerary(request: APIRequestContext, shareToken: string) {
+export async function getSharedItinerary(
+  request: APIRequestContext,
+  shareToken: string,
+) {
   return request.get(`${API_BASE_URL}/api/itinerary/shared/${shareToken}`);
 }
