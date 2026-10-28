@@ -1,3 +1,7 @@
+import {
+  translationPrompt,
+  TRANSLATION_SYSTEM,
+} from "../prompts/translation.js";
 import type {
   ItineraryInput,
   ItineraryOverview,
@@ -13,9 +17,10 @@ import {
 } from "../prompts/itinerary.js";
 import OpenAI from "openai";
 
-type ChatCompletionRequest = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
-  think?: boolean;
-};
+type ChatCompletionRequest =
+  OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+    think?: boolean;
+  };
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -25,6 +30,22 @@ export class OpenAIProvider implements AIProvider {
   private disableThinking: boolean;
   private readonly usage: AiTokenUsage[] = [];
 
+  async translateTexts(texts: Record<string, string>, target: "en" | "vi") {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: TRANSLATION_SYSTEM },
+        { role: "user", content: translationPrompt(texts, target) },
+      ],
+    });
+    this.recordUsage(response, "translate");
+    return JSON.parse(response.choices[0]?.message.content ?? "null") as Record<
+      string,
+      string
+    >;
+  }
   getUsage(): AiTokenUsage[] {
     return [...this.usage];
   }
@@ -38,7 +59,7 @@ export class OpenAIProvider implements AIProvider {
       maxTokens?: number;
       disableThinking?: boolean;
       timeoutMs?: number;
-    } = {}
+    } = {},
   ) {
     this.client = new OpenAI({
       apiKey,
@@ -54,7 +75,7 @@ export class OpenAIProvider implements AIProvider {
 
   async generateOverview(
     input: ItineraryInput,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<ItineraryOverview> {
     const request: ChatCompletionRequest = {
       model: this.model,
@@ -79,7 +100,7 @@ export class OpenAIProvider implements AIProvider {
   async generateDetail(
     input: ItineraryInput,
     overview: ItineraryOverview,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<Itinerary> {
     const request: ChatCompletionRequest = {
       model: this.model,
@@ -121,7 +142,10 @@ export class OpenAIProvider implements AIProvider {
     return response.choices[0]?.message.content ?? "";
   }
 
-  async parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>> {
+  async parseNaturalInput(
+    text: string,
+    locale: string,
+  ): Promise<Partial<ItineraryInput>> {
     const response = await this.client.chat.completions.create({
       model: this.naturalInputModel,
       temperature: 0,

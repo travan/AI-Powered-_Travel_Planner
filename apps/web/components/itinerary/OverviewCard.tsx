@@ -1,4 +1,7 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+
+import { UiText } from "../i18n/UiText";
 
 import React from "react";
 import type { Itinerary } from "@travel/types";
@@ -10,32 +13,53 @@ interface Props {
 }
 
 function legacyBudgetTotal(breakdown: unknown): number | undefined {
-  if (typeof breakdown !== "object" || breakdown === null || Array.isArray(breakdown)) {
+  if (
+    typeof breakdown !== "object" ||
+    breakdown === null ||
+    Array.isArray(breakdown)
+  ) {
     return undefined;
   }
   const total = (breakdown as Record<string, unknown>)["total_calculated"];
-  return typeof total === "number" && Number.isFinite(total) ? total : undefined;
+  return typeof total === "number" && Number.isFinite(total)
+    ? total
+    : undefined;
 }
 
 export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   const budgetTotal =
     itinerary.budget_breakdown?.total ??
     legacyBudgetTotal(itinerary.budget_breakdown) ??
     itinerary.total_cost;
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-4" data-testid="web-trips-overview-card">
+    <div
+      className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-4"
+      data-testid="web-trips-overview-card"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900" data-testid="web-itinerary-title">{itinerary.title}</h1>
+          <h1
+            className="text-2xl font-bold text-gray-900"
+            data-testid="web-itinerary-title"
+          >
+            {itinerary.title}
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {itinerary.num_days} day{itinerary.num_days !== 1 ? "s" : ""} · {itinerary.num_travelers} traveler
-            {itinerary.num_travelers !== 1 ? "s" : ""}
+            {itinerary.num_days}{" "}
+            <UiText text={itinerary.num_days === 1 ? "day" : "days"} /> ·{" "}
+            {itinerary.num_travelers}{" "}
+            <UiText
+              text={itinerary.num_travelers === 1 ? "traveler" : "travelers"}
+            />
           </p>
         </div>
         {showBudgetSummary && (
           <Badge variant="info" className="text-sm px-3 py-1">
-            {itinerary.currency} {itinerary.total_cost.toLocaleString()}
+            {itinerary.currency}{" "}
+            {itinerary.total_cost.toLocaleString(formattingLocale)}
           </Badge>
         )}
       </div>
@@ -44,12 +68,32 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
 
       {itinerary.ai_usage && itinerary.ai_usage.length > 0 && (
         <details className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          <summary className="cursor-pointer font-medium">AI tokens used when this itinerary was created</summary>
+          <summary className="cursor-pointer font-medium">
+            {" "}
+            <UiText
+              id="tb1bfe15afa64"
+              fallback="AI tokens used when this itinerary was created"
+            />{" "}
+          </summary>
           <ul className="mt-2 space-y-1">
             {itinerary.ai_usage.map((call, index) => (
               <li key={`${call.operation}-${index}`}>
-                {call.operation} · {call.provider}/{call.model}: {call.input_tokens?.toLocaleString() ?? "unknown"} input + {call.output_tokens?.toLocaleString() ?? "unknown"} output = {call.total_tokens?.toLocaleString() ?? "unknown"} tokens
-                {call.duration_ms != null ? ` · ${(call.duration_ms / 1000).toFixed(1)}s` : ""}
+                {call.operation} · {call.provider}/{call.model}:{" "}
+                {call.input_tokens?.toLocaleString(formattingLocale) ?? (
+                  <UiText text="unknown" />
+                )}{" "}
+                <UiText id="t4fa4f709b415" fallback="input +" />{" "}
+                {call.output_tokens?.toLocaleString(formattingLocale) ?? (
+                  <UiText text="unknown" />
+                )}{" "}
+                <UiText id="t456b6341fa61" fallback="output =" />{" "}
+                {call.total_tokens?.toLocaleString(formattingLocale) ?? (
+                  <UiText text="unknown" />
+                )}{" "}
+                <UiText id="t3391436a4e72" fallback="tokens" />{" "}
+                {call.duration_ms != null
+                  ? ` · ${(call.duration_ms / 1000).toFixed(1)}s`
+                  : ""}
               </li>
             ))}
           </ul>
@@ -63,7 +107,10 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
             key={day.day_number}
             className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-200"
           >
-            <span className="font-bold">Day {day.day_number}</span>
+            <span className="font-bold">
+              {" "}
+              <UiText id="t987b9ced08d4" fallback="Day" /> {day.day_number}
+            </span>
             <span>{day.city}</span>
           </span>
         ))}
@@ -86,27 +133,35 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
             />
           </svg>
           <span className="text-sm font-medium text-emerald-800">
-            Estimated budget: {itinerary.budget_breakdown.currency ?? itinerary.currency} {budgetTotal.toLocaleString()}
+            {" "}
+            <UiText id="t39d834c693bb" fallback="Estimated budget:" />{" "}
+            {itinerary.budget_breakdown.currency ?? itinerary.currency}{" "}
+            {budgetTotal.toLocaleString(formattingLocale)}
           </span>
         </div>
       )}
 
       {/* Highlights */}
-      {itinerary.seasonal_notes?.highlights && itinerary.seasonal_notes.highlights.length > 0 && (
-        <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Trip highlights
-          </h3>
-          <ul className="grid gap-1 sm:grid-cols-2">
-            {itinerary.seasonal_notes.highlights.map((h, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-400 shrink-0" />
-                {h}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {itinerary.seasonal_notes?.highlights &&
+        itinerary.seasonal_notes.highlights.length > 0 && (
+          <div className="space-y-1.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              {" "}
+              <UiText id="tc2e4e9e9b53a" fallback="Trip highlights" />{" "}
+            </h3>
+            <ul className="grid gap-1 sm:grid-cols-2">
+              {itinerary.seasonal_notes.highlights.map((h, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-gray-700"
+                >
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-400 shrink-0" />
+                  {h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
     </div>
   );
 }

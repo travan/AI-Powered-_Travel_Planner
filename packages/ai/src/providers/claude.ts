@@ -1,3 +1,7 @@
+import {
+  translationPrompt,
+  TRANSLATION_SYSTEM,
+} from "../prompts/translation.js";
 import type {
   ItineraryInput,
   ItineraryOverview,
@@ -18,6 +22,17 @@ export class ClaudeProvider implements AIProvider {
   private model: string;
   private readonly usage: AiTokenUsage[] = [];
 
+  async translateTexts(texts: Record<string, string>, target: "en" | "vi") {
+    const text = await this.callModel(
+      TRANSLATION_SYSTEM,
+      translationPrompt(texts, target),
+      "translate",
+    );
+    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, "")) as Record<
+      string,
+      string
+    >;
+  }
   getUsage(): AiTokenUsage[] {
     return [...this.usage];
   }
@@ -52,13 +67,14 @@ export class ClaudeProvider implements AIProvider {
     }
 
     const block = response.content[0];
-    if (block?.type !== "text") throw new Error("Claude returned non-text response");
+    if (block?.type !== "text")
+      throw new Error("Claude returned non-text response");
     return block.text;
   }
 
   async generateOverview(
     input: ItineraryInput,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<ItineraryOverview> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
@@ -73,7 +89,7 @@ export class ClaudeProvider implements AIProvider {
   async generateDetail(
     input: ItineraryInput,
     overview: ItineraryOverview,
-    cityData: PreFetchedCityData[]
+    cityData: PreFetchedCityData[],
   ): Promise<Itinerary> {
     const text = await this.callModel(
       SYSTEM_PROMPT(input.locale),
@@ -87,14 +103,17 @@ export class ClaudeProvider implements AIProvider {
   async transcribeVideo(videoUrl: string): Promise<string> {
     return this.callModel(
       "You are a travel content extractor.",
-      `Extract travel-related information from this video URL: ${videoUrl}`
+      `Extract travel-related information from this video URL: ${videoUrl}`,
     );
   }
 
-  async parseNaturalInput(text: string, locale: string): Promise<Partial<ItineraryInput>> {
+  async parseNaturalInput(
+    text: string,
+    locale: string,
+  ): Promise<Partial<ItineraryInput>> {
     const result = await this.callModel(
       SYSTEM_PROMPT(locale),
-      buildNLPPrompt(text)
+      buildNLPPrompt(text),
     );
     const json = result.replace(/^```json\n?/, "").replace(/\n?```$/, "");
     return JSON.parse(json) as Partial<ItineraryInput>;

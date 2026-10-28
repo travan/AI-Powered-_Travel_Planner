@@ -1,4 +1,7 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+
+import { UiText, useUiText } from "../i18n/UiText";
 
 import React from "react";
 import type { Activity, GoldenMoment, TicketOption } from "@travel/types";
@@ -16,7 +19,10 @@ function TicketChip({ option }: { option: TicketOption }) {
     >
       {option.platform}
       {option.price_from && (
-        <span className="text-gray-400">from {option.price_from}</span>
+        <span className="text-gray-400">
+          {" "}
+          <UiText id="t0b1e95cfd977" fallback="from" /> {option.price_from}
+        </span>
       )}
     </a>
   );
@@ -51,6 +57,9 @@ interface ActivityCardProps {
 }
 
 export function ActivityCard({ activity, index }: ActivityCardProps) {
+  const t = useUiText();
+  const { locale: formattingLocale } = useAppLanguage();
+
   const scheduleMeta = [activity.time, activity.duration]
     .filter(Boolean)
     .join(" · ");
@@ -63,6 +72,112 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
           typeof ticket.url === "string",
       )
     : [];
+
+  if (activity.kind) {
+    const labels: Record<string, string> = {
+      visit: "Tham quan",
+      meal: "Ăn uống",
+      cafe: "Café",
+      transfer: "Di chuyển",
+      check_in: "Nhận phòng",
+      check_out: "Trả phòng",
+      rest: "Nghỉ ngơi",
+    };
+    const safe = (url?: string) => !!url && /^https?:\/\//i.test(url);
+    const source =
+      activity.evidence?.source === "catalog"
+        ? "Dữ liệu địa điểm"
+        : activity.evidence?.source === "user"
+          ? "Bạn cung cấp"
+          : "Gợi ý AI — cần xác minh";
+    const scope = {
+      person: "/người",
+      group: "/cả nhóm",
+      room_night: "/phòng/đêm",
+      segment: "/chặng",
+    }[activity.price?.scope ?? "group"];
+    return (
+      <article className="mb-4 rounded-xl border border-outline-variant/30 bg-surface p-4">
+        <div className="flex flex-wrap justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold text-primary">
+              {t(labels[activity.kind] ?? activity.kind)} · {scheduleMeta}
+            </p>
+            <h4 className="mt-1 font-bold">{activity.name}</h4>
+          </div>
+          <span className="text-sm">
+            {activity.price?.amount != null ? (
+              `${activity.price.amount.toLocaleString(formattingLocale)} ${activity.currency}${t(scope)}`
+            ) : activity.cost != null ? (
+              `${activity.cost.toLocaleString(formattingLocale)} ${activity.currency}${t("/cả nhóm")}`
+            ) : (
+              <UiText id="t1006ab49c0bf" fallback="Chưa có giá" />
+            )}
+          </span>
+        </div>
+        {activity.reason && <p className="mt-2 text-sm">{activity.reason}</p>}
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-primary">
+            {" "}
+            <UiText
+              id="t01f214b4e130"
+              fallback="Xem kế hoạch, nguồn & phương án thay thế"
+            />{" "}
+          </summary>
+          <div className="mt-3 space-y-2 leading-6">
+            <p>{activity.description}</p>
+            {activity.travel_minutes != null && (
+              <p>
+                {" "}
+                <UiText
+                  id="t3ae9d22794ab"
+                  fallback="Di chuyển từ điểm trước: khoảng"
+                />{" "}
+                {activity.travel_minutes}{" "}
+                <UiText id="t41cdffb3a96c" fallback="phút." />{" "}
+              </p>
+            )}
+            <p>
+              {t(source)}
+              {activity.evidence?.verified_at
+                ? ` · Cập nhật ${activity.evidence.verified_at}`
+                : ""}
+            </p>
+            {activity.alternative && (
+              <p>
+                {" "}
+                <UiText id="t02b3d63ad0e6" fallback="Phương án khác:" />{" "}
+                {activity.alternative}
+              </p>
+            )}
+            <p>
+              {activity.price?.status === "user_confirmed" ? (
+                <UiText id="t58154db14870" fallback="Giá do bạn xác nhận" />
+              ) : (
+                <UiText
+                  id="t470c0565dedc"
+                  fallback="Chi phí ước tính; xác minh trước khi đặt."
+                />
+              )}
+            </p>
+          </div>
+        </details>
+        <a
+          className="mt-3 inline-block text-sm font-semibold text-primary"
+          href={
+            safe(activity.maps_link)
+              ? activity.maps_link
+              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.name)}`
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {" "}
+          <UiText id="tc97139683ce3" fallback="Mở bản đồ" />{" "}
+        </a>
+      </article>
+    );
+  }
 
   return (
     <div className="relative flex gap-4">
@@ -97,7 +212,8 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
           </div>
           {activity.cost != null && (
             <span className="text-sm font-medium text-emerald-700 whitespace-nowrap">
-              ~{activity.currency ?? "USD"} {activity.cost.toLocaleString()}
+              ~{activity.currency ?? "USD"}{" "}
+              {activity.cost.toLocaleString(formattingLocale)}
             </span>
           )}
         </div>
@@ -113,7 +229,10 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
         {typeof activity.golden_moment?.tip === "string" &&
           activity.golden_moment.tip && (
             <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              <span className="font-semibold">Tip:</span>{" "}
+              <span className="font-semibold">
+                {" "}
+                <UiText id="t2ee750e04190" fallback="Tip:" />{" "}
+              </span>{" "}
               {activity.golden_moment.tip}
             </div>
           )}
@@ -146,8 +265,8 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
                   d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
                   clipRule="evenodd"
                 />
-              </svg>
-              View on Maps
+              </svg>{" "}
+              <UiText id="t63f9a32c3e91" fallback="View on Maps" />{" "}
             </a>
           )}
           {activity.booking_link && (
@@ -157,7 +276,8 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
               rel="noopener noreferrer"
               className="text-xs text-gray-500 hover:text-brand-600 hover:underline"
             >
-              Booking link
+              {" "}
+              <UiText id="t0c130c933d48" fallback="Booking link" />{" "}
             </a>
           )}
         </div>

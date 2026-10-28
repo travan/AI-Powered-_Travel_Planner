@@ -1,4 +1,5 @@
 "use client";
+import { UiText, useUiText } from "../i18n/UiText";
 
 import type { FormState } from "./types";
 
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function DateBudgetForm({ form, update }: Props) {
+  const t = useUiText();
+
   return (
     <div className="space-y-6">
       {/* Date mode toggle */}
@@ -21,8 +24,8 @@ export function DateBudgetForm({ form, update }: Props) {
               checked={!form.use_date_range}
               onChange={() => update("use_date_range", false)}
               className="accent-brand-600"
-            />
-            Number of days
+            />{" "}
+            <UiText id="tcf117048b218" fallback="Number of days" />{" "}
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
             <input
@@ -30,8 +33,8 @@ export function DateBudgetForm({ form, update }: Props) {
               checked={form.use_date_range}
               onChange={() => update("use_date_range", true)}
               className="accent-brand-600"
-            />
-            Date range
+            />{" "}
+            <UiText id="tc65ea4ae0135" fallback="Date range" />{" "}
           </label>
         </div>
 
@@ -45,12 +48,18 @@ export function DateBudgetForm({ form, update }: Props) {
               onChange={(e) => update("num_days", Number(e.target.value))}
               className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
             />
-            <span className="text-sm text-gray-600">days</span>
+            <span className="text-sm text-gray-600">
+              {" "}
+              <UiText id="t5548ae4f34cb" fallback="days" />{" "}
+            </span>
           </div>
         ) : (
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex flex-1 flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">From</label>
+              <label className="text-xs font-medium text-gray-500">
+                {" "}
+                <UiText id="t3f66052a107e" fallback="From" />{" "}
+              </label>
               <input
                 type="date"
                 value={form.start_date}
@@ -59,7 +68,10 @@ export function DateBudgetForm({ form, update }: Props) {
               />
             </div>
             <div className="flex flex-1 flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">To</label>
+              <label className="text-xs font-medium text-gray-500">
+                {" "}
+                <UiText id="tae79ea1e9c63" fallback="To" />{" "}
+              </label>
               <input
                 type="date"
                 value={form.end_date}
@@ -75,8 +87,12 @@ export function DateBudgetForm({ form, update }: Props) {
       {/* Budget */}
       <section className="space-y-3">
         <h2 className="font-semibold text-gray-800">
-          Budget{" "}
-          <span className="font-normal text-gray-500 text-sm">(optional)</span>
+          {" "}
+          <UiText id="t7aeba4cd15b1" fallback="Budget" />{" "}
+          <span className="font-normal text-gray-500 text-sm">
+            {" "}
+            <UiText id="tb16c7ac6faff" fallback="(optional)" />{" "}
+          </span>
         </h2>
         <div className="flex gap-2">
           <input
@@ -84,7 +100,7 @@ export function DateBudgetForm({ form, update }: Props) {
             min={0}
             value={form.budget}
             onChange={(e) => update("budget", e.target.value)}
-            placeholder="e.g. 500"
+            placeholder={t("e.g. 500")}
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
           />
           <select
@@ -93,12 +109,18 @@ export function DateBudgetForm({ form, update }: Props) {
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
           >
             {CURRENCIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         </div>
         <p className="text-xs text-gray-500">
-          Leave blank and we&apos;ll suggest an optimized budget for you.
+          {" "}
+          <UiText
+            id="t609cd89aff20"
+            fallback="Leave blank and we'll suggest an optimized budget for you."
+          />{" "}
         </p>
       </section>
     </div>

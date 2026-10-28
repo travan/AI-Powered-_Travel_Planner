@@ -1,4 +1,5 @@
 "use client";
+import { UiText } from "../i18n/UiText";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,7 +23,9 @@ export function SaveTripButton({ itineraryId }: { itineraryId: string }) {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        router.push(`/login?redirectTo=${encodeURIComponent(`/itinerary/${itineraryId}`)}`);
+        router.push(
+          `/login?redirectTo=${encodeURIComponent(`/itinerary/${itineraryId}`)}`,
+        );
         return;
       }
 
@@ -30,7 +33,9 @@ export function SaveTripButton({ itineraryId }: { itineraryId: string }) {
       router.push(`/trips/${result.trip_id}/workspace`);
     } catch (error) {
       setState("error");
-      setMessage(error instanceof Error ? error.message : "Could not save this trip.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not save this trip.",
+      );
     }
   }
 
@@ -43,11 +48,18 @@ export function SaveTripButton({ itineraryId }: { itineraryId: string }) {
         disabled={state === "saving"}
         className="rounded-lg border border-primary bg-surface px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary-container disabled:cursor-wait disabled:opacity-60"
       >
-        {state === "saving" ? "Saving to My trips…" : "Save to My trips & open workspace"}
+        {state === "saving" ? (
+          <UiText id="tbcd86014b365" fallback="Saving to My trips…" />
+        ) : (
+          <UiText
+            id="te2d55f42a39a"
+            fallback="Save to My trips & open workspace"
+          />
+        )}
       </button>
       {message && (
         <span role="alert" className="max-w-56 text-right text-xs text-error">
-          {message}
+          <UiText text={message} />
         </span>
       )}
     </div>

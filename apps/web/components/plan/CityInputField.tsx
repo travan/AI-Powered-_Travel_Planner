@@ -1,4 +1,5 @@
 "use client";
+import { UiText, useUiText } from "../i18n/UiText";
 
 import { useState, useRef, useEffect } from "react";
 import { searchCities } from "../../lib/api";
@@ -10,8 +11,12 @@ interface Props {
 }
 
 export function CityInputField({ cities, onChange }: Props) {
+  const t = useUiText();
+
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<{ slug: string; name: Record<string, string>; country: string }[]>([]);
+  const [suggestions, setSuggestions] = useState<
+    { slug: string; name: Record<string, string>; country: string }[]
+  >([]);
   const [open, setOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,7 +68,8 @@ export function CityInputField({ cities, onChange }: Props) {
                 onClick={() => removeCity(city)}
                 className="ml-1 text-brand-400 hover:text-brand-700"
               >
-                ×
+                {" "}
+                <UiText id="t67fba2f357af" fallback="×" />{" "}
               </button>
             </div>
           ))}
@@ -77,7 +83,7 @@ export function CityInputField({ cities, onChange }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search city (e.g. Da Nang, Tokyo, Paris)…"
+          placeholder={t("Search city (e.g. Da Nang, Tokyo, Paris)…")}
           className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
         />
 
@@ -102,7 +108,11 @@ export function CityInputField({ cities, onChange }: Props) {
         )}
       </div>
       <p className="text-xs text-gray-500">
-        Press Enter to add a city. Add multiple cities for a multi-destination trip.
+        {" "}
+        <UiText
+          id="tfd5cc6b41ec0"
+          fallback="Press Enter to add a city. Add multiple cities for a multi-destination trip."
+        />{" "}
       </p>
     </div>
   );

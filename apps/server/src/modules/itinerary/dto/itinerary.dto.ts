@@ -1,4 +1,5 @@
-import { Transform } from "class-transformer";
+import { PlanningCriteriaDto } from "../journey/journey.dto.js";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -12,6 +13,7 @@ import {
   Max,
   Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
 
 function trimString({ value }: { value: unknown }): unknown {
@@ -26,6 +28,10 @@ export class ItineraryIdParamsDto {
 }
 
 export class GenerateItineraryDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PlanningCriteriaDto)
+  planning?: PlanningCriteriaDto;
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(10)
@@ -60,7 +66,19 @@ export class GenerateItineraryDto {
   currency!: string;
 
   @IsString()
-  @IsIn(["adventure", "relax", "culture", "food", "mixed", "budget", "mid_range", "luxury", "family", "romantic", "cultural"])
+  @IsIn([
+    "adventure",
+    "relax",
+    "culture",
+    "food",
+    "mixed",
+    "budget",
+    "mid_range",
+    "luxury",
+    "family",
+    "romantic",
+    "cultural",
+  ])
   trip_style!: string;
 
   @IsInt()
@@ -69,8 +87,8 @@ export class GenerateItineraryDto {
   num_travelers!: number;
 
   @IsOptional()
-  @IsString()
-  locale?: string;
+  @IsIn(["en", "vi"])
+  locale?: "en" | "vi";
 
   @IsOptional()
   @IsString()

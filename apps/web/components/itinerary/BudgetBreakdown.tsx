@@ -1,15 +1,28 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+
+import { UiText } from "../i18n/UiText";
 
 import type { BudgetBreakdown as BudgetBreakdownType } from "@travel/types";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
-const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899"];
+const COLORS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 interface Props {
   breakdown: BudgetBreakdownType;
 }
 
 export function BudgetBreakdown({ breakdown }: Props) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   if (!breakdown) return null;
 
   const categories = [
@@ -23,10 +36,14 @@ export function BudgetBreakdown({ breakdown }: Props) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900 text-lg">Budget Breakdown</h2>
+        <h2 className="font-semibold text-gray-900 text-lg">
+          {" "}
+          <UiText id="tfa5c1ce38652" fallback="Budget Breakdown" />{" "}
+        </h2>
         {breakdown.total != null && (
           <span className="text-xl font-bold text-emerald-700">
-            {breakdown.currency ?? "USD"} {breakdown.total.toLocaleString()}
+            {breakdown.currency ?? "USD"}{" "}
+            {breakdown.total.toLocaleString(formattingLocale)}
           </span>
         )}
       </div>
@@ -53,7 +70,7 @@ export function BudgetBreakdown({ breakdown }: Props) {
                 </Pie>
                 <Tooltip
                   formatter={(value: number) =>
-                    `${breakdown.currency ?? "USD"} ${value.toLocaleString()}`
+                    `${breakdown.currency ?? "USD"} ${value.toLocaleString(formattingLocale)}`
                   }
                 />
               </PieChart>
@@ -74,11 +91,16 @@ export function BudgetBreakdown({ breakdown }: Props) {
                   className="h-3 w-3 rounded-full shrink-0"
                   style={{ background: COLORS[i % COLORS.length] }}
                 />
-                <span className="flex-1 text-sm text-gray-700">{cat.label}</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {breakdown.currency ?? "USD"} {cat.value.toLocaleString()}
+                <span className="flex-1 text-sm text-gray-700">
+                  <UiText text={cat.label} />
                 </span>
-                <span className="w-10 text-right text-xs text-gray-400">{pct}%</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {breakdown.currency ?? "USD"}{" "}
+                  {cat.value.toLocaleString(formattingLocale)}
+                </span>
+                <span className="w-10 text-right text-xs text-gray-400">
+                  {pct}%
+                </span>
               </li>
             );
           })}
@@ -90,14 +112,22 @@ export function BudgetBreakdown({ breakdown }: Props) {
         <div className="flex flex-wrap gap-4 border-t border-gray-100 pt-4">
           {breakdown.per_person != null && (
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Per person:</span>{" "}
-              {breakdown.currency ?? "USD"} {breakdown.per_person.toLocaleString()}
+              <span className="font-medium">
+                {" "}
+                <UiText id="tb9da4f7105fa" fallback="Per person:" />{" "}
+              </span>{" "}
+              {breakdown.currency ?? "USD"}{" "}
+              {breakdown.per_person.toLocaleString(formattingLocale)}
             </div>
           )}
           {breakdown.per_day != null && (
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Per day:</span>{" "}
-              {breakdown.currency ?? "USD"} {breakdown.per_day.toLocaleString()}
+              <span className="font-medium">
+                {" "}
+                <UiText id="t83ec4f36d5e9" fallback="Per day:" />{" "}
+              </span>{" "}
+              {breakdown.currency ?? "USD"}{" "}
+              {breakdown.per_day.toLocaleString(formattingLocale)}
             </div>
           )}
         </div>

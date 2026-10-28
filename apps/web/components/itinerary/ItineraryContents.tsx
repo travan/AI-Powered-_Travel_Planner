@@ -1,0 +1,44 @@
+"use client";
+import React, { useState } from "react";
+import type { Itinerary } from "@travel/types";
+import { TranslationControls } from "./TranslationControls";
+import { OverviewCard } from "./OverviewCard";
+import { JourneySummary } from "./JourneySummary";
+import { SeasonalNote } from "./SeasonalNote";
+import { TransportSection } from "./TransportSection";
+import { DayTimeline } from "./DayTimeline";
+import { StayDiningRecommendations } from "./StayDiningRecommendations";
+import { BudgetBreakdown } from "./BudgetBreakdown";
+export function ItineraryContents({
+  plan,
+  sourceId,
+  token,
+}: {
+  plan: Itinerary;
+  sourceId: string;
+  token: string;
+}) {
+  const [translation, setTranslation] = useState<Itinerary | null>(null);
+  const display = translation ?? plan;
+  return (
+    <>
+      <TranslationControls
+        plan={plan}
+        path={`itinerary/${sourceId}/translations`}
+        token={token}
+        onChange={setTranslation}
+      />
+      <OverviewCard itinerary={display} />
+      <JourneySummary plan={display} />
+      {display.seasonal_notes && (
+        <SeasonalNote notes={display.seasonal_notes} />
+      )}
+      <TransportSection segments={display.transport_summary} />
+      <DayTimeline days={display.days} currency={display.currency} />
+      <StayDiningRecommendations itinerary={display} />
+      {display.budget_breakdown && (
+        <BudgetBreakdown breakdown={display.budget_breakdown} />
+      )}
+    </>
+  );
+}

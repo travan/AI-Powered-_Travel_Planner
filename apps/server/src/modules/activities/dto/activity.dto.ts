@@ -58,6 +58,7 @@ export class TripActivityParticipantParamsDto extends TripActivityIdParamsDto {
 }
 
 export class CreateTripActivityDto {
+  @IsOptional() @IsString() @MaxLength(160) source_plan_item_id?: string;
   @IsOptional()
   @IsUUID()
   activity_catalog_id?: string;
@@ -138,7 +139,14 @@ export class UpdateTripActivityDto {
   currency?: string;
 
   @IsOptional()
-  @IsIn(["pending_review", "approved", "rejected", "scheduled", "done", "cancelled"])
+  @IsIn([
+    "pending_review",
+    "approved",
+    "rejected",
+    "scheduled",
+    "done",
+    "cancelled",
+  ])
   status?: string;
 }
 

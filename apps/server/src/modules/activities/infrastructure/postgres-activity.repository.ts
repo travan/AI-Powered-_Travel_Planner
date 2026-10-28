@@ -1,7 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
-import type { TripMember, TripMemberRole, TripMemberStatus } from "../../trips/domain/trip.entity.js";
-import type { ActivityCatalogItem, TripActivity, TripActivityParticipant } from "../domain/activity.entity.js";
+import {
+  SQL_CLIENT,
+  type SqlClient,
+} from "../../../database/database.tokens.js";
+import type {
+  TripMember,
+  TripMemberRole,
+  TripMemberStatus,
+} from "../../trips/domain/trip.entity.js";
+import type {
+  ActivityCatalogItem,
+  TripActivity,
+  TripActivityParticipant,
+} from "../domain/activity.entity.js";
 import type { ActivityRepository } from "../domain/activity.repository.js";
 
 type TripMemberRow = {
@@ -29,6 +40,7 @@ type ActivityRow = {
   id: string;
   trip_id: string;
   activity_catalog_id: string | null;
+  source_plan_item_id?: string;
   title: string;
   category: string;
   scheduled_at: string | null;
@@ -54,13 +66,16 @@ type ParticipantRow = {
 export class PostgresActivityRepository implements ActivityRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
-  async findTripMember(input: { tripId: string; userId: string }): Promise<TripMember | null> {
+  async findTripMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null> {
     const result = await this.sql.query<TripMemberRow>(
       `select trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text
        from trip_members
        where trip_id = $1 and user_id = $2
        limit 1`,
-      [input.tripId, input.userId]
+      [input.tripId, input.userId],
     );
     return result.rows[0] ? mapMember(result.rows[0]) : null;
   }
@@ -81,7 +96,12 @@ export class PostgresActivityRepository implements ActivityRepository {
          and is_outdated = false
        order by quality_score desc, last_verified_at desc nulls last
        limit $4`,
-      [input.citySlug ?? null, input.category ?? null, input.q ?? null, input.limit]
+      [
+        input.citySlug ?? null,
+        input.category ?? null,
+        input.q ?? null,
+        input.limit,
+      ],
     );
     return result.rows.map(mapCatalog);
   }
@@ -91,17 +111,20 @@ export class PostgresActivityRepository implements ActivityRepository {
       `${activitySelectSql}
        where trip_id = $1
        order by scheduled_at asc nulls last, created_at asc`,
-      [tripId]
+      [tripId],
     );
     return this.hydrateActivities(result.rows);
   }
 
-  async findTripActivity(input: { tripId: string; activityId: string }): Promise<TripActivity | null> {
+  async findTripActivity(input: {
+    tripId: string;
+    activityId: string;
+  }): Promise<TripActivity | null> {
     const result = await this.sql.query<ActivityRow>(
       `${activitySelectSql}
        where trip_id = $1 and id = $2
        limit 1`,
-      [input.tripId, input.activityId]
+      [input.tripId, input.activityId],
     );
     const [activity] = await this.hydrateActivities(result.rows);
     return activity ?? null;
@@ -110,6 +133,7 @@ export class PostgresActivityRepository implements ActivityRepository {
   async createTripActivity(input: {
     tripId: string;
     activityCatalogId?: string | null;
+    sourcePlanItemId?: string;
     title: string;
     category: string;
     scheduledAt?: string | null;
@@ -123,9 +147,9 @@ export class PostgresActivityRepository implements ActivityRepository {
     const result = await this.sql.query<ActivityRow>(
       `insert into trip_activities (
          trip_id, activity_catalog_id, title, category, scheduled_at, location_name,
-         address, estimated_cost, currency, created_by_user_id, status
+         address, estimated_cost, currency, created_by_user_id, status, source_plan_item_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning ${activityReturningSql}`,
       [
         input.tripId,
@@ -139,9 +163,13 @@ export class PostgresActivityRepository implements ActivityRepository {
         input.currency,
         input.createdByUserId,
         input.status,
-      ]
+        input.sourcePlanItemId ?? null,
+      ],
     );
-    return (await this.findTripActivity({ tripId: input.tripId, activityId: result.rows[0]!.id }))!;
+    return (await this.findTripActivity({
+      tripId: input.tripId,
+      activityId: result.rows[0]!.id,
+    }))!;
   }
 
   async updateTripActivity(input: {
@@ -183,10 +211,13 @@ export class PostgresActivityRepository implements ActivityRepository {
         input.currency ?? null,
         input.status ?? null,
         input.updatedByUserId,
-      ]
+      ],
     );
     if (!result.rows[0]) return null;
-    return this.findTripActivity({ tripId: input.tripId, activityId: input.activityId });
+    return this.findTripActivity({
+      tripId: input.tripId,
+      activityId: input.activityId,
+    });
   }
 
   async upsertParticipant(input: {
@@ -195,7 +226,10 @@ export class PostgresActivityRepository implements ActivityRepository {
     userId: string;
     status: TripActivityParticipant["status"];
   }): Promise<TripActivityParticipant | null> {
-    const activity = await this.findTripActivity({ tripId: input.tripId, activityId: input.activityId });
+    const activity = await this.findTripActivity({
+      tripId: input.tripId,
+      activityId: input.activityId,
+    });
     if (!activity) return null;
     const result = await this.sql.query<ParticipantRow>(
       `insert into trip_activity_participants (activity_id, user_id, status)
@@ -203,7 +237,7 @@ export class PostgresActivityRepository implements ActivityRepository {
        on conflict (activity_id, user_id)
        do update set status = excluded.status
        returning activity_id::text, user_id::text, status, joined_at::text`,
-      [input.activityId, input.userId, input.status]
+      [input.activityId, input.userId, input.status],
     );
     return mapParticipant(result.rows[0]!);
   }
@@ -228,11 +262,13 @@ export class PostgresActivityRepository implements ActivityRepository {
         input.action,
         input.before ?? null,
         input.after ?? null,
-      ]
+      ],
     );
   }
 
-  private async hydrateActivities(rows: ActivityRow[]): Promise<TripActivity[]> {
+  private async hydrateActivities(
+    rows: ActivityRow[],
+  ): Promise<TripActivity[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((row) => row.id);
     const participants = await this.sql.query<ParticipantRow>(
@@ -240,7 +276,7 @@ export class PostgresActivityRepository implements ActivityRepository {
        from trip_activity_participants
        where activity_id = any($1::uuid[])
        order by joined_at asc`,
-      [ids]
+      [ids],
     );
     const byActivity = new Map<string, TripActivityParticipant[]>();
     for (const row of participants.rows) {
@@ -248,17 +284,20 @@ export class PostgresActivityRepository implements ActivityRepository {
       current.push(mapParticipant(row));
       byActivity.set(row.activity_id, current);
     }
-    return rows.map((row) => ({ ...mapActivity(row), participants: byActivity.get(row.id) ?? [] }));
+    return rows.map((row) => ({
+      ...mapActivity(row),
+      participants: byActivity.get(row.id) ?? [],
+    }));
   }
 }
 
-const activitySelectSql = `select id::text, trip_id::text, activity_catalog_id::text, title, category,
+const activitySelectSql = `select id::text, trip_id::text, activity_catalog_id::text, source_plan_item_id, title, category,
                                   scheduled_at::text, location_name, address, estimated_cost, currency,
                                   created_by_user_id::text, updated_by_user_id::text, status,
                                   created_at::text, updated_at::text
                            from trip_activities`;
 
-const activityReturningSql = `id::text, trip_id::text, activity_catalog_id::text, title, category,
+const activityReturningSql = `id::text, trip_id::text, activity_catalog_id::text, source_plan_item_id, title, category,
                               scheduled_at::text, location_name, address, estimated_cost, currency,
                               created_by_user_id::text, updated_by_user_id::text, status,
                               created_at::text, updated_at::text`;
@@ -293,12 +332,14 @@ function mapActivity(row: ActivityRow): TripActivity {
     id: row.id,
     tripId: row.trip_id,
     activityCatalogId: row.activity_catalog_id,
+    sourcePlanItemId: row.source_plan_item_id,
     title: row.title,
     category: row.category,
     scheduledAt: row.scheduled_at,
     locationName: row.location_name,
     address: row.address,
-    estimatedCost: row.estimated_cost === null ? null : Number(row.estimated_cost),
+    estimatedCost:
+      row.estimated_cost === null ? null : Number(row.estimated_cost),
     currency: row.currency,
     createdByUserId: row.created_by_user_id,
     updatedByUserId: row.updated_by_user_id,

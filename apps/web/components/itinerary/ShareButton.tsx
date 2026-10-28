@@ -1,4 +1,5 @@
 "use client";
+import { UiText } from "../i18n/UiText";
 
 import { useState } from "react";
 
@@ -28,7 +29,11 @@ export function ShareButton() {
       onClick={handleShare}
       className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary/90 transition-colors"
     >
-      {copied ? "Link copied!" : "Share"}
+      {copied ? (
+        <UiText id="t88fe9d214adf" fallback="Link copied!" />
+      ) : (
+        <UiText id="t09ca55ca52d2" fallback="Share" />
+      )}
     </button>
   );
 }

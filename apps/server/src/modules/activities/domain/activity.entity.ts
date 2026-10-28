@@ -18,6 +18,7 @@ export type TripActivityParticipant = {
 };
 
 export type TripActivity = {
+  sourcePlanItemId?: string;
   id: string;
   tripId: string;
   activityCatalogId: string | null;

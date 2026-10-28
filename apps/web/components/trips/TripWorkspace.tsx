@@ -1,4 +1,7 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+
+import { UiText, useUiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -11,6 +14,7 @@ import type { Itinerary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
 import { getMyTrips, getSavedTripItinerary } from "../../lib/api";
 import { localDateKey } from "../../lib/schedule-preview";
+import { JourneyWorkspacePanel } from "./JourneyWorkspacePanel";
 import { SavedAiPlanPanel } from "./SavedAiPlanPanel";
 import {
   analyzeBillUpload,
@@ -70,6 +74,9 @@ type WorkspaceTab =
   | "plan"
   | "members"
   | "schedule"
+  | "stays"
+  | "dining"
+  | "revisions"
   | "transport"
   | "bills"
   | "review"
@@ -195,7 +202,10 @@ const TABS: Array<{ id: WorkspaceTab; label: string; ready: boolean }> = [
   { id: "plan", label: "Itinerary preview", ready: true },
   { id: "members", label: "Members & share", ready: true },
   { id: "schedule", label: "Schedule", ready: true },
-  { id: "transport", label: "Transport", ready: true },
+  { id: "transport", label: "Di chuyển", ready: true },
+  { id: "stays", label: "Lưu trú", ready: true },
+  { id: "dining", label: "Ăn uống", ready: true },
+  { id: "revisions", label: "Chỉnh hành trình", ready: true },
   { id: "bills", label: "Bills & split", ready: true },
   { id: "review", label: "Host review", ready: true },
   { id: "insights", label: "Insights", ready: true },
@@ -215,6 +225,10 @@ function canAccessWorkspaceTab(
 }
 
 export function TripWorkspace({ tripId }: { tripId: string }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
+  const t = useUiText();
+
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
   const [state, setState] = useState<LoadState>("loading");
   const [session, setSession] = useState<WorkspaceSession | null>(null);
@@ -368,7 +382,8 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           () => [],
         );
         const nextTripCitySlug =
-          nextTrips.find((trip) => trip.id === tripId)?.primary_city_slug ?? null;
+          nextTrips.find((trip) => trip.id === tripId)?.primary_city_slug ??
+          null;
 
         const [
           nextAuditLogs,
@@ -388,9 +403,10 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
               )
             : Promise.resolve([] as TripAuditLog[]),
           listTripActivities(tripId, authSession.accessToken).catch(() => []),
-          searchActivityCatalog({ citySlug: nextTripCitySlug ?? undefined, limit: 8 }).catch(
-            () => [],
-          ),
+          searchActivityCatalog({
+            citySlug: nextTripCitySlug ?? undefined,
+            limit: 8,
+          }).catch(() => []),
           listTransportBookings(tripId, authSession.accessToken).catch(
             () => [],
           ),
@@ -400,14 +416,17 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           currentPermissions.reviewSubmissions
             ? listReviewQueue(tripId, authSession.accessToken).catch(() => [])
             : Promise.resolve([] as ReviewQueueItem[]),
-          listPlaceRecommendations({ citySlug: nextTripCitySlug ?? undefined, limit: 6 }).catch(
-            () => [],
-          ),
+          listPlaceRecommendations({
+            citySlug: nextTripCitySlug ?? undefined,
+            limit: 6,
+          }).catch(() => []),
           listTransportPriceRecommendations({ limit: 6 }).catch(() => []),
           listDataQualitySignals(tripId, authSession.accessToken).catch(
             () => [],
           ),
-          getSavedTripItinerary(tripId, authSession.accessToken).catch(() => null),
+          getSavedTripItinerary(tripId, authSession.accessToken).catch(
+            () => null,
+          ),
         ]);
 
         if (cancelled) return;
@@ -499,9 +518,10 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   async function refreshInsights(authToken = session?.accessToken) {
     if (!authToken) return;
     const [nextPlaces, nextTransportPrices, nextSignals] = await Promise.all([
-      listPlaceRecommendations({ citySlug: tripCitySlug ?? undefined, limit: 6 }).catch(
-        () => [],
-      ),
+      listPlaceRecommendations({
+        citySlug: tripCitySlug ?? undefined,
+        limit: 6,
+      }).catch(() => []),
       listTransportPriceRecommendations({ limit: 6 }).catch(() => []),
       listDataQualitySignals(tripId, authToken).catch(() => []),
     ]);
@@ -534,7 +554,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
       setInvite(created);
       setInviteEmail("");
       setMessage(
-        "Invite created. Send this token or link to your travel mate.",
+        t("Invite created. Send this token or link to your travel mate."),
       );
       await refreshAuditLogs(session.accessToken);
     } catch (error) {
@@ -561,7 +581,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         },
       );
       setShareLink(nextShareLink);
-      setMessage("Share link enabled for this trip.");
+      setMessage(t("Share link enabled for this trip."));
       await refreshAuditLogs(session.accessToken);
     } catch (error) {
       setMessage(
@@ -682,21 +702,28 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
       const imported: TripActivity[] = [];
       for (const day of savedPlan.days) {
         for (const activity of day.activities) {
-          const created = await createTripActivity(tripId, session.accessToken, {
-            title: activity.name,
-            category: activity.category,
-            scheduled_at: toPlanScheduledAt(day.date, activity.time),
-            location_name: day.city,
-            estimated_cost: activity.cost ?? undefined,
-            currency: savedPlan.currency,
-          });
+          const created = await createTripActivity(
+            tripId,
+            session.accessToken,
+            {
+              title: activity.name,
+              source_plan_item_id: activity.id,
+              category: activity.category,
+              scheduled_at: toPlanScheduledAt(day.date, activity.time),
+              location_name: day.city,
+              estimated_cost: activity.cost ?? undefined,
+              currency: savedPlan.currency,
+            },
+          );
           imported.push(created);
         }
       }
 
       setActivities(imported);
       setActivityDrafts(buildActivityDrafts(imported));
-      setMessage(`${imported.length} AI activities added to the shared schedule.`);
+      setMessage(
+        `${imported.length} AI activities added to the shared schedule.`,
+      );
       await refreshAuditLogs(session.accessToken);
       await refreshReviewQueue(session.accessToken);
       setActiveTab("schedule");
@@ -954,7 +981,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         [updated.id]: updated.price === null ? "" : String(updated.price),
       }));
       setMessage(
-        `Transport price updated to ${formatMoney(updated.price, updated.currency)}.`,
+        `Transport price updated to ${formatMoney(updated.price, updated.currency, formattingLocale)}.`,
       );
       await refreshAuditLogs(session.accessToken);
     } catch (error) {
@@ -1021,7 +1048,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
           : current.amount,
         title: current.title || `${created.merchantName ?? "Trip"} payment`,
       }));
-      setMessage("Bill captured. You can now create an expense from it.");
+      setMessage(t("Bill captured. You can now create an expense from it."));
       await refreshAuditLogs(session.accessToken);
       await refreshReviewQueue(session.accessToken);
     } catch (error) {
@@ -1103,7 +1130,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
     if (!session || !expenseForm.title.trim() || !expenseForm.amount.trim())
       return;
     if (expenseForm.participantUserIds.length === 0) {
-      setMessage("Select at least one participant for this expense.");
+      setMessage(t("Select at least one participant for this expense."));
       return;
     }
     setBusyAction("expense:create");
@@ -1262,7 +1289,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         splitStrategy: result.suggestedExpense.splitStrategy,
       }));
       setMessage(
-        "OCR worker normalized this bill and prepared a suggested expense.",
+        t("OCR worker normalized this bill and prepared a suggested expense."),
       );
       await refreshAuditLogs(session.accessToken);
       await refreshReviewQueue(session.accessToken);
@@ -1335,26 +1362,35 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                 href="/trips"
                 className="text-sm font-bold text-primary hover:underline"
               >
-                Back to trips
+                {" "}
+                <UiText id="t88dfddaafa97" fallback="Back to trips" />{" "}
               </Link>
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-secondary">
-                  Trip workspace
+                  {" "}
+                  <UiText id="t1e4f09113337" fallback="Trip workspace" />{" "}
                 </p>
                 <h1 className="mt-2 text-3xl font-black tracking-tight text-on-surface md:text-5xl">
-                  Plan together without losing the source of truth.
+                  {" "}
+                  <UiText
+                    id="tf5c129acfdd8"
+                    fallback="Plan together without losing the source of truth."
+                  />{" "}
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant md:text-base">
-                  Invite friends, plan activities, track transport, capture
-                  bills, settle splits, and keep every important change
-                  traceable.
+                  {" "}
+                  <UiText
+                    id="tf77cb46a3540"
+                    fallback="Invite friends, plan activities, track transport, capture bills, settle splits, and keep every important change traceable."
+                  />{" "}
                 </p>
               </div>
             </div>
 
             <div className="rounded-3xl bg-primary p-5 text-on-primary shadow-xl">
               <p className="text-xs font-bold uppercase tracking-widest opacity-80">
-                Current trip
+                {" "}
+                <UiText id="ta53069f82d0d" fallback="Current trip" />{" "}
               </p>
               <p
                 className="mt-3 break-all font-mono text-sm"
@@ -1366,14 +1402,22 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                 className="mt-4 inline-flex rounded-full bg-primary-fixed px-3 py-1 text-xs font-black text-on-primary-fixed-variant"
                 data-testid="web-workspace-ownership"
               >
-                {activeMember?.role === "host"
-                  ? "Personal trip · You own it"
-                  : `Shared trip · ${activeMember?.role ?? "guest"}`}
+                {activeMember?.role === "host" ? (
+                  <UiText
+                    id="t11996a9e4d8a"
+                    fallback="Personal trip · You own it"
+                  />
+                ) : (
+                  `Shared trip · ${activeMember?.role ?? "guest"}`
+                )}
               </span>
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <StatCard label="Members" value={members.length.toString()} />
                 <StatCard
-                  label="Your role"
+                  label={t("Members")}
+                  value={members.length.toString()}
+                />
+                <StatCard
+                  label={t("Your role")}
                   value={activeMember?.role ?? "guest"}
                 />
               </div>
@@ -1384,18 +1428,26 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         {state === "unauthenticated" && (
           <section className="rounded-3xl border border-outline-variant/40 bg-surface p-6 shadow-sm">
             <h2 className="font-headline text-2xl font-black">
-              Sign in to manage this trip
+              {" "}
+              <UiText
+                id="tbc5de1ef5d9f"
+                fallback="Sign in to manage this trip"
+              />{" "}
             </h2>
             <p className="mt-2 text-sm text-on-surface-variant">
-              Workspace actions need an account so every invite, edit, and split
-              can be traced clearly.
+              {" "}
+              <UiText
+                id="ta03094a8ae4d"
+                fallback="Workspace actions need an account so every invite, edit, and split can be traced clearly."
+              />{" "}
             </p>
             <Link
               href={`/login?redirectTo=/trips/${tripId}/workspace`}
               className="mt-5 inline-flex rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
               data-testid="web-workspace-signin"
             >
-              Sign in
+              {" "}
+              <UiText id="tada2e9e96fa9" fallback="Sign in" />{" "}
             </Link>
           </section>
         )}
@@ -1403,7 +1455,11 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         {state === "loading" && (
           <section className="rounded-3xl border border-outline-variant/40 bg-surface p-6 shadow-sm">
             <p className="text-sm font-bold text-on-surface">
-              Loading trip workspace...
+              {" "}
+              <UiText
+                id="tafcf7623c517"
+                fallback="Loading trip workspace..."
+              />{" "}
             </p>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container-high">
               <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
@@ -1414,10 +1470,14 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         {state === "error" && (
           <section className="rounded-3xl border border-error/30 bg-error-container p-6 text-on-error-container">
             <h2 className="font-headline text-xl font-black">
-              Workspace unavailable
+              {" "}
+              <UiText
+                id="te9220d232cd1"
+                fallback="Workspace unavailable"
+              />{" "}
             </h2>
             <p className="mt-2 text-sm">
-              {message ?? "Unable to load this trip."}
+              {message ?? <UiText text="Unable to load this trip." />}
             </p>
           </section>
         )}
@@ -1437,10 +1497,11 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                   }`}
                   data-testid={`web-workspace-tab-${tab.id}`}
                 >
-                  {tab.label}
+                  <UiText text={tab.label} />
                   {!tab.ready && (
                     <span className="ml-2 text-[10px] uppercase opacity-70">
-                      soon
+                      {" "}
+                      <UiText id="t3f934e4f1268" fallback="soon" />{" "}
                     </span>
                   )}
                 </button>
@@ -1453,7 +1514,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                   className="mb-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-sm font-semibold text-on-surface-variant"
                   data-testid="web-workspace-message"
                 >
-                  {message}
+                  <UiText text={message} />
                 </p>
               )}
 
@@ -1465,8 +1526,27 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                 />
               )}
 
+              {session &&
+                (activeTab === "stays" ||
+                  activeTab === "dining" ||
+                  activeTab === "revisions") && (
+                  <JourneyWorkspacePanel
+                    key={activeTab}
+                    tripId={tripId}
+                    token={session.accessToken}
+                    section={activeTab}
+                    canEdit={Boolean(permissions?.contribute)}
+                    canApply={Boolean(permissions?.reviewSubmissions)}
+                    onChanged={(plan) => {
+                      setSavedPlan(plan);
+                      void refreshActivities();
+                    }}
+                  />
+                )}
               {activeTab === "plan" && (
                 <SavedAiPlanPanel
+                  tripId={tripId}
+                  token={session?.accessToken}
                   plan={savedPlan}
                   scheduleActivities={activities}
                   loading={savedPlanLoading}
@@ -1552,6 +1632,18 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
                   }
                   onRefresh={() => void refreshActivities()}
                   onReviewItinerary={() => setActiveTab("plan")}
+                  onCancelEditing={() => {
+                    setActivityDrafts({});
+                    setActivityForm({
+                      category: "activity",
+                      title: "",
+                      scheduledAt: "",
+                      locationName: "",
+                      estimatedCost: "",
+                      address: "",
+                    });
+                    setActiveTab(savedPlan ? "plan" : "overview");
+                  }}
                 />
               )}
 
@@ -1696,8 +1788,16 @@ function ActivityPlannerPanel(props: {
   ) => void;
   onRefresh: () => void;
   onReviewItinerary: () => void;
+  onCancelEditing: () => void;
 }) {
-  const groupedActivities = groupActivitiesByDay(props.activities);
+  const { locale: formattingLocale } = useAppLanguage();
+
+  const t = useUiText();
+
+  const groupedActivities = groupActivitiesByDay(
+    props.activities,
+    formattingLocale,
+  );
   const trackableActivities = props.activities.filter(
     (activity) => activity.status !== "cancelled",
   );
@@ -1725,17 +1825,40 @@ function ActivityPlannerPanel(props: {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-              Follow your edited itinerary
+              {" "}
+              <UiText
+                id="td6a758f2bdbb"
+                fallback="Follow your edited itinerary"
+              />{" "}
             </p>
             <h2 className="mt-2 font-headline text-xl font-black text-on-surface">
-              Keep the trip on track
+              {" "}
+              <UiText
+                id="tefb91f4683eb"
+                fallback="Keep the trip on track"
+              />{" "}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-on-surface-variant">
-              Edit the schedule below, then check off each activity as you
-              complete it. Progress is saved for the shared trip.
+              {" "}
+              <UiText
+                id="t7de85296137b"
+                fallback="Edit the schedule below, then check off each activity as you complete it. Progress is saved for the shared trip."
+              />{" "}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {props.canContribute && (
+              <button
+                type="button"
+                onClick={props.onCancelEditing}
+                disabled={Boolean(props.busyAction)}
+                className="rounded-full border border-outline-variant bg-surface px-4 py-3 text-sm font-bold disabled:opacity-50"
+                data-testid="web-cancel-itinerary-edit"
+              >
+                <UiText id="cancel_editing" fallback="Cancel editing" />
+              </button>
+            )}
+
             {props.hasSavedPlan && props.activities.length > 0 && (
               <button
                 type="button"
@@ -1743,7 +1866,11 @@ function ActivityPlannerPanel(props: {
                 className="rounded-full border border-primary/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-fixed"
                 data-testid="web-review-edited-itinerary"
               >
-                Review updated itinerary
+                {" "}
+                <UiText
+                  id="t51705fd53a77"
+                  fallback="Review updated itinerary"
+                />{" "}
               </button>
             )}
             <div className="rounded-2xl bg-surface-container-lowest px-4 py-3 text-right">
@@ -1754,7 +1881,8 @@ function ActivityPlannerPanel(props: {
                 {completedActivities}/{progressTotal}
               </p>
               <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-                completed
+                {" "}
+                <UiText id="t231e564db4cd" fallback="completed" />{" "}
               </p>
             </div>
           </div>
@@ -1769,13 +1897,24 @@ function ActivityPlannerPanel(props: {
         </div>
 
         <p className="mt-3 text-sm font-bold text-on-primary-fixed-variant">
-          {nextActivity
-            ? `Next up: ${nextActivity.title}${nextActivity.scheduledAt ? ` · ${formatDateTime(nextActivity.scheduledAt)}` : ""}`
-            : progressTotal === 0 && props.activities.length > 0
-              ? "All activities are cancelled. Add or reschedule one to keep tracking the trip."
-              : props.activities.length > 0
-              ? "Everything on this schedule is complete."
-              : "Add the saved AI plan to Schedule to start tracking it."}
+          {nextActivity ? (
+            `Next up: ${nextActivity.title}${nextActivity.scheduledAt ? ` · ${formatDateTime(nextActivity.scheduledAt, formattingLocale)}` : ""}`
+          ) : progressTotal === 0 && props.activities.length > 0 ? (
+            <UiText
+              id="t5e5303c05cbe"
+              fallback="All activities are cancelled. Add or reschedule one to keep tracking the trip."
+            />
+          ) : props.activities.length > 0 ? (
+            <UiText
+              id="t2b2ab485705c"
+              fallback="Everything on this schedule is complete."
+            />
+          ) : (
+            <UiText
+              id="te85c669fd809"
+              fallback="Add the saved AI plan to Schedule to start tracking it."
+            />
+          )}
         </p>
       </section>
 
@@ -1785,11 +1924,15 @@ function ActivityPlannerPanel(props: {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-headline text-xl font-black">
-                  Activity catalog
+                  {" "}
+                  <UiText id="t23efe463d3ea" fallback="Activity catalog" />{" "}
                 </h2>
                 <p className="mt-1 text-sm text-on-surface-variant">
-                  Reuse verified places and activities so recommendations get
-                  smarter over time.
+                  {" "}
+                  <UiText
+                    id="te90c5114a78c"
+                    fallback="Reuse verified places and activities so recommendations get smarter over time."
+                  />{" "}
                 </p>
               </div>
               <button
@@ -1797,7 +1940,8 @@ function ActivityPlannerPanel(props: {
                 onClick={props.onRefresh}
                 className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
               >
-                Refresh
+                {" "}
+                <UiText id="t56e3badc4e6c" fallback="Refresh" />{" "}
               </button>
             </div>
 
@@ -1807,7 +1951,7 @@ function ActivityPlannerPanel(props: {
                 onChange={(event) =>
                   props.onCatalogQueryChange(event.target.value)
                 }
-                placeholder="Search cafe, food, workshop..."
+                placeholder={t("Search cafe, food, workshop...")}
                 className="min-w-0 flex-1 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-activity-catalog-search"
               />
@@ -1817,7 +1961,8 @@ function ActivityPlannerPanel(props: {
                 className="rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
                 data-testid="web-activity-catalog-submit"
               >
-                Search
+                {" "}
+                <UiText id="tbce06414177f" fallback="Search" />{" "}
               </button>
             </div>
 
@@ -1827,7 +1972,11 @@ function ActivityPlannerPanel(props: {
             >
               {props.catalog.length === 0 && (
                 <p className="text-sm text-on-surface-variant">
-                  No catalog matches yet.
+                  {" "}
+                  <UiText
+                    id="te9bb64aaee66"
+                    fallback="No catalog matches yet."
+                  />{" "}
                 </p>
               )}
               {props.catalog.map((item) => (
@@ -1841,8 +1990,10 @@ function ActivityPlannerPanel(props: {
                         {item.canonicalName}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {item.category} · {item.citySlug ?? "unknown city"} ·
-                        quality {item.qualityScore}
+                        <UiText text={item.category} /> ·{" "}
+                        {item.citySlug ?? "unknown city"}{" "}
+                        <UiText id="t57bf1ade8cfb" fallback="· quality" />{" "}
+                        {item.qualityScore}
                       </p>
                       {item.address && (
                         <p className="mt-1 text-xs text-on-surface-variant">
@@ -1857,7 +2008,8 @@ function ActivityPlannerPanel(props: {
                       className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:opacity-50"
                       data-testid={`web-add-catalog-activity-${item.id}`}
                     >
-                      Add
+                      {" "}
+                      <UiText id="t61cc55aa0453" fallback="Add" />{" "}
                     </button>
                   </div>
                 </article>
@@ -1867,11 +2019,15 @@ function ActivityPlannerPanel(props: {
 
           <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
             <h2 className="font-headline text-xl font-black">
-              Add custom activity
+              {" "}
+              <UiText id="tf84b20bfebcb" fallback="Add custom activity" />{" "}
             </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              User-entered activities can later be normalized back into the
-              shared catalog.
+              {" "}
+              <UiText
+                id="t13b8229b6c99"
+                fallback="User-entered activities can later be normalized back into the shared catalog."
+              />{" "}
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <input
@@ -1879,7 +2035,7 @@ function ActivityPlannerPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ title: event.target.value })
                 }
-                placeholder="Activity title"
+                placeholder={t("Activity title")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
                 data-testid="web-custom-activity-title"
               />
@@ -1888,7 +2044,7 @@ function ActivityPlannerPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ category: event.target.value })
                 }
-                placeholder="Category"
+                placeholder={t("Category")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-custom-activity-category"
               />
@@ -1906,7 +2062,7 @@ function ActivityPlannerPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ locationName: event.target.value })
                 }
-                placeholder="Location name"
+                placeholder={t("Location name")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-custom-activity-location"
               />
@@ -1916,7 +2072,7 @@ function ActivityPlannerPanel(props: {
                   props.onFormChange({ estimatedCost: event.target.value })
                 }
                 inputMode="numeric"
-                placeholder="Estimated cost"
+                placeholder={t("Estimated cost")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-custom-activity-cost"
               />
@@ -1925,7 +2081,7 @@ function ActivityPlannerPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ address: event.target.value })
                 }
-                placeholder="Address"
+                placeholder={t("Address")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
                 data-testid="web-custom-activity-address"
               />
@@ -1940,27 +2096,41 @@ function ActivityPlannerPanel(props: {
               className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="web-create-custom-activity"
             >
-              Add custom activity
+              {" "}
+              <UiText id="tf84b20bfebcb" fallback="Add custom activity" />{" "}
             </button>
           </div>
         </div>
       ) : (
         <ReadOnlyNotice>
-          Viewers can read the schedule and respond to their own RSVP, but
-          cannot add or edit activities.
+          {" "}
+          <UiText
+            id="ta425b5695afc"
+            fallback="Viewers can read the schedule and respond to their own RSVP, but cannot add or edit activities."
+          />{" "}
         </ReadOnlyNotice>
       )}
 
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-        <h2 className="font-headline text-xl font-black">Trip schedule</h2>
+        <h2 className="font-headline text-xl font-black">
+          {" "}
+          <UiText id="taa824f46a1d8" fallback="Trip schedule" />{" "}
+        </h2>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Track suggestions, host review status, timing, and participant RSVP.
+          {" "}
+          <UiText
+            id="t9f81b08a310e"
+            fallback="Track suggestions, host review status, timing, and participant RSVP."
+          />{" "}
         </p>
         <div className="mt-5 space-y-4" data-testid="web-trip-activities-list">
           {props.activities.length === 0 && (
             <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              No activities yet. Add one from the catalog or create a custom
-              entry.
+              {" "}
+              <UiText
+                id="tf60074dae37e"
+                fallback="No activities yet. Add one from the catalog or create a custom entry."
+              />{" "}
             </p>
           )}
           {groupedActivities.map((group) => (
@@ -1972,7 +2142,7 @@ function ActivityPlannerPanel(props: {
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-outline-variant/50" />
                 <p className="rounded-full bg-primary-container px-3 py-1 text-xs font-black uppercase tracking-widest text-on-primary-container">
-                  {group.label}
+                  <UiText text={group.label} />
                 </p>
                 <span className="h-px flex-1 bg-outline-variant/50" />
               </div>
@@ -2016,26 +2186,38 @@ function ActivityPlannerPanel(props: {
                           {activity.title}
                         </p>
                         <p className="mt-1 text-xs text-on-surface-variant">
-                          {activity.category} · {activity.status} ·{" "}
+                          <UiText text={activity.category} /> ·{" "}
+                          <UiText text={activity.status} /> ·{" "}
                           {formatMoney(
                             activity.estimatedCost,
                             activity.currency,
+                            formattingLocale,
                           )}
                         </p>
                         <p className="mt-1 text-xs text-on-surface-variant">
-                          {activity.locationName ?? "No location"}{" "}
+                          {activity.locationName ?? (
+                            <UiText text="No location" />
+                          )}{" "}
                           {activity.address ? `· ${activity.address}` : ""}
                         </p>
                         {activity.scheduledAt && (
                           <p className="mt-1 text-xs font-bold text-primary">
-                            {formatDateTime(activity.scheduledAt)}
+                            {formatDateTime(
+                              activity.scheduledAt,
+                              formattingLocale,
+                            )}
                           </p>
                         )}
                         <p
                           className="mt-2 text-xs font-bold text-secondary"
                           data-testid={`web-activity-participation-${activity.id}`}
                         >
-                          Your RSVP: {myParticipation?.status ?? "not set"}
+                          {" "}
+                          <UiText
+                            id="t0dfee7ffe030"
+                            fallback="Your RSVP:"
+                          />{" "}
+                          {myParticipation?.status ?? "not set"}
                         </p>
                       </div>
 
@@ -2060,7 +2242,11 @@ function ActivityPlannerPanel(props: {
                           className="h-4 w-4 accent-primary"
                           data-testid={`web-activity-check-${activity.id}`}
                         />
-                        {activity.status === "done" ? "Completed" : "Mark done"}
+                        {activity.status === "done" ? (
+                          <UiText id="t1798b3ba42ee" fallback="Completed" />
+                        ) : (
+                          <UiText id="t0911cce79bf0" fallback="Mark done" />
+                        )}
                       </label>
 
                       <select
@@ -2077,7 +2263,7 @@ function ActivityPlannerPanel(props: {
                       >
                         {ACTIVITY_STATUS_OPTIONS.map((status) => (
                           <option key={status} value={status}>
-                            {status}
+                            <UiText text={status} />
                           </option>
                         ))}
                       </select>
@@ -2102,7 +2288,7 @@ function ActivityPlannerPanel(props: {
                               }`}
                               data-testid={`web-activity-rsvp-${activity.id}-${status}`}
                             >
-                              {status}
+                              <UiText text={status} />
                             </button>
                           ),
                         )}
@@ -2142,7 +2328,7 @@ function ActivityPlannerPanel(props: {
                         }
                         disabled={!canEdit}
                         inputMode="numeric"
-                        placeholder="Estimated cost"
+                        placeholder={t("Estimated cost")}
                         className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
                         data-testid={`web-activity-edit-cost-${activity.id}`}
                       />
@@ -2154,7 +2340,7 @@ function ActivityPlannerPanel(props: {
                           })
                         }
                         disabled={!canEdit}
-                        placeholder="Location"
+                        placeholder={t("Location")}
                         className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
                         data-testid={`web-activity-edit-location-${activity.id}`}
                       />
@@ -2166,10 +2352,29 @@ function ActivityPlannerPanel(props: {
                           })
                         }
                         disabled={!canEdit}
-                        placeholder="Address"
+                        placeholder={t("Address")}
                         className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
                         data-testid={`web-activity-edit-address-${activity.id}`}
                       />
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            props.onDraftChange(
+                              activity.id,
+                              buildActivityDraft(activity),
+                            )
+                          }
+                          disabled={isSavingDetails}
+                          className="rounded-full border border-outline-variant px-4 py-2 text-sm font-bold"
+                          data-testid={`web-activity-cancel-details-${activity.id}`}
+                        >
+                          <UiText
+                            id="discard_unsaved_changes"
+                            fallback="Discard unsaved changes"
+                          />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => props.onUpdateDetails(activity)}
@@ -2179,11 +2384,22 @@ function ActivityPlannerPanel(props: {
                         className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2"
                         data-testid={`web-activity-save-details-${activity.id}`}
                       >
-                        {isSavingDetails
-                          ? "Saving details..."
-                          : canEdit
-                            ? "Save activity details"
-                            : "Only host or creator can edit"}
+                        {isSavingDetails ? (
+                          <UiText
+                            id="t0cd1d2a3251c"
+                            fallback="Saving details..."
+                          />
+                        ) : canEdit ? (
+                          <UiText
+                            id="tffbd93f3317d"
+                            fallback="Save activity details"
+                          />
+                        ) : (
+                          <UiText
+                            id="tfd4da6a8a3b3"
+                            fallback="Only host or creator can edit"
+                          />
+                        )}
                       </button>
                     </div>
                   </article>
@@ -2214,6 +2430,10 @@ function TransportPanel(props: {
   onUpdatePrice: (booking: TransportBooking) => void;
   onRefresh: () => void;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
+  const t = useUiText();
+
   const activeMembers = props.members.filter(
     (member) => member.status === "active",
   );
@@ -2232,10 +2452,16 @@ function TransportPanel(props: {
       {props.canContribute ? (
         <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-            <h2 className="font-headline text-xl font-black">Add transport</h2>
+            <h2 className="font-headline text-xl font-black">
+              {" "}
+              <UiText id="t1f063e4df760" fallback="Add transport" />{" "}
+            </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Track every movement, from flights and trains to ferry, car,
-              motorbike, bicycle, or walking segments.
+              {" "}
+              <UiText
+                id="ta6503584cca2"
+                fallback="Track every movement, from flights and trains to ferry, car, motorbike, bicycle, or walking segments."
+              />{" "}
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -2247,7 +2473,13 @@ function TransportPanel(props: {
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary sm:col-span-2"
                 data-testid="web-transport-activity"
               >
-                <option value="">Whole trip transport</option>
+                <option value="">
+                  {" "}
+                  <UiText
+                    id="t7cdda9de08c1"
+                    fallback="Whole trip transport"
+                  />{" "}
+                </option>
                 {props.activities.map((activity) => (
                   <option key={activity.id} value={activity.id}>
                     {activity.title}
@@ -2266,7 +2498,7 @@ function TransportPanel(props: {
               >
                 {TRANSPORT_MODES.map((mode) => (
                   <option key={mode} value={mode}>
-                    {transportModeLabel(mode)}
+                    <UiText text={transportModeLabel(mode)} />
                   </option>
                 ))}
               </select>
@@ -2280,7 +2512,7 @@ function TransportPanel(props: {
               >
                 {TRANSPORT_STATUS_OPTIONS.map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    <UiText text={status} />
                   </option>
                 ))}
               </select>
@@ -2289,7 +2521,7 @@ function TransportPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ providerName: event.target.value })
                 }
-                placeholder="Provider: Vietnam Airlines, VNR, Grab..."
+                placeholder={t("Provider: Vietnam Airlines, VNR, Grab...")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-provider"
               />
@@ -2298,7 +2530,7 @@ function TransportPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ bookingReference: event.target.value })
                 }
-                placeholder="Booking/ticket ref"
+                placeholder={t("Booking/ticket ref")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-reference"
               />
@@ -2307,7 +2539,7 @@ function TransportPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ originName: event.target.value })
                 }
-                placeholder="From"
+                placeholder={t("From")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-origin"
               />
@@ -2316,7 +2548,7 @@ function TransportPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ destinationName: event.target.value })
                 }
-                placeholder="To"
+                placeholder={t("To")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-destination"
               />
@@ -2344,7 +2576,7 @@ function TransportPanel(props: {
                   props.onFormChange({ price: event.target.value })
                 }
                 inputMode="numeric"
-                placeholder="Price in VND"
+                placeholder={t("Price in VND")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-price"
               />
@@ -2353,7 +2585,7 @@ function TransportPanel(props: {
                 onChange={(event) =>
                   props.onFormChange({ notes: event.target.value })
                 }
-                placeholder="Notes: platform, seat, cabin, pickup point..."
+                placeholder={t("Notes: platform, seat, cabin, pickup point...")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-transport-notes"
               />
@@ -2364,11 +2596,15 @@ function TransportPanel(props: {
               data-testid="web-transport-participant-picker"
             >
               <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-                Participants
+                {" "}
+                <UiText id="tcd56e0839d06" fallback="Participants" />{" "}
               </p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Leave everyone unchecked to include all active members
-                automatically.
+                {" "}
+                <UiText
+                  id="t7ae775c99468"
+                  fallback="Leave everyone unchecked to include all active members automatically."
+                />{" "}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {activeMembers.map((member) => {
@@ -2409,9 +2645,11 @@ function TransportPanel(props: {
               className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="web-create-transport"
             >
-              {props.busyAction === "transport:create"
-                ? "Adding..."
-                : "Add transport"}
+              {props.busyAction === "transport:create" ? (
+                <UiText id="t268c06a28a1b" fallback="Adding..." />
+              ) : (
+                <UiText id="t1f063e4df760" fallback="Add transport" />
+              )}
             </button>
           </div>
 
@@ -2419,11 +2657,18 @@ function TransportPanel(props: {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-headline text-xl font-black">
-                  Participant scope
+                  {" "}
+                  <UiText
+                    id="tb6c8b6dc3ab3"
+                    fallback="Participant scope"
+                  />{" "}
                 </h2>
                 <p className="mt-1 text-sm text-on-surface-variant">
-                  Leave the picker empty for an all-member booking, or choose
-                  only the people included in this segment.
+                  {" "}
+                  <UiText
+                    id="te683b2b98196"
+                    fallback="Leave the picker empty for an all-member booking, or choose only the people included in this segment."
+                  />{" "}
                 </p>
               </div>
               <button
@@ -2431,7 +2676,8 @@ function TransportPanel(props: {
                 onClick={props.onRefresh}
                 className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
               >
-                Refresh
+                {" "}
+                <UiText id="t56e3badc4e6c" fallback="Refresh" />{" "}
               </button>
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -2440,39 +2686,56 @@ function TransportPanel(props: {
                   key={member.userId}
                   className="rounded-full bg-surface-container-high px-3 py-2 text-xs font-bold"
                 >
-                  {memberDisplayName(member)} · {roleLabel(member.role)}
+                  {memberDisplayName(member)} ·{" "}
+                  <UiText text={roleLabel(member.role)} />
                 </span>
               ))}
             </div>
             <div className="mt-6 rounded-2xl bg-surface-container-low p-4">
               <p className="text-xs font-extrabold uppercase tracking-widest text-secondary">
-                Why this matters
+                {" "}
+                <UiText id="t76ff2a4c8e80" fallback="Why this matters" />{" "}
               </p>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                Keeping mode, route, provider, price, and ticket status
-                normalized lets the app later compare transport experience and
-                recommend cheaper timing for similar routes.
+                {" "}
+                <UiText
+                  id="t0cb2ed6e90e9"
+                  fallback="Keeping mode, route, provider, price, and ticket status normalized lets the app later compare transport experience and recommend cheaper timing for similar routes."
+                />{" "}
               </p>
             </div>
           </div>
         </div>
       ) : (
         <ReadOnlyNotice>
-          Viewers can read routes, booking status, participants, and prices, but
-          cannot add or edit transport.
+          {" "}
+          <UiText
+            id="t3dbc7c801a42"
+            fallback="Viewers can read routes, booking status, participants, and prices, but cannot add or edit transport."
+          />{" "}
         </ReadOnlyNotice>
       )}
 
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-        <h2 className="font-headline text-xl font-black">Transport bookings</h2>
+        <h2 className="font-headline text-xl font-black">
+          {" "}
+          <UiText id="tb279bffeadf5" fallback="Transport bookings" />{" "}
+        </h2>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Follow each segment from planning to reserved, ticketed, completed, or
-          cancelled.
+          {" "}
+          <UiText
+            id="t119e2758ecc4"
+            fallback="Follow each segment from planning to reserved, ticketed, completed, or cancelled."
+          />{" "}
         </p>
         <div className="mt-5 space-y-3" data-testid="web-transport-list">
           {props.bookings.length === 0 && (
             <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              No transport bookings yet.
+              {" "}
+              <UiText
+                id="t1ec26f146bf0"
+                fallback="No transport bookings yet."
+              />{" "}
             </p>
           )}
           {props.bookings.map((booking) => {
@@ -2490,34 +2753,54 @@ function TransportPanel(props: {
                   <div>
                     {booking.activityId && (
                       <p className="mb-2 text-xs font-extrabold uppercase tracking-widest text-primary">
-                        Linked activity:{" "}
+                        {" "}
+                        <UiText
+                          id="td6f2853026b2"
+                          fallback="Linked activity:"
+                        />{" "}
                         {props.activities.find(
                           (activity) => activity.id === booking.activityId,
                         )?.title ?? booking.activityId}
                       </p>
                     )}
                     <p className="font-bold text-on-surface">
-                      {transportModeLabel(booking.mode)} · {booking.originName}{" "}
-                      to {booking.destinationName}
+                      <UiText text={transportModeLabel(booking.mode)} /> ·{" "}
+                      {booking.originName}{" "}
+                      <UiText id="t4374aaee247f" fallback="to" />{" "}
+                      {booking.destinationName}
                     </p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {booking.providerName ?? "No provider"} ·{" "}
-                      {booking.bookingReference ?? "No reference"} ·{" "}
-                      {formatMoney(booking.price, booking.currency)}
+                      {booking.providerName ?? <UiText text="No provider" />} ·{" "}
+                      {booking.bookingReference ?? (
+                        <UiText text="No reference" />
+                      )}{" "}
+                      ·{" "}
+                      {formatMoney(
+                        booking.price,
+                        booking.currency,
+                        formattingLocale,
+                      )}
                     </p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {booking.departureAt
-                        ? formatDateTime(booking.departureAt)
-                        : "Departure TBD"}
+                      {booking.departureAt ? (
+                        formatDateTime(booking.departureAt, formattingLocale)
+                      ) : (
+                        <UiText id="t40ecfccddf52" fallback="Departure TBD" />
+                      )}
                       {booking.arrivalAt
-                        ? ` -> ${formatDateTime(booking.arrivalAt)}`
+                        ? ` -> ${formatDateTime(booking.arrivalAt, formattingLocale)}`
                         : ""}
                     </p>
                     <p
                       className="mt-2 text-xs font-bold text-secondary"
                       data-testid={`web-transport-participants-${booking.id}`}
                     >
-                      Participants: {booking.participantUserIds.length}
+                      {" "}
+                      <UiText
+                        id="t317d98447ed3"
+                        fallback="Participants:"
+                      />{" "}
+                      {booking.participantUserIds.length}
                     </p>
                     {booking.notes && (
                       <p className="mt-1 text-xs text-on-surface-variant">
@@ -2538,7 +2821,7 @@ function TransportPanel(props: {
                   >
                     {TRANSPORT_STATUS_OPTIONS.map((status) => (
                       <option key={status} value={status}>
-                        {status}
+                        <UiText text={status} />
                       </option>
                     ))}
                   </select>
@@ -2554,7 +2837,7 @@ function TransportPanel(props: {
                       props.busyAction === `transport-price:${booking.id}`
                     }
                     inputMode="numeric"
-                    placeholder="Updated price"
+                    placeholder={t("Updated price")}
                     className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-60"
                     data-testid={`web-transport-price-draft-${booking.id}`}
                   />
@@ -2568,7 +2851,8 @@ function TransportPanel(props: {
                     className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`web-transport-save-price-${booking.id}`}
                   >
-                    Save price
+                    {" "}
+                    <UiText id="t6a897ddb18fb" fallback="Save price" />{" "}
                   </button>
                 </div>
               </article>
@@ -2609,6 +2893,10 @@ function BillsPanel(props: {
   ) => void;
   onRefreshExpenses: () => void;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
+  const t = useUiText();
+
   const activeMembers = props.members.filter(
     (member) => member.status === "active",
   );
@@ -2642,10 +2930,16 @@ function BillsPanel(props: {
     <section className="space-y-5" data-testid="web-bills-panel">
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-          <h2 className="font-headline text-xl font-black">Capture bill</h2>
+          <h2 className="font-headline text-xl font-black">
+            {" "}
+            <UiText id="t9daa088e0fe8" fallback="Capture bill" />{" "}
+          </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Paste OCR text, bill URL, or manual amount now; photo upload can
-            later feed the same bill contract.
+            {" "}
+            <UiText
+              id="t2b5a4acf97df"
+              fallback="Paste OCR text, bill URL, or manual amount now; photo upload can later feed the same bill contract."
+            />{" "}
           </p>
 
           <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2657,7 +2951,10 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary sm:col-span-2"
               data-testid="web-bill-activity"
             >
-              <option value="">No linked activity</option>
+              <option value="">
+                {" "}
+                <UiText id="t44a2ce8f6935" fallback="No linked activity" />{" "}
+              </option>
               {props.activities.map((activity) => (
                 <option key={activity.id} value={activity.id}>
                   {activity.title}
@@ -2669,7 +2966,7 @@ function BillsPanel(props: {
               onChange={(event) =>
                 props.onBillFormChange({ merchantName: event.target.value })
               }
-              placeholder="Merchant: cafe, hotel, restaurant..."
+              placeholder={t("Merchant: cafe, hotel, restaurant...")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
               data-testid="web-bill-merchant"
             />
@@ -2679,7 +2976,7 @@ function BillsPanel(props: {
                 props.onBillFormChange({ totalAmount: event.target.value })
               }
               inputMode="numeric"
-              placeholder="Total amount"
+              placeholder={t("Total amount")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
               data-testid="web-bill-total"
             />
@@ -2697,7 +2994,7 @@ function BillsPanel(props: {
               onChange={(event) =>
                 props.onBillFormChange({ storageUrl: event.target.value })
               }
-              placeholder="Bill image/storage URL"
+              placeholder={t("Bill image/storage URL")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
               data-testid="web-bill-storage-url"
             />
@@ -2706,7 +3003,7 @@ function BillsPanel(props: {
               onChange={(event) =>
                 props.onBillFormChange({ rawText: event.target.value })
               }
-              placeholder="Raw OCR or copied bill text"
+              placeholder={t("Raw OCR or copied bill text")}
               className="min-h-28 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
               data-testid="web-bill-raw-text"
             />
@@ -2724,9 +3021,11 @@ function BillsPanel(props: {
             className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="web-create-bill"
           >
-            {props.busyAction === "bill:create"
-              ? "Capturing..."
-              : "Capture bill"}
+            {props.busyAction === "bill:create" ? (
+              <UiText id="t59cbbe8e43bf" fallback="Capturing..." />
+            ) : (
+              <UiText id="t9daa088e0fe8" fallback="Capture bill" />
+            )}
           </button>
         </div>
 
@@ -2734,11 +3033,15 @@ function BillsPanel(props: {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-headline text-xl font-black">
-                Create expense
+                {" "}
+                <UiText id="ta1c472e8af3f" fallback="Create expense" />{" "}
               </h2>
               <p className="mt-1 text-sm text-on-surface-variant">
-                Create a payable record from a bill or manual entry, then track
-                who owes what.
+                {" "}
+                <UiText
+                  id="t026ae0bc74c0"
+                  fallback="Create a payable record from a bill or manual entry, then track who owes what."
+                />{" "}
               </p>
             </div>
             <button
@@ -2746,7 +3049,8 @@ function BillsPanel(props: {
               onClick={props.onRefreshExpenses}
               className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
             >
-              Refresh
+              {" "}
+              <UiText id="t56e3badc4e6c" fallback="Refresh" />{" "}
             </button>
           </div>
 
@@ -2756,7 +3060,7 @@ function BillsPanel(props: {
               onChange={(event) =>
                 props.onExpenseFormChange({ title: event.target.value })
               }
-              placeholder="Expense title"
+              placeholder={t("Expense title")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
               data-testid="web-expense-title"
             />
@@ -2766,7 +3070,7 @@ function BillsPanel(props: {
                 props.onExpenseFormChange({ amount: event.target.value })
               }
               inputMode="numeric"
-              placeholder="Amount"
+              placeholder={t("Amount")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
               data-testid="web-expense-amount"
             />
@@ -2778,7 +3082,10 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
               data-testid="web-expense-paid-by"
             >
-              <option value={props.currentUserId}>Paid by me</option>
+              <option value={props.currentUserId}>
+                {" "}
+                <UiText id="td12efcd33fc2" fallback="Paid by me" />{" "}
+              </option>
               {activeMembers
                 .filter((member) => member.userId !== props.currentUserId)
                 .map((member) => (
@@ -2795,7 +3102,10 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
               data-testid="web-expense-activity"
             >
-              <option value="">No activity</option>
+              <option value="">
+                {" "}
+                <UiText id="t2a3c72a395db" fallback="No activity" />{" "}
+              </option>
               {props.activities.map((activity) => (
                 <option key={activity.id} value={activity.id}>
                   {activity.title}
@@ -2810,11 +3120,18 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
               data-testid="web-expense-bill"
             >
-              <option value="">No bill</option>
+              <option value="">
+                {" "}
+                <UiText id="t64549bc3ac91" fallback="No bill" />{" "}
+              </option>
               {props.billUploads.map((bill) => (
                 <option key={bill.id} value={bill.id}>
                   {bill.merchantName ?? bill.id} ·{" "}
-                  {formatMoney(bill.totalAmount, bill.currency)}
+                  {formatMoney(
+                    bill.totalAmount,
+                    bill.currency,
+                    formattingLocale,
+                  )}
                 </option>
               ))}
             </select>
@@ -2829,15 +3146,21 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm font-bold outline-none focus:border-primary"
               data-testid="web-expense-split-strategy"
             >
-              <option value="equal">Equal split</option>
-              <option value="custom">Custom split</option>
+              <option value="equal">
+                {" "}
+                <UiText id="t3abc69bbdede" fallback="Equal split" />{" "}
+              </option>
+              <option value="custom">
+                {" "}
+                <UiText id="t71d63d56226c" fallback="Custom split" />{" "}
+              </option>
             </select>
             <input
               value={props.expenseForm.description}
               onChange={(event) =>
                 props.onExpenseFormChange({ description: event.target.value })
               }
-              placeholder="Description"
+              placeholder={t("Description")}
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
               data-testid="web-expense-description"
             />
@@ -2850,14 +3173,20 @@ function BillsPanel(props: {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-                  Expense participants
+                  {" "}
+                  <UiText
+                    id="tff534be80310"
+                    fallback="Expense participants"
+                  />{" "}
                 </p>
                 <p
                   className="mt-1 text-sm font-bold text-on-surface"
                   data-testid="web-expense-participant-count"
                 >
-                  {selectedParticipants.length} of {activeMembers.length}{" "}
-                  selected
+                  {selectedParticipants.length}{" "}
+                  <UiText id="tde04fa0e29f9" fallback="of" />{" "}
+                  {activeMembers.length}{" "}
+                  <UiText id="t835f3b50e337" fallback="selected" />{" "}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -2873,7 +3202,8 @@ function BillsPanel(props: {
                   className="rounded-full border border-primary px-3 py-1.5 text-xs font-bold text-primary"
                   data-testid="web-expense-participants-all"
                 >
-                  Select all
+                  {" "}
+                  <UiText id="t913afff1faf7" fallback="Select all" />{" "}
                 </button>
                 <button
                   type="button"
@@ -2883,13 +3213,18 @@ function BillsPanel(props: {
                   className="rounded-full border border-outline-variant px-3 py-1.5 text-xs font-bold text-on-surface-variant"
                   data-testid="web-expense-participants-clear"
                 >
-                  Clear
+                  {" "}
+                  <UiText id="t719ea396ad92" fallback="Clear" />{" "}
                 </button>
               </div>
             </div>
 
             <p className="mt-2 text-xs leading-5 text-on-surface-variant">
-              Only selected travelers will receive a split for this bill.
+              {" "}
+              <UiText
+                id="tb04c21a4c551"
+                fallback="Only selected travelers will receive a split for this bill."
+              />{" "}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {activeMembers.map((member) => {
@@ -2920,7 +3255,11 @@ function BillsPanel(props: {
 
             {selectedParticipants.length === 0 ? (
               <p className="mt-3 text-xs font-bold text-error">
-                Select at least one traveler before creating the expense.
+                {" "}
+                <UiText
+                  id="tbf6a03969de9"
+                  fallback="Select at least one traveler before creating the expense."
+                />{" "}
               </p>
             ) : (
               props.expenseForm.splitStrategy === "equal" && (
@@ -2928,8 +3267,13 @@ function BillsPanel(props: {
                   className="mt-3 text-xs font-bold text-secondary"
                   data-testid="web-equal-split-preview"
                 >
-                  Equal split preview: {formatMoney(equalShare, "VND")} per
-                  traveler
+                  {" "}
+                  <UiText
+                    id="t5dfd25af26bc"
+                    fallback="Equal split preview:"
+                  />{" "}
+                  {formatMoney(equalShare, "VND", formattingLocale)}{" "}
+                  <UiText id="t33e40a9f6b26" fallback="per traveler" />{" "}
                 </p>
               )
             )}
@@ -2941,15 +3285,23 @@ function BillsPanel(props: {
               data-testid="web-custom-splits"
             >
               <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-                Custom split amounts
+                {" "}
+                <UiText
+                  id="te73e2bb11002"
+                  fallback="Custom split amounts"
+                />{" "}
               </p>
               <p
                 className="mt-2 text-xs font-bold text-on-surface-variant"
                 data-testid="web-custom-split-summary"
               >
-                Split total {formatMoney(customSplitTotal, "VND")} · expense{" "}
-                {formatMoney(expenseAmount, "VND")} · remaining{" "}
-                {formatMoney(customSplitDelta, "VND")}
+                {" "}
+                <UiText id="tb9a0927821d6" fallback="Split total" />{" "}
+                {formatMoney(customSplitTotal, "VND", formattingLocale)}{" "}
+                <UiText id="t69cbba8ec6a9" fallback="· expense" />{" "}
+                {formatMoney(expenseAmount, "VND", formattingLocale)}{" "}
+                <UiText id="t66573b3fab05" fallback="· remaining" />{" "}
+                {formatMoney(customSplitDelta, "VND", formattingLocale)}
               </p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {selectedParticipants.map((member) => (
@@ -2966,7 +3318,7 @@ function BillsPanel(props: {
                         )
                       }
                       inputMode="numeric"
-                      placeholder="0"
+                      placeholder={t("0")}
                       className="mt-1 w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                       data-testid={`web-custom-split-${member.userId}`}
                     />
@@ -2988,20 +3340,29 @@ function BillsPanel(props: {
             className="mt-4 rounded-full bg-secondary px-5 py-3 text-sm font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="web-create-expense"
           >
-            {props.busyAction === "expense:create"
-              ? "Creating..."
-              : "Create expense"}
+            {props.busyAction === "expense:create" ? (
+              <UiText id="t28ea7667d026" fallback="Creating..." />
+            ) : (
+              <UiText id="ta1c472e8af3f" fallback="Create expense" />
+            )}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-          <h2 className="font-headline text-xl font-black">Captured bills</h2>
+          <h2 className="font-headline text-xl font-black">
+            {" "}
+            <UiText id="t6cf460ec540c" fallback="Captured bills" />{" "}
+          </h2>
           <div className="mt-5 space-y-3" data-testid="web-bill-list">
             {props.billUploads.length === 0 && (
               <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-                No bills captured in this workspace session yet.
+                {" "}
+                <UiText
+                  id="t3e0f213152c9"
+                  fallback="No bills captured in this workspace session yet."
+                />{" "}
               </p>
             )}
             {props.billUploads.map((bill) => (
@@ -3010,10 +3371,15 @@ function BillsPanel(props: {
                 className="rounded-2xl bg-surface-container-low p-4"
               >
                 <p className="font-bold text-on-surface">
-                  {bill.merchantName ?? "Unnamed bill"}
+                  {bill.merchantName ?? <UiText text="Unnamed bill" />}
                 </p>
                 <p className="mt-1 text-xs text-on-surface-variant">
-                  {formatMoney(bill.totalAmount, bill.currency)} · Activity:{" "}
+                  {formatMoney(
+                    bill.totalAmount,
+                    bill.currency,
+                    formattingLocale,
+                  )}{" "}
+                  <UiText id="t451ae22df204" fallback="· Activity:" />{" "}
                   {activityTitle(props.activities, bill.activityId)}
                 </p>
                 <BillParticipantSummary
@@ -3037,7 +3403,13 @@ function BillsPanel(props: {
                     className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm font-bold outline-none focus:border-primary"
                     data-testid={`web-bill-edit-activity-${bill.id}`}
                   >
-                    <option value="">No linked activity</option>
+                    <option value="">
+                      {" "}
+                      <UiText
+                        id="t44a2ce8f6935"
+                        fallback="No linked activity"
+                      />{" "}
+                    </option>
                     {props.activities.map((activity) => (
                       <option key={activity.id} value={activity.id}>
                         {activity.title}
@@ -3051,7 +3423,7 @@ function BillsPanel(props: {
                         merchantName: event.target.value,
                       })
                     }
-                    placeholder="Merchant"
+                    placeholder={t("Merchant")}
                     className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                     data-testid={`web-bill-edit-merchant-${bill.id}`}
                   />
@@ -3064,7 +3436,7 @@ function BillsPanel(props: {
                         })
                       }
                       inputMode="numeric"
-                      placeholder="Total"
+                      placeholder={t("Total")}
                       className="rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                       data-testid={`web-bill-edit-total-${bill.id}`}
                     />
@@ -3086,7 +3458,7 @@ function BillsPanel(props: {
                         rawText: event.target.value,
                       })
                     }
-                    placeholder="Raw OCR text"
+                    placeholder={t("Raw OCR text")}
                     className="min-h-20 rounded-2xl border border-outline-variant/40 bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                     data-testid={`web-bill-edit-raw-${bill.id}`}
                   />
@@ -3097,9 +3469,11 @@ function BillsPanel(props: {
                     className="rounded-full bg-secondary px-4 py-2 text-xs font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`web-bill-save-details-${bill.id}`}
                   >
-                    {props.busyAction === `bill-details:${bill.id}`
-                      ? "Saving..."
-                      : "Save bill details"}
+                    {props.busyAction === `bill-details:${bill.id}` ? (
+                      <UiText id="tae7e887517b0" fallback="Saving..." />
+                    ) : (
+                      <UiText id="t15d35dd4b23d" fallback="Save bill details" />
+                    )}
                   </button>
                 </div>
                 <select
@@ -3113,7 +3487,7 @@ function BillsPanel(props: {
                 >
                   {BILL_STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
-                      {status}
+                      <UiText text={status} />
                     </option>
                   ))}
                 </select>
@@ -3124,9 +3498,11 @@ function BillsPanel(props: {
                   className="mt-3 w-full rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid={`web-bill-analyze-${bill.id}`}
                 >
-                  {props.busyAction === `bill-analyze:${bill.id}`
-                    ? "Analyzing..."
-                    : "Run OCR worker"}
+                  {props.busyAction === `bill-analyze:${bill.id}` ? (
+                    <UiText id="t7fb4834e16a4" fallback="Analyzing..." />
+                  ) : (
+                    <UiText id="t6fbf379d1a36" fallback="Run OCR worker" />
+                  )}
                 </button>
               </article>
             ))}
@@ -3135,16 +3511,21 @@ function BillsPanel(props: {
 
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h2 className="font-headline text-xl font-black">
-            Expenses & splits
+            {" "}
+            <UiText id="td9ff6781c5fb" fallback="Expenses & splits" />{" "}
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Hosts can approve expense records; each participant can settle their
-            split transparently.
+            {" "}
+            <UiText
+              id="t3d57049d7079"
+              fallback="Hosts can approve expense records; each participant can settle their split transparently."
+            />{" "}
           </p>
           <div className="mt-5 space-y-3" data-testid="web-expense-list">
             {props.expenses.length === 0 && (
               <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-                No expenses yet.
+                {" "}
+                <UiText id="t149c06e3f613" fallback="No expenses yet." />{" "}
               </p>
             )}
             {props.expenses.map((expense) => (
@@ -3156,19 +3537,27 @@ function BillsPanel(props: {
                   <div>
                     <p className="font-bold text-on-surface">{expense.title}</p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {formatMoney(expense.amount, expense.currency)} · paid by{" "}
+                      {formatMoney(
+                        expense.amount,
+                        expense.currency,
+                        formattingLocale,
+                      )}{" "}
+                      <UiText id="tdf6aa3520ea1" fallback="· paid by" />{" "}
                       {memberNameByUserId(props.members, expense.paidByUserId)}{" "}
                       · {expense.splits.length}{" "}
-                      {expense.splits.length === 1
-                        ? "participant"
-                        : "participants"}{" "}
-                      · {expense.status}
+                      {expense.splits.length === 1 ? (
+                        <UiText id="t7a2110450a94" fallback="participant" />
+                      ) : (
+                        <UiText id="ta94a46cccee0" fallback="participants" />
+                      )}{" "}
+                      · <UiText text={expense.status} />
                     </p>
                     <p
                       className="mt-1 text-xs font-bold text-primary"
                       data-testid={`web-expense-activity-${expense.id}`}
                     >
-                      Activity:{" "}
+                      {" "}
+                      <UiText id="tb89297a41c70" fallback="Activity:" />{" "}
                       {activityTitle(props.activities, expense.activityId)}
                     </p>
                   </div>
@@ -3186,7 +3575,7 @@ function BillsPanel(props: {
                   >
                     {EXPENSE_STATUS_OPTIONS.map((status) => (
                       <option key={status} value={status}>
-                        {status}
+                        <UiText text={status} />
                       </option>
                     ))}
                   </select>
@@ -3205,7 +3594,11 @@ function BillsPanel(props: {
                         {memberNameByUserId(props.members, split.userId)}
                       </p>
                       <p className="text-sm text-on-surface-variant">
-                        {formatMoney(split.amount, expense.currency)}
+                        {formatMoney(
+                          split.amount,
+                          expense.currency,
+                          formattingLocale,
+                        )}
                       </p>
                       <select
                         value={split.status}
@@ -3228,7 +3621,7 @@ function BillsPanel(props: {
                           ["owed", "settled", "waived"] as ExpenseSplitStatus[]
                         ).map((status) => (
                           <option key={status} value={status}>
-                            {status}
+                            <UiText text={status} />
                           </option>
                         ))}
                       </select>
@@ -3266,13 +3659,18 @@ function BillParticipantSummary({
       className="mt-2 text-xs font-bold text-primary"
       data-testid={`web-bill-participants-${billId}`}
     >
-      {participantIds.length === 0
-        ? "No expense participants assigned yet."
-        : `${participantIds.length} ${
-            participantIds.length === 1 ? "participant" : "participants"
-          }: ${participantIds
-            .map((userId) => memberNameByUserId(members, userId))
-            .join(", ")}`}
+      {participantIds.length === 0 ? (
+        <UiText
+          id="t7b0438fea8cb"
+          fallback="No expense participants assigned yet."
+        />
+      ) : (
+        `${participantIds.length} ${
+          participantIds.length === 1 ? "participant" : "participants"
+        }: ${participantIds
+          .map((userId) => memberNameByUserId(members, userId))
+          .join(", ")}`
+      )}
     </p>
   );
 }
@@ -3284,17 +3682,23 @@ function ReviewPanel(props: {
   onRefresh: () => void;
   onReview: (item: ReviewQueueItem, decision: "approved" | "rejected") => void;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   return (
     <section className="space-y-5" data-testid="web-review-panel">
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="font-headline text-xl font-black">
-              Host review queue
+              {" "}
+              <UiText id="t384b7f6eb734" fallback="Host review queue" />{" "}
             </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Host/co-host reviews activity, bill, expense, and place signals
-              before they become trusted trip data.
+              {" "}
+              <UiText
+                id="t9a7c14e6bebb"
+                fallback="Host/co-host reviews activity, bill, expense, and place signals before they become trusted trip data."
+              />{" "}
             </p>
           </div>
           <button
@@ -3303,14 +3707,19 @@ function ReviewPanel(props: {
             className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
             data-testid="web-review-refresh"
           >
-            Refresh
+            {" "}
+            <UiText id="t56e3badc4e6c" fallback="Refresh" />{" "}
           </button>
         </div>
 
         <div className="mt-5 space-y-3" data-testid="web-review-list">
           {props.items.length === 0 && (
             <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              Review queue is clear.
+              {" "}
+              <UiText
+                id="t0ff94cb6158f"
+                fallback="Review queue is clear."
+              />{" "}
             </p>
           )}
           {props.items.map((item) => (
@@ -3321,12 +3730,19 @@ function ReviewPanel(props: {
               <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-center">
                 <div>
                   <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-                    {item.entityType.replace("_", " ")} · {item.status}
+                    {item.entityType.replace("_", " ")} ·{" "}
+                    <UiText text={item.status} />
                   </p>
                   <p className="mt-2 font-bold text-on-surface">{item.title}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    Submitted by {item.submittedByUserId ?? "system"} ·{" "}
-                    {formatMoney(item.amount, item.currency ?? "VND")}
+                    {" "}
+                    <UiText id="t046485aa309a" fallback="Submitted by" />{" "}
+                    {item.submittedByUserId ?? <UiText text="system" />} ·{" "}
+                    {formatMoney(
+                      item.amount,
+                      item.currency ?? "VND",
+                      formattingLocale,
+                    )}
                   </p>
                   {item.subtitle && (
                     <p className="mt-1 text-xs text-on-surface-variant">
@@ -3335,7 +3751,9 @@ function ReviewPanel(props: {
                   )}
                   {item.linkedActivityId && (
                     <p className="mt-1 break-all text-xs font-bold text-secondary">
-                      Activity: {item.linkedActivityId}
+                      {" "}
+                      <UiText id="tb89297a41c70" fallback="Activity:" />{" "}
+                      {item.linkedActivityId}
                     </p>
                   )}
                 </div>
@@ -3350,7 +3768,8 @@ function ReviewPanel(props: {
                     className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`web-review-approve-${item.entityType}-${item.entityId}`}
                   >
-                    Approve
+                    {" "}
+                    <UiText id="t7b2c7f146aba" fallback="Approve" />{" "}
                   </button>
                   <button
                     type="button"
@@ -3362,7 +3781,8 @@ function ReviewPanel(props: {
                     className="rounded-full border border-error px-4 py-2 text-xs font-bold text-error disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`web-review-reject-${item.entityType}-${item.entityId}`}
                   >
-                    Reject
+                    {" "}
+                    <UiText id="t2b03b59293b6" fallback="Reject" />{" "}
                   </button>
                 </div>
               </div>
@@ -3381,18 +3801,26 @@ function InsightsPanel(props: {
   billNormalization: BillNormalizationResult | null;
   onRefresh: () => void;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   return (
     <section className="space-y-5" data-testid="web-insights-panel">
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="font-headline text-xl font-black">
-              Recommendation & data quality
+              {" "}
+              <UiText
+                id="te9836e9d5cad"
+                fallback="Recommendation & data quality"
+              />{" "}
             </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              OCR evidence and user submissions become reusable signals only
-              after quality checks catch price changes, renamed places, moved
-              venues, and outdated records.
+              {" "}
+              <UiText
+                id="t6f37d9c4e93a"
+                fallback="OCR evidence and user submissions become reusable signals only after quality checks catch price changes, renamed places, moved venues, and outdated records."
+              />{" "}
             </p>
           </div>
           <button
@@ -3401,7 +3829,8 @@ function InsightsPanel(props: {
             className="rounded-full border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant"
             data-testid="web-insights-refresh"
           >
-            Refresh
+            {" "}
+            <UiText id="t56e3badc4e6c" fallback="Refresh" />{" "}
           </button>
         </div>
       </div>
@@ -3409,21 +3838,25 @@ function InsightsPanel(props: {
       {props.billNormalization && (
         <div className="rounded-3xl border border-primary/20 bg-primary-container p-5 text-on-primary-container shadow-sm">
           <p className="text-xs font-extrabold uppercase tracking-widest">
-            Last OCR normalization
+            {" "}
+            <UiText id="t2e5ea442e142" fallback="Last OCR normalization" />{" "}
           </p>
           <h3
             className="mt-2 font-headline text-xl font-black"
             data-testid="web-ocr-merchant"
           >
-            {props.billNormalization.extracted.merchantName ??
-              "Unknown merchant"}
+            {props.billNormalization.extracted.merchantName ?? (
+              <UiText text="Unknown merchant" />
+            )}
           </h3>
           <p className="mt-1 text-sm">
-            Suggested expense: {props.billNormalization.suggestedExpense.title}{" "}
-            ·{" "}
+            {" "}
+            <UiText id="t6e7d0b1cad53" fallback="Suggested expense:" />{" "}
+            {props.billNormalization.suggestedExpense.title} ·{" "}
             {formatMoney(
               props.billNormalization.suggestedExpense.amount,
               props.billNormalization.suggestedExpense.currency,
+              formattingLocale,
             )}
           </p>
           <div className="mt-4 grid gap-2" data-testid="web-ocr-line-items">
@@ -3436,13 +3869,16 @@ function InsightsPanel(props: {
                 {formatMoney(
                   item.amount,
                   props.billNormalization?.extracted.currency ?? "VND",
+                  formattingLocale,
                 )}{" "}
                 · {item.category ?? "uncategorized"}
               </p>
             ))}
           </div>
           <p className="mt-4 text-sm" data-testid="web-ocr-place-signal">
-            Place signal: {props.billNormalization.placeSignal.action} ·{" "}
+            {" "}
+            <UiText id="tedd5320c5e11" fallback="Place signal:" />{" "}
+            {props.billNormalization.placeSignal.action} ·{" "}
             {props.billNormalization.placeSignal.reason}
           </p>
         </div>
@@ -3450,7 +3886,10 @@ function InsightsPanel(props: {
 
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-          <h3 className="font-headline text-xl font-black">Trusted places</h3>
+          <h3 className="font-headline text-xl font-black">
+            {" "}
+            <UiText id="tb1f68cfdbbc6" fallback="Trusted places" />{" "}
+          </h3>
           <div
             className="mt-5 space-y-3"
             data-testid="web-place-recommendations"
@@ -3462,11 +3901,14 @@ function InsightsPanel(props: {
               >
                 <p className="font-bold text-on-surface">{place.name}</p>
                 <p className="mt-1 text-xs text-on-surface-variant">
-                  {place.category} · {place.citySlug ?? "unknown"} ·{" "}
+                  <UiText text={place.category} /> ·{" "}
+                  {place.citySlug ?? <UiText text="unknown" />} ·{" "}
                   {place.priceLevel ?? "price unknown"}
                 </p>
                 <p className="mt-1 text-xs font-bold text-secondary">
-                  Quality {place.qualityScore}
+                  {" "}
+                  <UiText id="ta60f2c73604f" fallback="Quality" />{" "}
+                  {place.qualityScore}
                 </p>
                 {place.address && (
                   <p className="mt-1 text-xs text-on-surface-variant">
@@ -3480,7 +3922,8 @@ function InsightsPanel(props: {
 
         <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
           <h3 className="font-headline text-xl font-black">
-            Transport price timing
+            {" "}
+            <UiText id="taefa6cce7f9a" fallback="Transport price timing" />{" "}
           </h3>
           <div
             className="mt-5 space-y-3"
@@ -3492,20 +3935,34 @@ function InsightsPanel(props: {
                 className="rounded-2xl bg-surface-container-low p-4"
               >
                 <p className="font-bold text-on-surface">
-                  {transportModeLabel(price.mode)} ·{" "}
-                  {price.originCity ?? "origin"} to{" "}
+                  <UiText text={transportModeLabel(price.mode)} /> ·{" "}
+                  {price.originCity ?? "origin"}{" "}
+                  <UiText id="t4374aaee247f" fallback="to" />{" "}
                   {price.destinationCity ?? "destination"}
                 </p>
                 <p className="mt-1 text-xs text-on-surface-variant">
-                  {price.providerName ?? "Any provider"} · low{" "}
-                  {formatMoney(price.minPrice, price.currency)} · median{" "}
-                  {formatMoney(price.medianPrice, price.currency)}
+                  {price.providerName ?? <UiText text="Any provider" />}{" "}
+                  <UiText id="tafd02528b35d" fallback="· low" />{" "}
+                  {formatMoney(
+                    price.minPrice,
+                    price.currency,
+                    formattingLocale,
+                  )}{" "}
+                  <UiText id="t567f06cb8107" fallback="· median" />{" "}
+                  {formatMoney(
+                    price.medianPrice,
+                    price.currency,
+                    formattingLocale,
+                  )}
                 </p>
                 <p className="mt-1 text-xs font-bold text-secondary">
-                  Best observed{" "}
-                  {price.bestObservedAt
-                    ? formatDate(price.bestObservedAt)
-                    : "unknown"}
+                  {" "}
+                  <UiText id="tdd5862c7ec64" fallback="Best observed" />{" "}
+                  {price.bestObservedAt ? (
+                    formatDate(price.bestObservedAt, formattingLocale)
+                  ) : (
+                    <UiText id="t50d8b4a941c2" fallback="unknown" />
+                  )}
                 </p>
               </article>
             ))}
@@ -3515,12 +3972,17 @@ function InsightsPanel(props: {
 
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
         <h3 className="font-headline text-xl font-black">
-          Data quality signals
+          {" "}
+          <UiText id="t987388e789af" fallback="Data quality signals" />{" "}
         </h3>
         <div className="mt-5 space-y-3" data-testid="web-data-quality-signals">
           {props.dataQualitySignals.length === 0 && (
             <p className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              No open quality signals yet.
+              {" "}
+              <UiText
+                id="t6c96ec88561e"
+                fallback="No open quality signals yet."
+              />{" "}
             </p>
           )}
           {props.dataQualitySignals.map((signal) => (
@@ -3547,7 +4009,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-white/15 p-4">
       <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">
-        {label}
+        <UiText text={label} />
       </p>
       <p className="mt-2 text-lg font-black capitalize">{value}</p>
     </div>
@@ -3613,6 +4075,8 @@ function OverviewPanel({
   role: TripMemberRole;
   onOpenMembers: () => void;
 }) {
+  const t = useUiText();
+
   const activeMembers = members.filter((member) => member.status === "active");
   const rolePermissions = getTripRolePermissions(role);
   const permissionLabel = rolePermissions.manageMembers
@@ -3629,27 +4093,31 @@ function OverviewPanel({
   return (
     <section className="grid gap-4 md:grid-cols-3">
       <InfoCard
-        title="People"
+        title={t("People")}
         value={`${activeMembers.length} active`}
         description="Host, co-hosts, contributors, and viewers are tracked per trip."
       />
       <InfoCard
-        title="Permissions"
-        value={permissionLabel}
-        description={permissionDescription}
+        title={t("Permissions")}
+        value={t(permissionLabel)}
+        description={t(permissionDescription)}
       />
       <InfoCard
-        title="Your role"
-        value={roleLabel(role)}
+        title={t("Your role")}
+        value={t(roleLabel(role))}
         description="Navigation and actions are filtered by this trip membership role."
       />
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-6 md:col-span-3">
         <h2 className="font-headline text-2xl font-black">
-          What each role can do
+          {" "}
+          <UiText id="t679a25426e82" fallback="What each role can do" />{" "}
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
-          Permissions are enforced by the API and reflected here in the tabs and
-          actions each traveler can access.
+          {" "}
+          <UiText
+            id="t3569874cb3b5"
+            fallback="Permissions are enforced by the API and reflected here in the tabs and actions each traveler can access."
+          />{" "}
         </p>
         <div
           className="mt-5 grid gap-3 lg:grid-cols-2"
@@ -3669,16 +4137,17 @@ function OverviewPanel({
               >
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-headline text-lg font-black">
-                    {item.label}
+                    <UiText text={item.label} />
                   </h3>
                   {isCurrent && (
                     <span className="rounded-full bg-primary px-3 py-1 text-[11px] font-black uppercase tracking-wider text-on-primary">
-                      Your role
+                      {" "}
+                      <UiText id="t936b000c1476" fallback="Your role" />{" "}
                     </span>
                   )}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                  {item.summary}
+                  <UiText text={item.summary} />
                 </p>
                 <ul className="mt-3 space-y-2 text-sm text-on-surface-variant">
                   {item.abilities.map((ability) => (
@@ -3689,7 +4158,9 @@ function OverviewPanel({
                       >
                         ✓
                       </span>
-                      <span>{ability}</span>
+                      <span>
+                        <UiText text={ability} />
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -3704,7 +4175,11 @@ function OverviewPanel({
             className="mt-5 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary"
             data-testid="web-open-members"
           >
-            {rolePermissions.manageMembers ? "Manage members" : "View members"}
+            {rolePermissions.manageMembers ? (
+              <UiText id="t0331250c29d5" fallback="Manage members" />
+            ) : (
+              <UiText id="t4d665681d182" fallback="View members" />
+            )}
           </button>
         )}
       </div>
@@ -3728,20 +4203,21 @@ function InfoCard({
       </p>
       <p className="mt-3 text-2xl font-black">{value}</p>
       <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-        {description}
+        <UiText text={description} />
       </p>
     </article>
   );
 }
 
-function ReadOnlyNotice({ children }: { children: string }) {
+function ReadOnlyNotice({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="rounded-3xl border border-outline-variant/30 bg-surface-container-low p-5 text-sm leading-6 text-on-surface-variant"
       data-testid="web-read-only-notice"
     >
       <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-        Read-only access
+        {" "}
+        <UiText id="tffdcd8d75b35" fallback="Read-only access" />{" "}
       </p>
       <p className="mt-2">{children}</p>
     </div>
@@ -3793,6 +4269,10 @@ function MembersPanel(props: {
   ) => void;
   onUpdateMember: (member: TripMember) => void;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
+  const t = useUiText();
+
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const inviteJoinUrl = props.invite
     ? `${getBrowserOrigin()}/trips/join?token=${props.invite.token}&type=invite`
@@ -3813,10 +4293,15 @@ function MembersPanel(props: {
         <div className="grid gap-5 xl:grid-cols-2">
           <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
             <h2 className="font-headline text-xl font-black">
-              Invite by email
+              {" "}
+              <UiText id="te705c7bf70b0" fallback="Invite by email" />{" "}
             </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Host/co-host can create an auditable invite token.
+              {" "}
+              <UiText
+                id="t952527cd4b7c"
+                fallback="Host/co-host can create an auditable invite token."
+              />{" "}
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_150px]">
               <input
@@ -3825,7 +4310,7 @@ function MembersPanel(props: {
                   props.onInviteEmailChange(event.target.value)
                 }
                 disabled={!props.canManage}
-                placeholder="friend@example.com"
+                placeholder={t("friend@example.com")}
                 className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary"
                 data-testid="web-invite-email"
               />
@@ -3840,7 +4325,7 @@ function MembersPanel(props: {
               >
                 {ROLE_OPTIONS.filter((role) => role !== "host").map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    <UiText text={role} />
                   </option>
                 ))}
               </select>
@@ -3852,11 +4337,18 @@ function MembersPanel(props: {
               className="mt-4 rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="web-create-invite"
             >
-              {props.busyAction === "invite" ? "Creating..." : "Create invite"}
+              {props.busyAction === "invite" ? (
+                <UiText id="t28ea7667d026" fallback="Creating..." />
+              ) : (
+                <UiText id="ta84046224e81" fallback="Create invite" />
+              )}
             </button>
             {props.invite && (
               <div className="mt-4 rounded-2xl bg-surface-container-low p-4 text-sm">
-                <p className="font-bold text-on-surface">Invite token</p>
+                <p className="font-bold text-on-surface">
+                  {" "}
+                  <UiText id="t12fe31a0fdd6" fallback="Invite token" />{" "}
+                </p>
                 <p
                   className="mt-1 break-all font-mono text-primary"
                   data-testid="web-invite-token"
@@ -3875,18 +4367,27 @@ function MembersPanel(props: {
                   className="mt-3 rounded-full border border-primary px-4 py-2 text-xs font-bold text-primary"
                   data-testid="web-copy-invite-link"
                 >
-                  {copiedValue === "invite"
-                    ? "Copied invite link"
-                    : "Copy invite link"}
+                  {copiedValue === "invite" ? (
+                    <UiText id="t762220a92407" fallback="Copied invite link" />
+                  ) : (
+                    <UiText id="t1cad13c5c44c" fallback="Copy invite link" />
+                  )}
                 </button>
               </div>
             )}
           </div>
 
           <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
-            <h2 className="font-headline text-xl font-black">Share link</h2>
+            <h2 className="font-headline text-xl font-black">
+              {" "}
+              <UiText id="t3c1362260633" fallback="Share link" />{" "}
+            </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Use this when friends can self-join the group.
+              {" "}
+              <UiText
+                id="t8b62acbe9cc4"
+                fallback="Use this when friends can self-join the group."
+              />{" "}
             </p>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <select
@@ -3902,7 +4403,7 @@ function MembersPanel(props: {
                   (role) => role === "contributor" || role === "viewer",
                 ).map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    <UiText text={role} />
                   </option>
                 ))}
               </select>
@@ -3913,12 +4414,19 @@ function MembersPanel(props: {
                 className="rounded-full bg-secondary px-5 py-3 text-sm font-bold text-on-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="web-enable-share"
               >
-                {props.busyAction === "share" ? "Enabling..." : "Enable share"}
+                {props.busyAction === "share" ? (
+                  <UiText id="t2b8e03e688ce" fallback="Enabling..." />
+                ) : (
+                  <UiText id="t200793a1d577" fallback="Enable share" />
+                )}
               </button>
             </div>
             {props.shareLink?.shareToken && (
               <div className="mt-4 rounded-2xl bg-surface-container-low p-4 text-sm">
-                <p className="font-bold text-on-surface">Share token</p>
+                <p className="font-bold text-on-surface">
+                  {" "}
+                  <UiText id="td4afb3fc92b0" fallback="Share token" />{" "}
+                </p>
                 <p
                   className="mt-1 break-all font-mono text-secondary"
                   data-testid="web-share-token"
@@ -3937,9 +4445,11 @@ function MembersPanel(props: {
                   className="mt-3 rounded-full border border-secondary px-4 py-2 text-xs font-bold text-secondary"
                   data-testid="web-copy-share-link"
                 >
-                  {copiedValue === "share"
-                    ? "Copied share link"
-                    : "Copy share link"}
+                  {copiedValue === "share" ? (
+                    <UiText id="t2c9d572ab6ff" fallback="Copied share link" />
+                  ) : (
+                    <UiText id="tdd71c73b93df" fallback="Copy share link" />
+                  )}
                 </button>
               </div>
             )}
@@ -3947,23 +4457,36 @@ function MembersPanel(props: {
         </div>
       ) : (
         <ReadOnlyNotice>
-          Contributors can see who is traveling, but only the host or a co-host
-          can invite people, create share links, or change member roles.
+          {" "}
+          <UiText
+            id="t0fc617ce4ce2"
+            fallback="Contributors can see who is traveling, but only the host or a co-host can invite people, create share links, or change member roles."
+          />{" "}
         </ReadOnlyNotice>
       )}
 
       <div className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-headline text-xl font-black">Trip members</h2>
+            <h2 className="font-headline text-xl font-black">
+              {" "}
+              <UiText id="t3c17c845a553" fallback="Trip members" />{" "}
+            </h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Roles decide who can approve, edit, or only view collaboration
-              data.
+              {" "}
+              <UiText
+                id="teee119f53837"
+                fallback="Roles decide who can approve, edit, or only view collaboration data."
+              />{" "}
             </p>
           </div>
           {!props.canManage && (
             <span className="rounded-full bg-surface-container-high px-3 py-1 text-xs font-bold text-on-surface-variant">
-              Read-only member list
+              {" "}
+              <UiText
+                id="t77e38dd7f60c"
+                fallback="Read-only member list"
+              />{" "}
             </span>
           )}
         </div>
@@ -3989,7 +4512,11 @@ function MembersPanel(props: {
                 <div>
                   <p className="font-bold text-on-surface">
                     {memberDisplayName(member)}
-                    {member.userId === props.currentUserId ? " (You)" : ""}
+                    {member.userId === props.currentUserId ? (
+                      <UiText id="td385586c79f1" fallback=" (You)" />
+                    ) : (
+                      ""
+                    )}
                   </p>
                   {member.email && (
                     <p className="text-sm text-on-surface-variant">
@@ -3997,17 +4524,24 @@ function MembersPanel(props: {
                     </p>
                   )}
                   <p className="text-xs text-on-surface-variant">
-                    Joined {formatDate(member.joinedAt)}
-                    {member.invitedByUserId
-                      ? ` · invited by ${
-                          member.invitedByDisplayName?.trim() ||
-                          member.invitedByEmail ||
-                          memberNameByUserId(
-                            props.members,
-                            member.invitedByUserId,
-                          )
-                        }`
-                      : " · direct ownership"}
+                    {" "}
+                    <UiText id="t43a1c6266f88" fallback="Joined" />{" "}
+                    {formatDate(member.joinedAt, formattingLocale)}
+                    {member.invitedByUserId ? (
+                      ` · invited by ${
+                        member.invitedByDisplayName?.trim() ||
+                        member.invitedByEmail ||
+                        memberNameByUserId(
+                          props.members,
+                          member.invitedByUserId,
+                        )
+                      }`
+                    ) : (
+                      <UiText
+                        id="tded598ac8523"
+                        fallback=" · direct ownership"
+                      />
+                    )}
                   </p>
                 </div>
                 <select
@@ -4025,7 +4559,7 @@ function MembersPanel(props: {
                     (role) => member.role === "host" || role !== "host",
                   ).map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      <UiText text={role} />
                     </option>
                   ))}
                 </select>
@@ -4042,7 +4576,7 @@ function MembersPanel(props: {
                 >
                   {STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
-                      {status}
+                      <UiText text={status} />
                     </option>
                   ))}
                 </select>
@@ -4058,7 +4592,11 @@ function MembersPanel(props: {
                   className="rounded-full border border-primary px-4 py-2 text-sm font-bold text-primary disabled:cursor-not-allowed disabled:border-outline-variant disabled:text-outline"
                   data-testid={`web-member-save-${member.userId}`}
                 >
-                  {isSaving ? "Saving..." : "Save"}
+                  {isSaving ? (
+                    <UiText id="tae7e887517b0" fallback="Saving..." />
+                  ) : (
+                    <UiText id="tefc007a393f6" fallback="Save" />
+                  )}
                 </button>
               </div>
             );
@@ -4078,6 +4616,8 @@ function AuditPanel({
   members: TripMember[];
   canManage: boolean;
 }) {
+  const { locale: formattingLocale } = useAppLanguage();
+
   const [entityFilter, setEntityFilter] = useState("all");
   const filteredLogs =
     entityFilter === "all"
@@ -4091,14 +4631,19 @@ function AuditPanel({
         data-testid="web-audit-forbidden"
       >
         <p className="text-xs font-extrabold uppercase tracking-widest text-error">
-          Restricted audit
+          {" "}
+          <UiText id="t9dc8b7cf3ce9" fallback="Restricted audit" />{" "}
         </p>
         <h2 className="mt-2 font-headline text-xl font-black">
-          Host/co-host only
+          {" "}
+          <UiText id="t7f782079edc9" fallback="Host/co-host only" />{" "}
         </h2>
         <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-          Audit logs include sensitive actor and change history, so viewers can
-          keep using the trip without seeing management history.
+          {" "}
+          <UiText
+            id="t817ed513fbab"
+            fallback="Audit logs include sensitive actor and change history, so viewers can keep using the trip without seeing management history."
+          />{" "}
         </p>
       </section>
     );
@@ -4108,14 +4653,22 @@ function AuditPanel({
     <section className="rounded-3xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
       <div className="grid gap-3 sm:grid-cols-[1fr_220px] sm:items-end">
         <div>
-          <h2 className="font-headline text-xl font-black">Audit trail</h2>
+          <h2 className="font-headline text-xl font-black">
+            {" "}
+            <UiText id="t33de865a8d82" fallback="Audit trail" />{" "}
+          </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Every collaboration change records actor, target, and time.
+            {" "}
+            <UiText
+              id="t9c8a1478b240"
+              fallback="Every collaboration change records actor, target, and time."
+            />{" "}
           </p>
         </div>
         <label className="block">
           <span className="text-xs font-extrabold uppercase tracking-widest text-primary">
-            Entity filter
+            {" "}
+            <UiText id="t00a979697d8c" fallback="Entity filter" />{" "}
           </span>
           <select
             value={entityFilter}
@@ -4125,7 +4678,11 @@ function AuditPanel({
           >
             {AUDIT_ENTITY_FILTERS.map((entityType) => (
               <option key={entityType} value={entityType}>
-                {entityType === "all" ? "All entities" : entityType}
+                {entityType === "all" ? (
+                  <UiText id="t50914f4260d8" fallback="All entities" />
+                ) : (
+                  entityType
+                )}
               </option>
             ))}
           </select>
@@ -4134,7 +4691,11 @@ function AuditPanel({
       <div className="mt-5 space-y-3" data-testid="web-audit-list">
         {filteredLogs.length === 0 && (
           <p className="text-sm text-on-surface-variant">
-            No audit events for this filter.
+            {" "}
+            <UiText
+              id="t2d78fff4afb0"
+              fallback="No audit events for this filter."
+            />{" "}
           </p>
         )}
         {filteredLogs.map((log) => (
@@ -4143,15 +4704,23 @@ function AuditPanel({
             className="rounded-2xl bg-surface-container-low p-4"
           >
             <p className="text-sm font-black text-on-surface">
-              {log.action} <span className="text-on-surface-variant">on</span>{" "}
+              {log.action}{" "}
+              <span className="text-on-surface-variant">
+                {" "}
+                <UiText id="tdb3d405b1067" fallback="on" />{" "}
+              </span>{" "}
               {log.entityType}
             </p>
             <p className="mt-1 break-all text-xs text-on-surface-variant">
-              Actor{" "}
-              {log.actorUserId
-                ? memberNameByUserId(members, log.actorUserId)
-                : "system"}{" "}
-              at {formatDate(log.createdAt)}
+              {" "}
+              <UiText id="tcbd19b5c397e" fallback="Actor" />{" "}
+              {log.actorUserId ? (
+                memberNameByUserId(members, log.actorUserId)
+              ) : (
+                <UiText id="t317f1e761f2f" fallback="system" />
+              )}{" "}
+              <UiText id="t27e90dfa57c3" fallback="at" />{" "}
+              {formatDate(log.createdAt, formattingLocale)}
             </p>
           </article>
         ))}
@@ -4166,21 +4735,21 @@ function toPlanScheduledAt(date: string, time: string): string | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, formattingLocale = "en") {
   if (!value) return "unknown";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en", {
+  return date.toLocaleDateString(formattingLocale, {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value: string, formattingLocale = "en") {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en", {
+  return date.toLocaleString(formattingLocale, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -4199,9 +4768,13 @@ function formatDateTimeInput(value: string | null) {
   )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function formatMoney(value: number | null, currency: string) {
+function formatMoney(
+  value: number | null,
+  currency: string,
+  formattingLocale = "en",
+) {
   if (value === null) return "cost unknown";
-  return new Intl.NumberFormat("vi-VN", {
+  return new Intl.NumberFormat(formattingLocale, {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
@@ -4289,7 +4862,10 @@ function activityTitle(activities: TripActivity[], activityId: string | null) {
   );
 }
 
-function groupActivitiesByDay(activities: TripActivity[]) {
+function groupActivitiesByDay(
+  activities: TripActivity[],
+  formattingLocale = "en",
+) {
   const groups = new Map<
     string,
     { key: string; label: string; activities: TripActivity[] }
@@ -4297,13 +4873,14 @@ function groupActivitiesByDay(activities: TripActivity[]) {
 
   for (const activity of activities) {
     const date = activity.scheduledAt ? new Date(activity.scheduledAt) : null;
-    const key = date && !Number.isNaN(date.getTime())
-      ? localDateKey(date)
-      : "unscheduled";
+    const key =
+      date && !Number.isNaN(date.getTime())
+        ? localDateKey(date)
+        : "unscheduled";
     const label =
       key === "unscheduled"
         ? "Unscheduled"
-        : date!.toLocaleDateString("en", {
+        : date!.toLocaleDateString(formattingLocale, {
             weekday: "short",
             month: "short",
             day: "numeric",

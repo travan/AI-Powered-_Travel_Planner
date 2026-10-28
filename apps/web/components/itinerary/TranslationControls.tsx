@@ -1,0 +1,243 @@
+"use client";
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import {
+  applyItineraryTranslation,
+  type Itinerary,
+  type ItineraryTranslation,
+  type PlanningJob,
+} from "@travel/types";
+import { useIssueText } from "../i18n/UiText";
+import { ApiRequestError } from "../../lib/api";
+import { journeyRequest } from "../../lib/journey-api";
+
+type TranslationList = {
+  source_version: string;
+  source: Itinerary;
+  translations: ItineraryTranslation[];
+};
+type DisplayError = { code: string; params?: Record<string, string | number> };
+function translationError(
+  error: unknown,
+  fallback = "TRANSLATION_FAILED",
+): DisplayError {
+  return error instanceof ApiRequestError && error.code
+    ? { code: error.code, params: error.params }
+    : { code: fallback };
+}
+export function TranslationControls({
+  plan,
+  path,
+  token,
+  onChange,
+}: {
+  plan: Itinerary;
+  path: string;
+  token: string;
+  onChange: (plan: Itinerary | null) => void;
+}) {
+  const t = useTranslations("translations");
+  const issueText = useIssueText();
+  const [data, setData] = useState<TranslationList | null>(null);
+  const [status, setStatus] = useState<"idle" | "queued" | "processing">(
+    "idle",
+  );
+  const [selected, setSelected] = useState("original");
+  const [error, setError] = useState<DisplayError | null>(null);
+  const [jobId, setJobId] = useState<string>();
+  const epoch = useRef(0);
+  useEffect(() => {
+    const current = ++epoch.current;
+    setData(null);
+    setSelected("original");
+    onChange(null);
+    setJobId(undefined);
+    setStatus("idle");
+    setError(null);
+    const abort = new AbortController();
+    journeyRequest<TranslationList>(path, token, undefined, "GET", abort.signal)
+      .then((result) => {
+        if (current === epoch.current && !abort.signal.aborted) setData(result);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted && current === epoch.current)
+          setError(translationError(e, "TRANSLATION_LOAD_FAILED"));
+      });
+    return () => {
+      abort.abort();
+      epoch.current++;
+    };
+  }, [plan, path, token, onChange]);
+  useEffect(() => {
+    if (!jobId) return;
+    const current = epoch.current;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const job = await journeyRequest<PlanningJob>(
+          `itinerary/jobs/${jobId}`,
+          token,
+          undefined,
+          "GET",
+          abort.signal,
+        );
+        if (abort.signal.aborted || current !== epoch.current) return;
+        if (job.status === "failed")
+          throw new ApiRequestError(
+            "Translation failed",
+            500,
+            job.error_code ?? "TRANSLATION_FAILED",
+            job.error_params,
+          );
+        if (job.status === "complete") {
+          const result = await journeyRequest<TranslationList>(
+            path,
+            token,
+            undefined,
+            "GET",
+            abort.signal,
+          );
+          if (abort.signal.aborted || current !== epoch.current) return;
+          setData(result);
+          setStatus("idle");
+          setJobId(undefined);
+          return;
+        }
+        setStatus(job.status === "processing" ? "processing" : "queued");
+        timer = setTimeout(poll, 2500);
+      } catch (e) {
+        if (!abort.signal.aborted && current === epoch.current) {
+          setError(translationError(e));
+          setStatus("idle");
+          setJobId(undefined);
+        }
+      }
+    };
+    void poll();
+    return () => {
+      abort.abort();
+      clearTimeout(timer);
+    };
+  }, [jobId, path, token]);
+  const translate = async (target: "en" | "vi") => {
+    if (!data) return;
+    const current = epoch.current;
+    setError(null);
+    setStatus("queued");
+    try {
+      // Submit the version already shown, never silently accept a newer source.
+      const result = await journeyRequest<{
+        job_id?: string;
+        translation?: ItineraryTranslation;
+      }>(path, token, {
+        target_locale: target,
+        source_version: data.source_version,
+      });
+      if (current !== epoch.current) return;
+      if (result.translation) {
+        setData((previous) =>
+          previous
+            ? {
+                ...previous,
+                translations: [
+                  result.translation!,
+                  ...previous.translations.filter(
+                    (x) => x.target_locale !== target,
+                  ),
+                ],
+              }
+            : previous,
+        );
+        setStatus("idle");
+      } else if (result.job_id) setJobId(result.job_id);
+      else throw new Error("Missing translation job");
+    } catch (e) {
+      if (current === epoch.current) {
+        setStatus("idle");
+        setError(translationError(e));
+      }
+    }
+  };
+  const sourceChanged =
+    plan.version !== undefined &&
+    data?.source.version !== undefined &&
+    plan.version !== data.source.version;
+  const available = sourceChanged
+    ? []
+    : (data?.translations.filter(
+        (entry) => !entry.stale && entry.source_version === data.source_version,
+      ) ?? []);
+  const choose = (value: string) => {
+    const entry = available.find((entry) => entry.target_locale === value);
+    try {
+      onChange(
+        entry && data
+          ? applyItineraryTranslation(data.source, entry.texts)
+          : null,
+      );
+      setSelected(value);
+      setError(null);
+    } catch {
+      setError({ code: "TRANSLATION_INVALID_TEXT" });
+    }
+  };
+  return (
+    <section
+      className="space-y-3 rounded-2xl border border-outline-variant/30 bg-surface p-4"
+      aria-label={t("panel")}
+    >
+      <p className="text-sm">
+        {t("source_language")}:{" "}
+        <strong>
+          {plan.locale === "vi"
+            ? "Tiếng Việt"
+            : plan.locale === "en"
+              ? "English"
+              : t("unknown")}
+        </strong>
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
+          {t("viewing")}{" "}
+          <select
+            value={selected}
+            className="min-h-11 min-w-40 max-w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            onChange={(e) => choose(e.target.value)}
+          >
+            <option value="original">{t("original")}</option>
+            {available.map((entry) => (
+              <option key={entry.id} value={entry.target_locale}>
+                {entry.target_locale === "vi" ? "Tiếng Việt" : "English"}
+              </option>
+            ))}
+          </select>
+        </label>
+        {(["en", "vi"] as const)
+          .filter((target) => target !== plan.locale)
+          .map((target) => (
+            <button
+              key={target}
+              type="button"
+              disabled={!data || sourceChanged || status !== "idle"}
+              onClick={() => void translate(target)}
+              className="rounded-full border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-50"
+            >
+              {t("translate_to", {
+                language: target === "vi" ? "Tiếng Việt" : "English",
+              })}
+            </button>
+          ))}
+      </div>
+      {(sourceChanged || data?.translations.some((entry) => entry.stale)) && (
+        <p className="text-sm text-amber-800">{t("stale")}</p>
+      )}
+      {status !== "idle" && <p role="status">{t(status)}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-error">
+          {issueText(error)}
+        </p>
+      )}
+    </section>
+  );
+}

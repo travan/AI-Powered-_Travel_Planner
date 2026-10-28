@@ -1,4 +1,5 @@
 "use client";
+import { UiText } from "../i18n/UiText";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -51,7 +52,9 @@ export function VerifyEmailCard({ email }: VerifyEmailCardProps) {
         {/* Icon */}
         <div className="flex justify-center">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary text-4xl">mark_email_unread</span>
+            <span className="material-symbols-outlined text-primary text-4xl">
+              mark_email_unread
+            </span>
           </div>
         </div>
 
@@ -69,12 +72,10 @@ export function VerifyEmailCard({ email }: VerifyEmailCardProps) {
         {message && (
           <p
             className={`text-center text-sm rounded-lg px-4 py-3 ${
-              isError
-                ? "bg-error/10 text-error"
-                : "bg-primary/10 text-primary"
+              isError ? "bg-error/10 text-error" : "bg-primary/10 text-primary"
             }`}
           >
-            {message}
+            <UiText text={message} />
           </p>
         )}
 

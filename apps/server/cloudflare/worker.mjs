@@ -3,6 +3,7 @@ import pg from "pg";
 import { httpServerHandler } from "cloudflare:node";
 import { buildApp } from "../dist/app.js";
 import { workerRequestContext } from "../dist/cloudflare/request-context.js";
+import { JourneyService } from "../dist/modules/itinerary/journey/journey.service.js";
 import { CityCatalogWorker } from "../dist/modules/cities/application/city-catalog.worker.js";
 
 let ready;
@@ -11,7 +12,10 @@ function application() {
     const app = await buildApp();
     await app.listen(8080);
     return { app, handler: httpServerHandler({ port: 8080 }) };
-  })().catch(error => { ready = undefined; throw error; });
+  })().catch((error) => {
+    ready = undefined;
+    throw error;
+  });
   return ready;
 }
 
@@ -41,6 +45,7 @@ export default {
   async scheduled(_event, env, ctx) {
     return inRequest(env, ctx, async () => {
       const { app } = await application();
+      await app.get(JourneyService).processNextJob();
       await app.get(CityCatalogWorker).processNextJob();
     });
   },

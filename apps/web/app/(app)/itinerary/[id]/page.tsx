@@ -1,13 +1,11 @@
+import { ItineraryContents } from "../../../../components/itinerary/ItineraryContents";
+
+import { UiText } from "../../../../components/i18n/UiText";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "../../../../lib/supabase/server";
 import { ApiRequestError, getItinerary } from "../../../../lib/api";
-import { OverviewCard } from "../../../../components/itinerary/OverviewCard";
-import { DayTimeline } from "../../../../components/itinerary/DayTimeline";
-import { TransportSection } from "../../../../components/itinerary/TransportSection";
-import { SeasonalNote } from "../../../../components/itinerary/SeasonalNote";
-import { BudgetBreakdown } from "../../../../components/itinerary/BudgetBreakdown";
 import { SaveTripButton } from "../../../../components/itinerary/SaveTripButton";
 import { ShareButton } from "../../../../components/itinerary/ShareButton";
 import type { Itinerary } from "@travel/types";
@@ -16,7 +14,9 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { id } = await params;
   try {
     const data = await getItinerary(id);
@@ -57,7 +57,8 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
       {/* Action bar */}
       <div className="flex items-center justify-between">
         <Link href="/plan" className="text-sm text-primary hover:underline">
-          ← Plan another trip
+          {" "}
+          <UiText id="t4a50522901e7" fallback="← Plan another trip" />{" "}
         </Link>
         <div className="flex gap-2">
           {user && <SaveTripButton itineraryId={id} />}
@@ -65,26 +66,11 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Overview */}
-      <OverviewCard itinerary={itinerary} />
-
-      {/* Seasonal notes */}
-      {itinerary.seasonal_notes && <SeasonalNote notes={itinerary.seasonal_notes} />}
-
-      {/* Transport */}
-      {itinerary.transport_summary && itinerary.transport_summary.length > 0 && (
-        <TransportSection segments={itinerary.transport_summary} />
-      )}
-
-      {/* Day Timeline */}
-      {itinerary.days && itinerary.days.length > 0 && (
-        <DayTimeline days={itinerary.days} currency={itinerary.currency} />
-      )}
-
-      {/* Budget */}
-      {itinerary.budget_breakdown && (
-        <BudgetBreakdown breakdown={itinerary.budget_breakdown} />
-      )}
+      <ItineraryContents
+        plan={itinerary}
+        sourceId={id}
+        token={session.access_token}
+      />
     </main>
   );
 }
