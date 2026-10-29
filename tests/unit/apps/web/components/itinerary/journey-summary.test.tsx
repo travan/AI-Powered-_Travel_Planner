@@ -4,15 +4,17 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createPlanningCriteria, type Itinerary } from "@travel/types";
 import { JourneySummary } from "../../../../../../apps/web/components/itinerary/JourneySummary";
+import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";
 
 afterEach(cleanup);
 
-function showRoute(cities: string[], endpoint?: string) {
+function showRoute(cities: string[], endpoint?: string | null, locale = "en") {
   const planning = createPlanningCriteria();
   planning.journey.origin = { label: "Hanoi", source: "manual" };
-  if (endpoint) {
+  if (endpoint !== undefined) {
     planning.journey.return_to_origin = false;
-    planning.journey.endpoint = { label: endpoint, source: "manual" };
+    if (endpoint !== null)
+      planning.journey.endpoint = { label: endpoint, source: "manual" };
   }
   const plan = {
     planning,
@@ -21,7 +23,11 @@ function showRoute(cities: string[], endpoint?: string) {
     total_cost: 0,
     currency: "VND",
   } as Itinerary;
-  render(<JourneySummary plan={plan} />);
+  render(
+    <LanguageProvider initialLocale={locale}>
+      <JourneySummary plan={plan} />
+    </LanguageProvider>,
+  );
   return within(screen.getByRole("list"))
     .getAllByRole("listitem")
     .map((item) => item.querySelector("span:last-child")?.textContent);
@@ -51,6 +57,51 @@ describe("journey summary route", () => {
       "Seoul",
       "Busan",
       "Hanoi",
+    ]);
+  });
+
+  it("collapses adjacent labels with different case or repeated whitespace", () => {
+    expect(
+      showRoute([
+        " hAnOi ",
+        "New   York",
+        "new york",
+        "BUSAN",
+        "Busan",
+        "Hanoi",
+      ]),
+    ).toEqual(["Hanoi", "New York", "BUSAN", "Hanoi"]);
+  });
+
+  it("treats composed and decomposed Unicode as the same adjacent stop", () => {
+    expect(showRoute(["Đà Nẵng", "Đà Nẵng".normalize("NFD")])).toEqual([
+      "Hanoi",
+      "Đà Nẵng",
+      "Hanoi",
+    ]);
+  });
+
+  it("ignores empty day labels", () => {
+    expect(showRoute([" ", "Busan", "", "Busan"])).toEqual([
+      "Hanoi",
+      "Busan",
+      "Hanoi",
+    ]);
+  });
+
+  it("translates the missing endpoint in English", () => {
+    expect(showRoute(["Busan"], null)).toEqual([
+      "Hanoi",
+      "Busan",
+      "Final destination not selected",
+    ]);
+  });
+
+  it("translates the missing endpoint in Vietnamese even when its label is blank", () => {
+    expect(showRoute(["Busan"], " ", "vi")).toEqual([
+      "Hanoi",
+      "Busan",
+      "Chưa chọn điểm cuối",
     ]);
   });
 });

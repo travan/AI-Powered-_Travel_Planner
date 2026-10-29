@@ -1,13 +1,14 @@
 "use client";
 import { useAppLanguage } from "../i18n/LanguageProvider";
 
-import { UiText, useIssueText } from "../i18n/UiText";
+import { UiText, useIssueText, useUiText } from "../i18n/UiText";
 import React from "react";
 import type { Itinerary } from "@travel/types";
 export function JourneySummary({ plan }: { plan: Itinerary }) {
   const { locale: formattingLocale } = useAppLanguage();
 
   const issueText = useIssueText();
+  const t = useUiText();
   if (!plan.planning) return null;
   const p = plan.planning,
     end = p.journey.return_to_origin ? p.journey.origin : p.journey.endpoint;
@@ -16,14 +17,15 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
   const route = [
     p.journey.origin.label,
     ...plan.days.map((day) => day.city),
-    end?.label ?? "Chưa chọn điểm cuối",
+    end?.label?.trim() || t("Chưa chọn điểm cuối"),
   ]
-    .map((label) => label.trim())
+    .map((label) => label.trim().replace(/\s+/g, " "))
     .filter(Boolean)
     .filter(
       (label, index, stops) =>
         index === 0 ||
-        label.toLocaleLowerCase() !== stops[index - 1]?.toLocaleLowerCase(),
+        label.normalize("NFC").toLowerCase() !==
+          stops[index - 1]?.normalize("NFC").toLowerCase(),
     );
   return (
     <section
