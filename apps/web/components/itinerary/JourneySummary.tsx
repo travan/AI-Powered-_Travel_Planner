@@ -11,7 +11,20 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
   if (!plan.planning) return null;
   const p = plan.planning,
     end = p.journey.return_to_origin ? p.journey.origin : p.journey.endpoint;
-  const cities = [...new Set(plan.days.map((d) => d.city))];
+  // Travel days can already include the origin and final destination.
+  // Collapse adjacent stops only, preserving actual returns later in the route.
+  const route = [
+    p.journey.origin.label,
+    ...plan.days.map((day) => day.city),
+    end?.label ?? "Chưa chọn điểm cuối",
+  ]
+    .map((label) => label.trim())
+    .filter(Boolean)
+    .filter(
+      (label, index, stops) =>
+        index === 0 ||
+        label.toLocaleLowerCase() !== stops[index - 1]?.toLocaleLowerCase(),
+    );
   return (
     <section
       className="space-y-4 rounded-2xl border border-primary/20 bg-primary-fixed/20 p-5"
@@ -25,11 +38,7 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
         />{" "}
       </h2>
       <ol className="flex flex-wrap items-center gap-2">
-        {[
-          p.journey.origin.label,
-          ...cities,
-          end?.label ?? "Chưa chọn điểm cuối",
-        ].map((label, i) => (
+        {route.map((label, i) => (
           <li key={`${label}-${i}`} className="flex items-center gap-2">
             {i > 0 && <span aria-hidden>→</span>}
             <span className="rounded-full bg-surface px-3 py-2 text-sm font-semibold">
