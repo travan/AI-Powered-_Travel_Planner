@@ -58,6 +58,7 @@ describe("reopening planning requests", () => {
     ]);
     const view = show();
     await screen.findByText("Yêu cầu gần đây");
+    expect(screen.queryByRole("navigation")).toBeNull();
     expect(mock.list.mock.calls[0][0]).toBe("account-token");
     expect(
       screen
@@ -71,6 +72,67 @@ describe("reopening planning requests", () => {
     show();
     await screen.findByText("Yêu cầu gần đây");
     expect(mock.list).toHaveBeenCalledTimes(2);
+  });
+  it("shows at most three requests per page and supports moving both ways", async () => {
+    mock.list.mockResolvedValue(
+      Array.from({ length: 7 }, (_, index) => ({
+        ...request,
+        id: `job-${index}`,
+        city_names: [`City ${index}`],
+      })),
+    );
+    show();
+    await screen.findByText("City 0");
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.queryByText("City 3")).toBeNull();
+    expect(screen.getByText("Trang 1/3")).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Trang trước" })
+        .disabled,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("City 3")).toBeTruthy();
+    expect(screen.queryByText("City 0")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("City 6")).toBeTruthy();
+    expect(screen.getByText("Trang 3/3")).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Trang sau" })
+        .disabled,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Trang trước" }));
+    expect(screen.getByText("City 3")).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+  it("keeps the selected page during refresh and adjusts it if requests disappear", async () => {
+    vi.useFakeTimers();
+    const rows = Array.from({ length: 4 }, (_, index) => ({
+      ...request,
+      id: `job-${index}`,
+      city_names: [`City ${index}`],
+    }));
+    mock.list
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValue([request]);
+    show();
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(screen.getByText("Trang 2/2")).toBeTruthy();
+    expect(screen.getByText("City 3")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(screen.getByText("Đà Nẵng")).toBeTruthy();
+    expect(screen.queryByRole("navigation")).toBeNull();
   });
   it("refreshes queued requests until the result becomes available", async () => {
     vi.useFakeTimers();

@@ -8,12 +8,21 @@ import { createClient } from "../../lib/supabase/client";
 import { getPlanningRequests } from "../../lib/journey-api";
 import { useAppLanguage } from "../i18n/LanguageProvider";
 
+const PAGE_SIZE = 3;
+
 export function RecentPlanningRequests() {
   const t = useTranslations("plannerUX.requests");
   const { locale } = useAppLanguage();
   const [requests, setRequests] = useState<PlanningJobSummary[]>([]);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(requests.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRequests = requests.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   useEffect(() => {
     const abort = new AbortController();
@@ -30,6 +39,9 @@ export function RecentPlanningRequests() {
         );
         if (abort.signal.aborted) return;
         setRequests(rows);
+        setPage((value) =>
+          Math.min(value, Math.max(1, Math.ceil(rows.length / PAGE_SIZE))),
+        );
         setError(false);
         if (
           rows.some(
@@ -69,7 +81,7 @@ export function RecentPlanningRequests() {
         </p>
       )}
       <ul className="mt-3 divide-y divide-outline-variant/30">
-        {requests.map((request) => (
+        {visibleRequests.map((request) => (
           <li
             key={request.id}
             className="flex flex-wrap items-center justify-between gap-3 py-3"
@@ -100,6 +112,34 @@ export function RecentPlanningRequests() {
           </li>
         ))}
       </ul>
+      {pageCount > 1 && (
+        <nav
+          aria-label={t("pagination")}
+          className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/30 pt-4"
+        >
+          <p aria-live="polite" className="text-sm text-on-surface-variant">
+            {t("page", { current: currentPage, total: pageCount })}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentPage === 1}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              {t("previous")}
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentPage === pageCount}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              {t("next")}
+            </button>
+          </div>
+        </nav>
+      )}
     </section>
   );
 }
