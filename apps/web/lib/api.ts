@@ -1,3 +1,4 @@
+import { fetchWithLocalSession } from "./session-fetch";
 import type {
   ItineraryOutput,
   Itinerary,
@@ -64,11 +65,14 @@ export async function generateItinerary(
   };
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
-  const res = await fetch(getApiUrl("/api/itinerary/generate"), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithLocalSession(
+    getApiUrl("/api/itinerary/generate"),
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    },
+  );
   if (!res.ok) throwApiRequestError("Generate failed", res);
   return res.json() as Promise<GenerateResponse>;
 }
@@ -77,7 +81,7 @@ export async function checkAccountExists(
   email: string,
 ): Promise<boolean | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithLocalSession(
       getApiUrl(`/api/auth/account-exists?email=${encodeURIComponent(email)}`),
     );
     if (!res.ok) return null;
@@ -96,7 +100,7 @@ export async function createSearchDraft(body: {
   prompt_text?: string;
   search_payload: GenerateRequest;
 }): Promise<SearchDraftRecord> {
-  const res = await fetch(getApiUrl("/api/search-drafts"), {
+  const res = await fetchWithLocalSession(getApiUrl("/api/search-drafts"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -110,14 +114,17 @@ export async function claimSearchDraft(
   guestKey: string,
   authToken: string,
 ): Promise<SearchDraftRecord> {
-  const res = await fetch(getApiUrl(`/api/search-drafts/${draftId}/claim`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/search-drafts/${draftId}/claim`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ guest_key: guestKey }),
     },
-    body: JSON.stringify({ guest_key: guestKey }),
-  });
+  );
   if (!res.ok) throwApiRequestError("Claim search draft failed", res);
   return res.json() as Promise<SearchDraftRecord>;
 }
@@ -128,7 +135,7 @@ export async function getItinerary(
 ): Promise<ItineraryOutput> {
   const headers: Record<string, string> = {};
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
-  const res = await fetch(getApiUrl(`/api/itinerary/${id}`), {
+  const res = await fetchWithLocalSession(getApiUrl(`/api/itinerary/${id}`), {
     headers,
     cache: "no-store",
   });
@@ -141,9 +148,12 @@ export async function getSavedTripItinerary(
   tripId: string,
   authToken: string,
 ): Promise<Itinerary | null> {
-  const res = await fetch(getApiUrl(`/api/itinerary/trips/${tripId}`), {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/itinerary/trips/${tripId}`),
+    {
+      headers: { Authorization: `Bearer ${authToken}` },
+    },
+  );
   if (res.status === 404) return null;
   if (!res.ok) throwApiRequestError("Saved itinerary fetch failed", res);
   const payload = (await res.json()) as { itinerary?: Itinerary | null };
@@ -151,7 +161,7 @@ export async function getSavedTripItinerary(
 }
 
 export async function searchCities(q: string): Promise<CitySuggestion[]> {
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/cities/search?q=${encodeURIComponent(q)}`),
   );
   if (!res.ok) return [];
@@ -162,7 +172,7 @@ export async function rememberCity(
   name: string,
   authToken: string,
 ): Promise<void> {
-  const res = await fetch(getApiUrl("/api/cities"), {
+  const res = await fetchWithLocalSession(getApiUrl("/api/cities"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -174,7 +184,7 @@ export async function rememberCity(
 }
 
 export async function getPopularCities(): Promise<CitySuggestion[]> {
-  const res = await fetch(getApiUrl("/api/cities/popular"), {
+  const res = await fetchWithLocalSession(getApiUrl("/api/cities/popular"), {
     next: { revalidate: 86400 }, // 24h client-side revalidation
   });
   if (!res.ok) return [];
@@ -185,7 +195,7 @@ export async function getPromptHistory(
   authToken: string,
   limit = 5,
 ): Promise<PromptHistoryEntry[]> {
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/users/me/prompt-history?limit=${limit}`),
     {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -198,7 +208,7 @@ export async function getPromptHistory(
 export async function getMyProfile(
   authToken: string,
 ): Promise<UserProfileSummary> {
-  const res = await fetch(getApiUrl("/api/profile/me"), {
+  const res = await fetchWithLocalSession(getApiUrl("/api/profile/me"), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
@@ -206,7 +216,7 @@ export async function getMyProfile(
 }
 
 export async function getMyTrips(authToken: string): Promise<TripSummary[]> {
-  const res = await fetch(getApiUrl("/api/trips"), {
+  const res = await fetchWithLocalSession(getApiUrl("/api/trips"), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!res.ok) throwApiRequestError("Trips fetch failed", res);
@@ -217,7 +227,7 @@ export async function getTripDetail(
   tripId: string,
   authToken: string,
 ): Promise<TripDetail> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}`), {
+  const res = await fetchWithLocalSession(getApiUrl(`/api/trips/${tripId}`), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!res.ok) throw new Error(`Trip detail fetch failed: ${res.status}`);
@@ -230,7 +240,7 @@ export async function updateTripActivityStatus(
   status: TripActivitySummary["status"],
   authToken: string,
 ): Promise<TripActivitySummary> {
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/trips/${tripId}/activities/${activityId}/status`),
     {
       method: "PATCH",
@@ -251,7 +261,7 @@ export async function updateTripChecklistStatus(
   status: TripChecklistItem["status"],
   authToken: string,
 ): Promise<TripChecklistItem> {
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/trips/${tripId}/checklist/${itemId}/status`),
     {
       method: "PATCH",
@@ -271,14 +281,17 @@ export async function createTripActivity(
   body: CreateTripActivityRequest,
   authToken: string,
 ): Promise<TripActivitySummary> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/activities`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/trips/${tripId}/activities`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
   if (!res.ok) throw new Error(`Activity create failed: ${res.status}`);
   return res.json() as Promise<TripActivitySummary>;
 }
@@ -288,14 +301,17 @@ export async function createPlaceSubmission(
   body: CreatePlaceSubmissionRequest,
   authToken: string,
 ): Promise<UserPlaceSubmissionSummary> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/place-submissions`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/trips/${tripId}/place-submissions`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
   if (!res.ok) throw new Error(`Place submission failed: ${res.status}`);
   return res.json() as Promise<UserPlaceSubmissionSummary>;
 }
@@ -305,14 +321,17 @@ export async function createTripExpense(
   body: CreateTripExpenseRequest,
   authToken: string,
 ): Promise<TripDetail["expenses"][number]> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/expenses`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/trips/${tripId}/expenses`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
   if (!res.ok) throw new Error(`Expense create failed: ${res.status}`);
   return res.json() as Promise<TripDetail["expenses"][number]>;
 }
@@ -322,14 +341,17 @@ export async function createBillUpload(
   body: CreateBillUploadRequest,
   authToken: string,
 ): Promise<BillUploadSummary> {
-  const res = await fetch(getApiUrl(`/api/trips/${tripId}/bills`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/trips/${tripId}/bills`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
   if (!res.ok) throw new Error(`Bill upload failed: ${res.status}`);
   return res.json() as Promise<BillUploadSummary>;
 }
@@ -340,7 +362,7 @@ export async function reviewTripChangeRequest(
   status: "approved" | "rejected",
   authToken: string,
 ): Promise<TripChangeRequestSummary> {
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/trips/${tripId}/change-requests/${requestId}/review`),
     {
       method: "PATCH",
@@ -365,7 +387,9 @@ export async function getPlaceRecommendations(params: {
   if (params.type) query.set("type", params.type);
   if (params.limit) query.set("limit", String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const res = await fetch(getApiUrl(`/api/recommendations/places${suffix}`));
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/recommendations/places${suffix}`),
+  );
   if (!res.ok) return [];
   return res.json() as Promise<PlaceRecommendationSummary[]>;
 }
@@ -384,7 +408,7 @@ export async function getTransportPriceRecommendations(params: {
   if (params.month) query.set("month", String(params.month));
   if (params.limit) query.set("limit", String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const res = await fetch(
+  const res = await fetchWithLocalSession(
     getApiUrl(`/api/recommendations/transport-prices${suffix}`),
   );
   if (!res.ok) return [];
@@ -395,10 +419,13 @@ export async function saveTrip(
   itineraryId: string,
   authToken: string,
 ): Promise<{ saved: true; trip_id: string }> {
-  const res = await fetch(getApiUrl(`/api/itinerary/${itineraryId}/save`), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/itinerary/${itineraryId}/save`),
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+    },
+  );
   if (!res.ok) throw new Error(`Save failed: ${res.status}`);
   return res.json() as Promise<{ saved: true; trip_id: string }>;
 }
@@ -407,10 +434,13 @@ export async function shareItinerary(
   itineraryId: string,
   authToken: string,
 ): Promise<{ share_token: string; share_url: string }> {
-  const res = await fetch(getApiUrl(`/api/itinerary/${itineraryId}/share`), {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/itinerary/${itineraryId}/share`),
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${authToken}` },
+    },
+  );
   if (!res.ok) throw new Error(`Share failed: ${res.status}`);
   return res.json() as Promise<{ share_token: string; share_url: string }>;
 }

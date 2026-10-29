@@ -7,7 +7,11 @@ import type {
   MockUser,
 } from "@travel/types";
 import { mobileApiUrl } from "./api";
-import { isMockAuthEnabled, isSupabaseConfigured, requireSupabase } from "./supabase";
+import {
+  isMockAuthEnabled,
+  isSupabaseConfigured,
+  requireSupabase,
+} from "./supabase";
 
 export type MobileAuthProvider = "local" | "supabase" | "mock";
 
@@ -17,22 +21,27 @@ export const AUTH_PROVIDER: MobileAuthProvider = isMockAuthEnabled
     ? "supabase"
     : "local";
 
-export const isAuthConfigured = AUTH_PROVIDER === "local"
-  || AUTH_PROVIDER === "mock"
-  || (AUTH_PROVIDER === "supabase" && isSupabaseConfigured);
+export const isAuthConfigured =
+  AUTH_PROVIDER === "local" ||
+  AUTH_PROVIDER === "mock" ||
+  (AUTH_PROVIDER === "supabase" && isSupabaseConfigured);
 
-export const AUTH_CONFIG_ERROR = AUTH_PROVIDER === "supabase"
-  ? "Supabase auth is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY."
-  : "Mobile authentication is not configured.";
+export const AUTH_CONFIG_ERROR =
+  AUTH_PROVIDER === "supabase"
+    ? "Supabase auth is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY."
+    : "Mobile authentication is not configured.";
 
-export const supportsGoogleAuth = AUTH_PROVIDER === "supabase" || AUTH_PROVIDER === "mock";
+export const supportsGoogleAuth =
+  AUTH_PROVIDER === "supabase" || AUTH_PROVIDER === "mock";
 
 const LOCAL_SESSION_KEY = "horizon.mobile.local.session";
+let browserSessionValue: string | null = null;
+let refreshing: Promise<MockSession | null> | null = null;
 const localAuthSubscribers = new Set<MockAuthCallback>();
 
 async function getLocalSessionValue() {
   if (Platform.OS === "web") {
-    return typeof window === "undefined" ? null : window.sessionStorage.getItem(LOCAL_SESSION_KEY);
+    return browserSessionValue;
   }
   return SecureStore.getItemAsync(LOCAL_SESSION_KEY);
 }
@@ -40,8 +49,8 @@ async function getLocalSessionValue() {
 async function setLocalSessionValue(value: string | null) {
   if (Platform.OS === "web") {
     if (typeof window === "undefined") return;
-    if (value === null) window.sessionStorage.removeItem(LOCAL_SESSION_KEY);
-    else window.sessionStorage.setItem(LOCAL_SESSION_KEY, value);
+    window.sessionStorage.removeItem(LOCAL_SESSION_KEY);
+    browserSessionValue = value;
     return;
   }
   if (value === null) await SecureStore.deleteItemAsync(LOCAL_SESSION_KEY);
@@ -77,62 +86,120 @@ function mapSession(session: LocalApiSession | MockSession): MockSession {
 
 async function readLocalSession(): Promise<MockSession | null> {
   const serialized = await getLocalSessionValue();
-  if (!serialized) return null;
-
+  let current: MockSession | null = null;
   try {
-    const session = JSON.parse(serialized) as LocalApiSession;
-    if (!session.access_token || session.expires_at <= Math.floor(Date.now() / 1000)) {
-      await setLocalSessionValue(null);
-      return null;
-    }
-    return mapSession(session);
+    current = serialized ? mapSession(JSON.parse(serialized)) : null;
   } catch {
     await setLocalSessionValue(null);
-    return null;
   }
+  if (current && current.expires_at > Date.now() / 1000 + 30) return current;
+  if (Platform.OS !== "web" && !current?.refresh_token) return null;
+  if (refreshing) return refreshing;
+  const refresh = async () => {
+    const web = Platform.OS === "web";
+    const send = (path: string) =>
+      fetch(mobileApiUrl(path), {
+        method: "POST",
+        credentials: web ? "include" : "omit",
+        headers: {
+          "content-type": "application/json",
+          ...(web ? { "x-auth-client": "web" } : {}),
+        },
+        body: JSON.stringify(
+          web ? {} : { refresh_token: current!.refresh_token },
+        ),
+      });
+    let response = await send(web ? "/api/auth/restore" : "/api/auth/refresh");
+    if (web && response.status === 401)
+      response = await send("/api/auth/refresh");
+    if (!response.ok) {
+      if (response.status === 401) await writeLocalSession(null);
+      else throw await readError(response);
+      return null;
+    }
+    const payload = await response.json();
+    const session = mapSession(payload.session);
+    await writeLocalSession(session);
+    return session;
+  };
+  refreshing = (
+    Platform.OS === "web" && typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request("horizon-auth-refresh", refresh)
+      : refresh()
+  ).finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
 }
 
 async function writeLocalSession(session: MockSession | null) {
   await setLocalSessionValue(session ? JSON.stringify(session) : null);
 }
 
-function emitLocalAuthChange(event: MockAuthChangeEvent, session: MockSession | null) {
+function emitLocalAuthChange(
+  event: MockAuthChangeEvent,
+  session: MockSession | null,
+) {
   for (const callback of localAuthSubscribers) callback(event, session);
 }
 
 async function readError(response: Response) {
-  const payload = await response.json().catch(() => ({})) as { message?: string | string[]; code?: string };
-  const message = Array.isArray(payload.message) ? payload.message.join(" ") : payload.message;
-  const error = new Error(message ?? `Authentication request failed (${response.status})`) as Error & { code?: string; status?: number };
+  const payload = (await response.json().catch(() => ({}))) as {
+    message?: string | string[];
+    code?: string;
+  };
+  const message = Array.isArray(payload.message)
+    ? payload.message.join(" ")
+    : payload.message;
+  const error = new Error(
+    message ?? `Authentication request failed (${response.status})`,
+  ) as Error & { code?: string; status?: number };
   error.code = payload.code;
   error.status = response.status;
   return error;
 }
 
 async function localAuthPost(path: string, body?: Record<string, unknown>) {
-  const current = await readLocalSession();
+  const current = path === "/api/auth/logout" ? await readLocalSession() : null;
   const response = await fetch(mobileApiUrl(path), {
     method: "POST",
+    credentials: Platform.OS === "web" ? "include" : "omit",
     headers: {
-      ...(body ? { "content-type": "application/json" } : {}),
-      ...(current?.access_token ? { authorization: `Bearer ${current.access_token}` } : {}),
+      ...(Platform.OS === "web" ? { "x-auth-client": "web" } : {}),
+      "content-type": "application/json",
+      ...(current?.access_token
+        ? { authorization: `Bearer ${current.access_token}` }
+        : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    body: JSON.stringify(
+      body ??
+        (Platform.OS === "web"
+          ? {}
+          : { refresh_token: current?.refresh_token }),
+    ),
   });
   if (!response.ok) throw await readError(response);
-  return response.json() as Promise<{ session?: LocalApiSession; user?: LocalApiUser }>;
+  return response.json() as Promise<{
+    session?: LocalApiSession;
+    user?: LocalApiUser;
+  }>;
 }
 
 async function localSignIn(path: string, body: Record<string, unknown>) {
   try {
     const payload = await localAuthPost(path, body);
-    if (!payload.session) throw new Error("The auth server returned no session.");
+    if (!payload.session)
+      throw new Error("The auth server returned no session.");
     const session = mapSession(payload.session);
     await writeLocalSession(session);
     emitLocalAuthChange("SIGNED_IN", session);
     return { data: { user: session.user, session }, error: null };
   } catch (error) {
-    return { data: { user: null, session: null }, error: error instanceof Error ? error : new Error("Authentication failed") };
+    return {
+      data: { user: null, session: null },
+      error:
+        error instanceof Error ? error : new Error("Authentication failed"),
+    };
   }
 }
 
@@ -156,7 +223,7 @@ export async function getAuthUser(): Promise<MockUser | null> {
       if (response.status === 401 || response.status === 403) return null;
       throw await readError(response);
     }
-    const payload = await response.json() as { user: LocalApiUser };
+    const payload = (await response.json()) as { user: LocalApiUser };
     return mapUser(payload.user);
   }
   const { data, error } = await requireSupabase().auth.getUser();
@@ -179,7 +246,9 @@ export async function signUpWithEmail(input: {
   return requireSupabase().auth.signUp({
     email: input.email,
     password: input.password,
-    options: { data: { full_name: input.fullName, display_name: input.fullName } },
+    options: {
+      data: { full_name: input.fullName, display_name: input.fullName },
+    },
   });
 }
 
@@ -207,18 +276,25 @@ export async function signOut() {
 export function onAuthStateChange(callback: MockAuthCallback) {
   if (AUTH_PROVIDER !== "local") {
     return requireSupabase().auth.onAuthStateChange((event, session) => {
-      callback(event as MockAuthChangeEvent, session ? mapSession(session as MockSession) : null);
+      callback(
+        event as MockAuthChangeEvent,
+        session ? mapSession(session as MockSession) : null,
+      );
     }).data.subscription;
   }
 
   localAuthSubscribers.add(callback);
   void getAuthSession().then((session) => {
-    if (localAuthSubscribers.has(callback)) callback("INITIAL_SESSION", session);
+    if (localAuthSubscribers.has(callback))
+      callback("INITIAL_SESSION", session);
   });
   return { unsubscribe: () => localAuthSubscribers.delete(callback) };
 }
 
-export async function requestPasswordReset(email: string, _redirectTo?: string) {
+export async function requestPasswordReset(
+  email: string,
+  _redirectTo?: string,
+) {
   if (AUTH_PROVIDER === "mock") {
     const { error } = await requireSupabase().auth.resetPasswordForEmail(email);
     if (error) throw error;
@@ -231,7 +307,11 @@ export async function requestPasswordReset(email: string, _redirectTo?: string) 
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(typeof payload.message === "string" ? payload.message : "Password recovery failed. Please try again.");
+    throw new Error(
+      typeof payload.message === "string"
+        ? payload.message
+        : "Password recovery failed. Please try again.",
+    );
   }
 }
 

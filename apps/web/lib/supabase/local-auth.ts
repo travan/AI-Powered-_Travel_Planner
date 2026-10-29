@@ -11,99 +11,118 @@ const SESSION_STORAGE_KEY = "horizon.local.auth.session";
 const AUTH_CHANGE_EVENT = "horizon:local-auth-change";
 export const LOCAL_AUTH_COOKIE = "horizon_local_auth";
 export const LOCAL_AUTH_ENABLED =
-  (process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ?? process.env["AUTH_PROVIDER"] ?? "local") === "local";
+  (process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ??
+    process.env["AUTH_PROVIDER"] ??
+    "local") === "local";
 
-function encodeCookieValue(session: MockSession | null) {
-  if (!session) return "";
-  return encodeURIComponent(JSON.stringify(session));
-}
-
-function decodeCookieValue(value: string | undefined) {
-  if (!value) return null;
-
-  try {
-    return JSON.parse(decodeURIComponent(value)) as MockSession;
-  } catch {
-    return null;
-  }
-}
-
-function readSessionCookie() {
-  if (typeof document === "undefined") return null;
-
-  const cookie = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${LOCAL_AUTH_COOKIE}=`));
-
-  return decodeCookieValue(cookie?.slice(`${LOCAL_AUTH_COOKIE}=`.length));
-}
+let memorySession: MockSession | null = null;
+let pendingSession: Promise<MockSession | null> | null = null;
+let authVersion = 0;
+let lastSessionError: Error | null = null;
+const AUTH_SIGNAL_KEY = "horizon.local.auth.event";
+export const LOCAL_REFRESH_COOKIE = "horizon_local_refresh";
 
 function readSession() {
-  if (typeof window === "undefined") return null;
+  return memorySession;
+}
 
-  const cookieSession = readSessionCookie();
-
-  try {
-    const value = window.localStorage.getItem(SESSION_STORAGE_KEY);
-    if (value) {
-      const storedSession = JSON.parse(value) as MockSession;
-
-      // The cookie is what SSR uses to decide whether /login should redirect.
-      // Prefer it when the browser has two different local sessions, otherwise
-      // the server and client can disagree about whether the user is signed in.
-      if (!cookieSession || storedSession.access_token === cookieSession.access_token) {
-        return storedSession;
-      }
-
-      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(cookieSession));
-      return cookieSession;
-    }
-  } catch {
-    // Fall back to the server-readable cookie when localStorage is stale or
-    // unavailable after a browser reload.
-  }
-
-  if (cookieSession) {
-    try {
-      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(cookieSession));
-    } catch {
-      // The cookie is still enough to continue this session.
-    }
-  }
-  return cookieSession;
+export async function refreshLocalBrowserSession() {
+  memorySession = null;
+  return restoreSession();
 }
 
 function writeSession(session: MockSession | null) {
-  if (typeof window === "undefined") return;
-
-  if (session) {
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    document.cookie = `${LOCAL_AUTH_COOKIE}=${encodeCookieValue(session)}; Path=/; Max-Age=604800; SameSite=Lax`;
-    return;
+  memorySession = session ? { ...session, refresh_token: "" } : null;
+  if (session) lastSessionError = null;
+  // Remove credentials left by the previous browser implementation.
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      /* Storage may be disabled. */
+    }
   }
-
-  window.localStorage.removeItem(SESSION_STORAGE_KEY);
-  document.cookie = `${LOCAL_AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
-function emitAuthChange(event: MockAuthChangeEvent, session: MockSession | null) {
+async function restoreSession(): Promise<MockSession | null> {
+  if (typeof window === "undefined") return null;
+  if (memorySession && memorySession.expires_at > Date.now() / 1000 + 30)
+    return memorySession;
+  if (pendingSession) return pendingSession;
+  const version = authVersion;
+  const restore = async () => {
+    const existing = await postAuth("/api/auth/restore", {});
+    let result = existing;
+    // A temporary network error must not consume or discard a refresh token.
+    if (
+      (existing.error &&
+        (existing.error as Error & { status?: number }).status === 401) ||
+      (!existing.error &&
+        existing.data.session &&
+        existing.data.session.expires_at <= Date.now() / 1000 + 30)
+    ) {
+      result = await postAuth("/api/auth/refresh", {});
+    }
+    if (version !== authVersion) return memorySession;
+    lastSessionError =
+      result.error &&
+      (result.error as Error & { status?: number }).status !== 401
+        ? result.error
+        : null;
+    if (!result.error) writeSession(result.data.session);
+    else if ((result.error as Error & { status?: number }).status === 401)
+      writeSession(null);
+    return result.error ? null : memorySession;
+  };
+  // Coordinate tabs so one-use refresh cookies are never redeemed concurrently.
+  pendingSession = (
+    typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request("horizon-auth-refresh", restore)
+      : restore()
+  ).finally(() => {
+    pendingSession = null;
+  });
+  return pendingSession;
+}
+
+function emitAuthChange(
+  event: MockAuthChangeEvent,
+  session: MockSession | null,
+) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT, { detail: { event, session } }));
+  window.dispatchEvent(
+    new CustomEvent(AUTH_CHANGE_EVENT, { detail: { event, session } }),
+  );
+  try {
+    window.localStorage.setItem(
+      AUTH_SIGNAL_KEY,
+      JSON.stringify({ event, time: Date.now() }),
+    );
+  } catch {
+    /* No credentials are stored in this signal. */
+  }
 }
 
 function successResponse(session: MockSession | null): MockAuthResponse {
+  const browserSession = session ? { ...session, refresh_token: "" } : null;
   return {
     data: {
-      session,
-      user: session?.user ?? null,
+      session: browserSession,
+      user: browserSession?.user ?? null,
     },
     error: null,
   };
 }
 
-function errorResponse(message: string, code?: string, status?: number): MockAuthResponse {
-  const error = new Error(message) as Error & { code?: string; status?: number };
+function errorResponse(
+  message: string,
+  code?: string,
+  status?: number,
+): MockAuthResponse {
+  const error = new Error(message) as Error & {
+    code?: string;
+    status?: number;
+  };
   if (code) error.code = code;
   if (status) error.status = status;
   return {
@@ -115,26 +134,47 @@ function errorResponse(message: string, code?: string, status?: number): MockAut
   };
 }
 
-export function getLocalUserFromCookieValue(cookieValue: string | undefined): MockUser | null {
-  return decodeCookieValue(cookieValue)?.user ?? null;
-}
-
-export function getLocalSessionFromCookieValue(cookieValue: string | undefined): MockSession | null {
-  return decodeCookieValue(cookieValue);
+// Server/middleware hint only. Actual identity is validated with /api/auth/me.
+export function getLocalSessionFromCookieValue(
+  value: string | undefined,
+): MockSession | null {
+  if (!value) return null;
+  try {
+    const claims = JSON.parse(
+      atob(value.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")),
+    );
+    if (
+      typeof claims.sub !== "string" ||
+      typeof claims.exp !== "number" ||
+      claims.exp <= Date.now() / 1000
+    )
+      return null;
+    return {
+      access_token: value,
+      refresh_token: "",
+      token_type: "bearer",
+      expires_in: Math.max(0, claims.exp - Math.floor(Date.now() / 1000)),
+      expires_at: claims.exp,
+      user: {
+        id: claims.sub,
+        email: typeof claims.email === "string" ? claims.email : "",
+        user_metadata: {},
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function createLocalBrowserClient(): MockAuthClient {
   return {
     auth: {
       async getSession() {
-        const session = readSession();
-        // Keep the server-readable cookie in sync for users who already had a
-        // localStorage session before SSR itinerary pages were introduced.
-        writeSession(session);
-        return { data: { session }, error: null };
+        const session = await restoreSession();
+        return { data: { session }, error: lastSessionError };
       },
       async getUser() {
-        const session = readSession();
+        const session = await restoreSession();
         if (!session?.access_token) {
           writeSession(null);
           return { data: { user: null }, error: null };
@@ -153,9 +193,11 @@ export function createLocalBrowserClient(): MockAuthClient {
         return { data: { user: payload.user }, error: null };
       },
       async signUp({ email, password, options }) {
-        const fullName = typeof options?.data?.["full_name"] === "string"
-          ? options.data["full_name"]
-          : undefined;
+        const fullName =
+          typeof options?.data?.["full_name"] === "string"
+            ? options.data["full_name"]
+            : undefined;
+        await pendingSession;
         const result = await postAuth("/api/auth/register", {
           email,
           password,
@@ -163,14 +205,17 @@ export function createLocalBrowserClient(): MockAuthClient {
         });
         if (result.error) return result;
 
+        authVersion++;
         writeSession(result.data.session);
         emitAuthChange("SIGNED_IN", result.data.session);
         return result;
       },
       async signInWithPassword({ email, password }) {
+        await pendingSession;
         const result = await postAuth("/api/auth/session", { email, password });
         if (result.error) return result;
 
+        authVersion++;
         writeSession(result.data.session);
         emitAuthChange("SIGNED_IN", result.data.session);
         return result;
@@ -189,9 +234,21 @@ export function createLocalBrowserClient(): MockAuthClient {
             body: JSON.stringify({ email }),
           });
           const payload = await response.json().catch(() => ({}));
-          return { data: {}, error: response.ok ? null : new Error(typeof payload.message === "string" ? payload.message : "Password recovery failed") };
+          return {
+            data: {},
+            error: response.ok
+              ? null
+              : new Error(
+                  typeof payload.message === "string"
+                    ? payload.message
+                    : "Password recovery failed",
+                ),
+          };
         } catch {
-          return { data: {}, error: new Error("Password recovery failed. Please try again.") };
+          return {
+            data: {},
+            error: new Error("Password recovery failed. Please try again."),
+          };
         }
       },
       async resend() {
@@ -200,18 +257,34 @@ export function createLocalBrowserClient(): MockAuthClient {
       async updateUser() {
         return {
           data: { user: readSession()?.user ?? null },
-          error: new Error("Open the reset link in your email to change your password."),
+          error: new Error(
+            "Open the reset link in your email to change your password.",
+          ),
         };
       },
       async signOut() {
         const session = readSession();
-        if (session?.access_token) {
-          await fetch("/api/auth/logout", {
-            method: "POST",
-            headers: { authorization: `Bearer ${session.access_token}` },
-          }).catch(() => undefined);
-        }
-
+        authVersion++;
+        await pendingSession;
+        const response = await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-auth-client": "web",
+            ...(session?.access_token
+              ? { authorization: `Bearer ${session.access_token}` }
+              : {}),
+          },
+          body: "{}",
+        }).catch(() => null);
+        // A failed network logout cannot clear HttpOnly cookies; report it.
+        if (!response?.ok)
+          return {
+            error: new Error(
+              "Sign out could not reach the server. Please try again.",
+            ),
+          };
         writeSession(null);
         emitAuthChange("SIGNED_OUT", null);
         return { error: null };
@@ -222,23 +295,41 @@ export function createLocalBrowserClient(): MockAuthClient {
         }
 
         const customEventHandler = (event: Event) => {
-          const detail = (event as CustomEvent<{ event: MockAuthChangeEvent; session: MockSession | null }>).detail;
+          const detail = (
+            event as CustomEvent<{
+              event: MockAuthChangeEvent;
+              session: MockSession | null;
+            }>
+          ).detail;
           callback(detail.event, detail.session);
         };
+        let active = true;
         const storageEventHandler = (event: StorageEvent) => {
-          if (event.key !== SESSION_STORAGE_KEY) return;
-          callback(event.newValue ? "SIGNED_IN" : "SIGNED_OUT", readSession());
+          if (event.key !== AUTH_SIGNAL_KEY) return;
+          authVersion++;
+          writeSession(null);
+          if (event.newValue?.includes("SIGNED_OUT"))
+            callback("SIGNED_OUT", null);
+          else
+            void restoreSession().then((session) => {
+              if (active) callback("SIGNED_IN", session);
+            });
         };
-
-        window.addEventListener(AUTH_CHANGE_EVENT, customEventHandler);
         window.addEventListener("storage", storageEventHandler);
-        queueMicrotask(() => callback("INITIAL_SESSION", readSession()));
+        window.addEventListener(AUTH_CHANGE_EVENT, customEventHandler);
+        void restoreSession().then((session) => {
+          if (active) callback("INITIAL_SESSION", session);
+        });
 
         return {
           data: {
             subscription: {
               unsubscribe() {
-                window.removeEventListener(AUTH_CHANGE_EVENT, customEventHandler);
+                window.removeEventListener(
+                  AUTH_CHANGE_EVENT,
+                  customEventHandler,
+                );
+                active = false;
                 window.removeEventListener("storage", storageEventHandler);
               },
             },
@@ -249,11 +340,15 @@ export function createLocalBrowserClient(): MockAuthClient {
   };
 }
 
-async function postAuth(path: string, body: Record<string, unknown>): Promise<MockAuthResponse> {
+async function postAuth(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<MockAuthResponse> {
   try {
     const response = await fetch(path, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-auth-client": "web" },
       body: JSON.stringify(body),
     });
     const payload = (await response.json().catch(() => ({}))) as {
@@ -266,12 +361,14 @@ async function postAuth(path: string, body: Record<string, unknown>): Promise<Mo
       return errorResponse(
         payload.message ?? "Authentication failed",
         payload.code,
-        response.status
+        response.status,
       );
     }
 
     return successResponse(payload.session);
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : "Authentication failed");
+    return errorResponse(
+      error instanceof Error ? error.message : "Authentication failed",
+    );
   }
 }

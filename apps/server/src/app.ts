@@ -38,6 +38,7 @@ export async function buildApp(): Promise<NestExpressApplication> {
   });
   app.use("/api/auth/forgot-password", rateLimit({ max: 5, windowMs: 15 * 60_000 }));
   app.use("/api/auth/reset-password", rateLimit({ max: 20, windowMs: 15 * 60_000 }));
+  app.use("/api/auth/refresh", rateLimit({ max: 120, windowMs: 15 * 60_000 }));
   app.use(
     rateLimit({
       max: config.rateLimit.max,

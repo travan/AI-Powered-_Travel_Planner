@@ -60,6 +60,13 @@ test("SMTP recovery: one-use token, expiry, concurrency, password update and ses
     expect((await reset(firstToken)).status()).toBe(400);
     expect(
       (
+        await request.post("/api/auth/refresh", {
+          data: { refresh_token: user.session.refresh_token },
+        })
+      ).status(),
+    ).toBe(401);
+    expect(
+      (
         await request.get("/api/auth/me", {
           headers: { authorization: `Bearer ${user.session.access_token}` },
         })

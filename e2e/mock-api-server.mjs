@@ -19,9 +19,10 @@ const port = Number(process.env.PORT ?? 3101);
 const localAuthAccounts = new Map();
 const planningDrafts = new Map();
 const localAuthSessions = new Map();
+const localRefreshSessions = new Map();
 
 const server = createServer(async (req, res) => {
-  setCors(res);
+  setCors(req, res);
 
   if (!req.url || !req.method) {
     return sendJson(res, 400, { message: "Missing request data" });
@@ -78,7 +79,7 @@ const server = createServer(async (req, res) => {
       },
     };
     localAuthAccounts.set(email, { user, password });
-    return sendJson(res, 201, createLocalAuthResponse(user));
+    return sendJson(res, 201, createLocalAuthResponse(user, req, res));
   }
 
   if (req.method === "POST" && pathname === "/api/auth/session") {
@@ -92,7 +93,22 @@ const server = createServer(async (req, res) => {
         message: "Invalid login credentials",
       });
     }
-    return sendJson(res, 200, createLocalAuthResponse(account.user));
+    return sendJson(res, 200, createLocalAuthResponse(account.user, req, res));
+  }
+
+  if (req.method === "POST" && ["/api/auth/restore", "/api/auth/refresh"].includes(pathname)) {
+    const body = await readJsonBody(req);
+    const isRefresh = pathname.endsWith("refresh");
+    const token = isRefresh ? (body.refresh_token ?? cookieValue(req, "horizon_local_refresh")) : cookieValue(req, "horizon_local_auth");
+    const email = (isRefresh ? localRefreshSessions : localAuthSessions).get(token);
+    const account = email ? localAuthAccounts.get(email) : null;
+    if (!account) return sendJson(res, 401, { message: "Invalid or expired session" });
+    if (isRefresh) {
+      localRefreshSessions.delete(token);
+      return sendJson(res, 200, createLocalAuthResponse(account.user, req, res));
+    }
+    const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
+    return sendJson(res, 200, { user: account.user, session: { access_token: token, refresh_token: "", token_type: "bearer", expires_in: 900, expires_at: exp, user: account.user } });
   }
 
   if (req.method === "GET" && pathname === "/api/auth/me") {
@@ -110,6 +126,9 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && pathname === "/api/auth/logout") {
     const token = getLocalAuthToken(req.headers.authorization);
     if (token) localAuthSessions.delete(token);
+    const refreshToken = cookieValue(req, "horizon_local_refresh");
+    if (refreshToken) localRefreshSessions.delete(refreshToken);
+    res.setHeader("Set-Cookie", ["horizon_local_auth=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax", "horizon_local_refresh=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"]);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -339,10 +358,11 @@ server.listen(port, "127.0.0.1", () => {
 process.on("SIGTERM", () => server.close(() => process.exit(0)));
 process.on("SIGINT", () => server.close(() => process.exit(0)));
 
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+function setCors(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "http://127.0.0.1:3202");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client");
 }
 
 function sendJson(res, statusCode, body) {
@@ -352,19 +372,27 @@ function sendJson(res, statusCode, body) {
   res.end(JSON.stringify(body));
 }
 
-function createLocalAuthResponse(user) {
-  const accessToken = `local-e2e-${randomUUID()}`;
-  const expiresIn = 7 * 24 * 60 * 60;
+function createLocalAuthResponse(user, req, res) {
+  const expiresIn = 900;
+  const payload = Buffer.from(JSON.stringify({ sub: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + expiresIn, jti: randomUUID() })).toString("base64url");
+  const accessToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.e2e-signature`;
+  const refreshToken = randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
+  localRefreshSessions.set(refreshToken, user.email);
+  if (req.headers["x-auth-client"] === "web") res.setHeader("Set-Cookie", [`horizon_local_auth=${accessToken}; Path=/; Max-Age=900; HttpOnly; SameSite=Lax`, `horizon_local_refresh=${refreshToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`]);
   localAuthSessions.set(accessToken, user.email);
   const session = {
     access_token: accessToken,
-    refresh_token: "",
+    refresh_token: req.headers["x-auth-client"] === "web" ? "" : refreshToken,
     token_type: "bearer",
     expires_in: expiresIn,
     expires_at: Math.floor(Date.now() / 1000) + expiresIn,
     user,
   };
   return { user, session };
+}
+
+function cookieValue(req, name) {
+  return req.headers.cookie?.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
 }
 
 function getLocalAuthToken(authorization) {

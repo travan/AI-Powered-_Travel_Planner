@@ -1,3 +1,4 @@
+import { fetchWithLocalSession } from "./session-fetch";
 import { resolveApiUrl } from "@travel/api-client";
 import type {
   AccommodationBooking,
@@ -17,7 +18,7 @@ export async function journeyRequest<T>(
   method = body === undefined ? "GET" : "POST",
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(
+  const response = await fetchWithLocalSession(
     resolveApiUrl(`/api/${path}`, {
       publicBaseUrl: process.env["NEXT_PUBLIC_API_URL"] ?? "",
     }),

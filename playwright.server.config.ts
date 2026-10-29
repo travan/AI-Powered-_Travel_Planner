@@ -30,6 +30,7 @@ export default defineConfig({
       env: {
         NODE_ENV: "test",
         AUTH_PROVIDER: "local",
+        CORS_ORIGINS: "http://127.0.0.1:3348",
         SMTP_HOST: "127.0.0.1",
         SMTP_PORT: "3351",
         SMTP_SECURE: "false",

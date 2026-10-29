@@ -34,6 +34,8 @@
     "type-check": "turbo type-check",
     "clean": "turbo clean",
     "test": "vitest run --pool forks",
+    "test:security": "vitest run --pool forks tests/unit/apps/server/shared/local-jwt.test.ts tests/unit/apps/server/shared/jwt-auth.guard.security.test.ts tests/unit/apps/server/modules/auth tests/unit/apps/web/lib/local-auth.security.test.ts tests/unit/apps/web/lib/session-fetch.security.test.ts tests/unit/apps/server/cors-origin.test.ts tests/unit/apps/server/modules/workspace-rbac.service.test.ts",
+    "test:security:e2e": "DOCUMENT_STORE=postgres playwright test --config playwright.server.config.ts auth-security.spec.ts",
     "test:coverage": "vitest run --pool forks --coverage",
     "test:e2e": "playwright test",
     "test:e2e:server": "playwright test --config playwright.server.config.ts",

@@ -90,6 +90,10 @@ export class PasswordRecoveryRepository {
         "update user_sessions set revoked_at = now() where user_id = $1 and revoked_at is null",
         [userId],
       );
+      await db.query(
+        "update private.refresh_tokens set revoked_at = now() where user_id = $1 and revoked_at is null",
+        [userId],
+      );
       await db.query("commit");
       return true;
     } catch (error) {

@@ -8,6 +8,8 @@ const apiProxyTarget =
   "http://127.0.0.1:3001";
 
 const nextConfig: NextConfig = {
+  // Preserve the browser origin when auth middleware redirects loopback URLs.
+  skipMiddlewareUrlNormalize: true,
   env: {
     // The first-party API owns auth by default. Supabase remains opt-in via
     // AUTH_PROVIDER=supabase (or NEXT_PUBLIC_AUTH_PROVIDER=supabase).

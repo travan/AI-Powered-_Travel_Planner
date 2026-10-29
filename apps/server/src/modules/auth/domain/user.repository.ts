@@ -1,4 +1,5 @@
 import type { User } from "./user.entity.js";
+import type { SessionTokens } from "./session.js";
 
 export const USER_REPOSITORY = Symbol("USER_REPOSITORY");
 
@@ -22,6 +23,13 @@ export interface UserRepository {
   verifyLocalCredentials(input: VerifyCredentialsInput): Promise<User | null>;
   getById(userId: string): Promise<User | null>;
   existsByEmail(email: string): Promise<boolean>;
-  createSession(input: { userId: string; token: string }): Promise<UserSessionRecord>;
+  createSession(input: SessionTokens): Promise<UserSessionRecord>;
+  getRefreshUser(refreshToken: string): Promise<User | null>;
+  getSessionUser(token: string): Promise<User | null>;
+  rotateSession(
+    refreshToken: string,
+    next: SessionTokens,
+  ): Promise<UserSessionRecord | null>;
+  revokeRefreshSession(refreshToken: string): Promise<void>;
   revokeSession(token: string): Promise<void>;
 }
