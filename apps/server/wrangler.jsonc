@@ -9,7 +9,7 @@
 	],
 	"workers_dev": true,
 	"build": {
-		"command": "pnpm build"
+		"command": "pnpm --filter @travel/server build"
 	},
 	"rules": [
 		{
