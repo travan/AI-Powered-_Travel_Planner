@@ -1106,6 +1106,10 @@
     "calendar_month": "Month {month}",
     "draft_expired": "Your saved search is no longer available. Please choose a destination and try again.",
     "requests": {
+      "pagination": "Recent requests pagination",
+      "page": "Page {current}/{total}",
+      "previous": "Previous",
+      "next": "Next",
       "title": "Recent requests",
       "hint": "Open a previous request to check its progress or view the result.",
       "error": "Unable to load your requests.",

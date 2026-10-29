@@ -1107,6 +1107,10 @@
     "draft_expired": "Yêu cầu đã lưu không còn khả dụng. Hãy chọn điểm đến và thử lại.",
     "requests": {
       "title": "Yêu cầu gần đây",
+      "pagination": "Phân trang yêu cầu gần đây",
+      "page": "Trang {current}/{total}",
+      "previous": "Trang trước",
+      "next": "Trang sau",
       "hint": "Mở lại yêu cầu đã gửi để kiểm tra tiến độ hoặc xem kết quả.",
       "error": "Không tải được danh sách yêu cầu.",
       "retry": "Thử lại",
