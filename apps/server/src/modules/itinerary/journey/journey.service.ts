@@ -32,6 +32,7 @@ import type {
   AccommodationBooking,
   Itinerary,
   PlanningJob,
+  PlanningJobSummary,
   PlanRevision,
 } from "@travel/types";
 import * as travelTypes from "@travel/types";
@@ -137,6 +138,21 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       stream_url: `/api/itinerary/jobs/${job.rows[0].id}`,
     };
   }
+  async listJobs(userId: string): Promise<PlanningJobSummary[]> {
+    // Uses itinerary_jobs_user_idx; exclude translation and revision jobs.
+    const result = await this.sql.query<PlanningJobSummary>(
+      `select id::text,status,stage,attempts,itinerary_id::text,created_at,
+        coalesce(payload->'dto'->'city_names', '[]'::jsonb) as city_names,
+        coalesce((payload->'dto'->>'num_days')::int,
+          (payload->'dto'->>'end_date')::date - (payload->'dto'->>'start_date')::date + 1,
+          0) as num_days
+       from itinerary_jobs where user_id=$1 and kind='generate'
+       order by created_at desc, id desc limit 20`,
+      [userId],
+    );
+    return result.rows;
+  }
+
   async getJob(userId: string, id: string) {
     const result = await this.sql.query<PlanningJob>(
       `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,error,error_code,error_params,kind,payload from itinerary_jobs where id=$1 and user_id=$2`,

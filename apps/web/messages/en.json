@@ -1104,6 +1104,21 @@
     "return_adjusted": "Return date set to the next day. You can choose a later date.",
     "calendar_for": "Calendar: {field}",
     "calendar_month": "Month {month}",
-    "draft_expired": "Your saved search is no longer available. Please choose a destination and try again."
+    "draft_expired": "Your saved search is no longer available. Please choose a destination and try again.",
+    "requests": {
+      "title": "Recent requests",
+      "hint": "Open a previous request to check its progress or view the result.",
+      "error": "Unable to load your requests.",
+      "retry": "Try again",
+      "fallback": "Itinerary request",
+      "days": "{count} days",
+      "queued": "Queued",
+      "processing": "Processing",
+      "complete": "Ready",
+      "failed": "Failed",
+      "result": "View result",
+      "status": "View status",
+      "return_hint": "After returning to the planner, open Recent requests to check this request."
+    }
   }
 }

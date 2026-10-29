@@ -11,6 +11,7 @@ import Link from "next/link";
 import { createClient } from "../../../../../lib/supabase/client";
 import { getJourneyJob } from "../../../../../lib/journey-api";
 import type { PlanningJob } from "@travel/types";
+import { useTranslations } from "next-intl";
 const LABELS: Record<string, string> = {
   queued: "Yêu cầu đang chờ xử lý",
   catalog: "Đang lấy dữ liệu địa điểm",
@@ -24,6 +25,7 @@ const LABELS: Record<string, string> = {
 export default function JourneyJobPage() {
   const t = useUiText();
   const issueText = useIssueText();
+  const requestsText = useTranslations("plannerUX.requests");
   const { jobId } = useParams<{ jobId: string }>(),
     router = useRouter();
   const [job, setJob] = useState<PlanningJob | null>(null),
@@ -106,6 +108,9 @@ export default function JourneyJobPage() {
           <UiText text={error} />
         </p>
       )}
+      <p className="text-sm text-on-surface-variant">
+        {requestsText("return_hint")}
+      </p>
       <Link
         className="inline-block rounded-full border border-primary px-5 py-3 font-semibold text-primary"
         href="/plan"

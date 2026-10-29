@@ -1104,6 +1104,21 @@
     "return_adjusted": "Ngày về đã được chuyển sang ngày tiếp theo. Bạn có thể chọn ngày muộn hơn.",
     "calendar_for": "Lịch: {field}",
     "calendar_month": "Tháng {month}",
-    "draft_expired": "Yêu cầu đã lưu không còn khả dụng. Hãy chọn điểm đến và thử lại."
+    "draft_expired": "Yêu cầu đã lưu không còn khả dụng. Hãy chọn điểm đến và thử lại.",
+    "requests": {
+      "title": "Yêu cầu gần đây",
+      "hint": "Mở lại yêu cầu đã gửi để kiểm tra tiến độ hoặc xem kết quả.",
+      "error": "Không tải được danh sách yêu cầu.",
+      "retry": "Thử lại",
+      "fallback": "Yêu cầu lập hành trình",
+      "days": "{count} ngày",
+      "queued": "Đang chờ xử lý",
+      "processing": "Đang xử lý",
+      "complete": "Đã có kết quả",
+      "failed": "Thất bại",
+      "result": "Xem kết quả",
+      "status": "Xem trạng thái",
+      "return_hint": "Sau khi quay lại bộ lập kế hoạch, mở mục Yêu cầu gần đây để kiểm tra yêu cầu này."
+    }
   }
 }

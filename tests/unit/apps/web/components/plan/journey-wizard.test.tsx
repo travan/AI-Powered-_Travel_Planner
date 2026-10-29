@@ -46,6 +46,7 @@ vi.mock("../../../../../../apps/web/lib/api", async (importOriginal) => ({
   claimSearchDraft: vi.fn(),
 }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
+  getPlanningRequests: vi.fn().mockResolvedValue([]),
   validateJourney: mock.validate,
   resolveJourneyLocation: vi.fn().mockResolvedValue({ candidates: [] }),
 }));

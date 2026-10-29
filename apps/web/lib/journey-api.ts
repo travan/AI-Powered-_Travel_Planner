@@ -5,6 +5,7 @@ import type {
   Itinerary,
   PlanningIssue,
   PlanningJob,
+  PlanningJobSummary,
   PlanRevision,
 } from "@travel/types";
 import { ApiRequestError } from "./api";
@@ -49,6 +50,14 @@ export const validateJourney = (request: GenerateRequest) =>
     "planning/validate",
     undefined,
     request,
+  );
+export const getPlanningRequests = (token: string, signal?: AbortSignal) =>
+  journeyRequest<PlanningJobSummary[]>(
+    "planning/requests",
+    token,
+    undefined,
+    "GET",
+    signal,
   );
 export const getJourneyJob = (
   id: string,

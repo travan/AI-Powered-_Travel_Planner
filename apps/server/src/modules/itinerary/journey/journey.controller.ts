@@ -92,6 +92,11 @@ export class JourneyController {
   @Post("planning/validate") validate(@Body() dto: GenerateItineraryDto) {
     return validatePlanning(dto as Parameters<typeof validatePlanning>[0]);
   }
+  @Get("planning/requests")
+  @UseGuards(JwtAuthGuard)
+  requests(@CurrentUser() u: CurrentUserValue) {
+    return this.journey.listJobs(u.sub);
+  }
   @Get("itinerary/jobs/:jobId")
   @UseGuards(JwtAuthGuard)
   job(@Param() p: JobParamsDto, @CurrentUser() u: CurrentUserValue) {

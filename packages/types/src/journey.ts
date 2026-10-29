@@ -115,6 +115,12 @@ export interface PlanningJob {
   revision_id?: string;
   error?: string;
 }
+export interface PlanningJobSummary extends PlanningJob {
+  created_at: string;
+  city_names: string[];
+  num_days: number;
+}
+
 export interface PlanRevision {
   id: string;
   base_version: number;

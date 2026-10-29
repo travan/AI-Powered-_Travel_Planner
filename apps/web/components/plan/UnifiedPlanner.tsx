@@ -46,6 +46,7 @@ import {
 } from "../../lib/journey-api";
 
 import { PlannerDatePicker } from "./PlannerDatePicker";
+import { RecentPlanningRequests } from "./RecentPlanningRequests";
 
 const DRAFT_KEY = "horizon.planner.draft.v3";
 const INTENT_KEY = "horizon.search.intent";
@@ -651,6 +652,7 @@ export function UnifiedPlanner() {
           />{" "}
         </h1>
         <p className="mt-2 text-on-surface-variant">{ux("intro")}</p>
+        <RecentPlanningRequests />
         <p className="mt-3 text-sm text-on-surface-variant">
           <span aria-hidden="true" className="font-bold text-error">
             *

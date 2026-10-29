@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import type { Itinerary, SSEEventType, TripSummary } from "@travel/types";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { OverviewCard } from "../../../components/itinerary/OverviewCard";
+import { RecentPlanningRequests } from "../../../components/plan/RecentPlanningRequests";
 import { ApiRequestError, getItinerary, getMyTrips } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 import { useSSE } from "../../../hooks/useSSE";
@@ -235,6 +236,8 @@ export default function TripsPage() {
             )}
           </div>
         </header>
+
+        {!hasGeneratedContext && <RecentPlanningRequests />}
 
         {state === "idle" && !hasGeneratedContext && (
           <section className="rounded-xl border border-outline-variant/30 bg-surface p-6">
