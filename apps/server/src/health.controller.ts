@@ -7,7 +7,7 @@ import { MONGO_CLIENT, POSTGRES_POOL } from "./database/database.tokens.js";
 export class HealthController {
   constructor(
     @Inject(POSTGRES_POOL) private readonly postgres: Pool,
-    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient | null
+    @Inject(MONGO_CLIENT) private readonly mongo: MongoClient | null,
   ) {}
 
   @Get("health")
@@ -17,6 +17,9 @@ export class HealthController {
 
     return {
       status: "ok",
+      ...(process.env.DEPLOY_COMMIT
+        ? { deploy_commit: process.env.DEPLOY_COMMIT }
+        : {}),
       services: {
         postgres: "ok",
         ...(this.mongo ? { mongo: "ok" } : { documents: "postgres" }),

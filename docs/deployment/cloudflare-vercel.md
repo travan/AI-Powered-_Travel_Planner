@@ -15,8 +15,7 @@ this deployment. Local Docker development continues to use its configured stores
 
 ## Database setup
 
-Keep `SUPABASE_DATABASE_URL` in ignored `.env.cloudflare.local` with file mode
-600. Never commit that file, `.dev.vars`, database passwords or JWT secrets.
+Keep `SUPABASE_DATABASE_URL` in ignored `.env.cloudflare.local` with file mode 600. Never commit that file, `.dev.vars`, database passwords or JWT secrets.
 
 Run `node scripts/init-cloudflare-postgres.mjs` for a transaction that rolls back,
 then add `--apply` to initialize the application schema and restricted runtime
@@ -32,15 +31,54 @@ and authenticated API roles do not receive access to the application schema.
 
 ## Deployment
 
-Authenticate Wrangler to the intended account and run:
+### Automatic production deployment
+
+The **CI/CD Pipeline → Deploy Cloudflare API** job deploys every push/merge to
+`main` after build, type checks, unit tests and both E2E targets pass. Pull requests
+only run checks; they cannot deploy production. To redeploy, run **CI/CD Pipeline**
+from Actions with branch `main` selected. Failed checks prevent deployment.
+
+Configure these secrets in the repository's **production** environment
+(Settings → Environments → production → Environment secrets):
+
+| Secret                              | Value                                                                                                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLOUDFLARE_API_TOKEN`              | Account-scoped token with Workers Scripts Edit and the read permissions required by the existing AI and Hyperdrive bindings. Use the Edit Cloudflare Workers template restricted to account `6b34ff1e99d15ffdbbb503dac4423549`.                                    |
+| `CLOUDFLARE_MIGRATION_DATABASE_URL` | Administrator PostgreSQL URL for project `cvlvzfkoarlwhvjwwppn`, used only by the migration step. On IPv4-only hosted runners use the dashboard's **Session pooler** URL on port 5432 with user `postgres.cvlvzfkoarlwhvjwwppn`. Do not use transaction port 6543. |
+
+Repository secrets with these names also work if environment secrets are absent.
+The account ID and existing bindings come from `apps/server/wrangler.jsonc`.
+Initialize the runtime role once using the database setup above. The existing
+Worker `JWT_SECRET` and Hyperdrive credentials stay on Cloudflare; CI does not
+upload, generate or rotate them. Do not put the migration credential in Worker
+variables, Vercel, `NEXT_PUBLIC_*` variables or source control.
+
+The job bundles the Worker using pinned Wrangler 4.155.0, dry-runs migrations in a
+rolled-back transaction, applies only pending migrations using the existing
+`travel_cloud.schema_migrations` ledger, then deploys the Worker and cron triggers.
+Migration CI mode refuses an uninitialized runtime role and never reads or writes
+`.env.cloudflare.local`. Migrations retain the existing backend grants/RLS setup.
+Only backward-compatible migrations should be merged, because the old Worker is
+still serving requests during this step. A failed deploy does not reverse database
+migrations; investigate before rerunning. Production deploys are serialized.
+
+The post-deploy smoke check retries for propagation and checks PostgreSQL health,
+the exact Git commit, journey config and `POST /api/planning/validate`. Missing
+routes such as `Cannot POST /api/planning/validate` fail the job. It does not create
+accounts, trips or AI jobs. Inspect **Deploy Cloudflare API** separately from the
+Vercel Ready status. Vercel deploys independently and may be ready earlier.
+
+### Manual fallback
+
+Authenticate Wrangler to the intended account and run from the repository root:
 
 ```sh
-pnpm dlx wrangler deploy --config apps/server/wrangler.jsonc
+pnpm dlx wrangler@4.155.0 deploy --config apps/server/wrangler.jsonc
 ```
 
 The Worker needs `JWT_SECRET` as a secret and the bindings/variables declared in
-`wrangler.jsonc`. Scheduled catalog ingestion runs every minute instead of a
-persistent Node timer.
+`wrangler.jsonc`. Scheduled journey jobs and catalog ingestion run every minute
+instead of persistent Node timers.
 
 Vercel uses root directory `apps/web` and the existing monorepo build configuration.
 Set `API_PROXY_TARGET=https://travel-planner-api.travan-it-96.workers.dev` for

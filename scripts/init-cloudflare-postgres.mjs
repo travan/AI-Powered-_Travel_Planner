@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
+import { rootCertificates } from "node:tls";
 
 const require = createRequire(
   new URL("../apps/server/package.json", import.meta.url),
@@ -9,10 +10,21 @@ const { Client } = require("pg");
 const dotenv = require("dotenv");
 const root = new URL("../", import.meta.url);
 const envFile = new URL(".env.cloudflare.local", root);
-const originalEnv = await fs.readFile(envFile, "utf8");
-const env = dotenv.parse(originalEnv);
+// CI receives only database credentials, never reads/writes the local secret file
+// and cannot create or rotate runtime credentials.
+const ci = process.argv.includes("--ci");
+const originalEnv = ci ? "" : await fs.readFile(envFile, "utf8");
+const env = ci ? process.env : dotenv.parse(originalEnv);
+if (!env.SUPABASE_DATABASE_URL) {
+  throw new Error("Database migration requires SUPABASE_DATABASE_URL");
+}
 const adminUrl = new URL(env.SUPABASE_DATABASE_URL);
-if (adminUrl.hostname !== "db.cvlvzfkoarlwhvjwwppn.supabase.co") {
+const isDirect = adminUrl.hostname === "db.cvlvzfkoarlwhvjwwppn.supabase.co";
+const isSessionPooler =
+  adminUrl.hostname.endsWith(".pooler.supabase.com") &&
+  decodeURIComponent(adminUrl.username) === "postgres.cvlvzfkoarlwhvjwwppn" &&
+  adminUrl.port === "5432";
+if (!isDirect && !isSessionPooler) {
   throw new Error(
     "Refusing to initialize a database outside the selected Travel Planner Supabase project",
   );
@@ -23,12 +35,18 @@ const ca = await fs.readFile(
 );
 const client = new Client({
   connectionString: adminUrl.toString(),
-  ssl: { ca, rejectUnauthorized: true },
+  ssl: {
+    ca: isSessionPooler ? [...rootCertificates, ca] : ca,
+    rejectUnauthorized: true,
+  },
+  connectionTimeoutMillis: 15000,
 });
 const role = "travel_worker_app";
-const password = env.POSTGRES_URL
-  ? decodeURIComponent(new URL(env.POSTGRES_URL).password)
-  : randomBytes(32).toString("hex");
+const password = ci
+  ? null
+  : env.POSTGRES_URL
+    ? decodeURIComponent(new URL(env.POSTGRES_URL).password)
+    : randomBytes(32).toString("hex");
 const apply = process.argv.includes("--apply");
 await client.connect();
 try {
@@ -45,13 +63,17 @@ try {
     [role],
   );
   if (!roleExists.rowCount) {
+    if (ci)
+      throw new Error(
+        "Initialize the runtime role locally before enabling CI deployment",
+      );
     // Only generated hexadecimal passwords are used in this DDL literal.
     if (!/^[a-f0-9]{64}$/.test(password))
       throw new Error("Expected generated runtime password");
     await client.query(
       `create role ${role} login password '${password}' nosuperuser nocreatedb nocreaterole noinherit`,
     );
-  } else if (!env.POSTGRES_URL) {
+  } else if (!ci && !env.POSTGRES_URL) {
     throw new Error(
       "Runtime role already exists but its local credentials are missing; refusing to rotate it",
     );
@@ -126,11 +148,22 @@ try {
     await client.query(
       `create policy travel_backend_access on private.password_resets to ${role} using(true) with check(true)`,
     );
+  // Verify the restricted backend role can access the durable job queue before
+  // committing. CI never needs the runtime password or the Worker's JWT secret.
+  const grants = await client.query(
+    `select has_table_privilege($1, 'travel_cloud.itinerary_jobs', 'SELECT')
+      and has_table_privilege($1, 'travel_cloud.itinerary_jobs', 'INSERT')
+      and has_table_privilege($1, 'travel_cloud.itinerary_jobs', 'UPDATE')
+      and has_table_privilege($1, 'travel_cloud.itinerary_jobs', 'DELETE') as ready`,
+    [role],
+  );
+  if (!grants.rows[0]?.ready)
+    throw new Error("Runtime job queue grants are missing");
   await client.query(apply ? "commit" : "rollback");
   console.log(
     `${apply ? "Initialized" : "Dry run passed; rolled back"}: ${tables.rowCount} isolated application tables`,
   );
-  if (apply) {
+  if (apply && !ci) {
     const runtimeUrl = new URL(env.POSTGRES_URL || adminUrl);
     runtimeUrl.username = runtimeUrl.hostname.endsWith(".pooler.supabase.com")
       ? `${role}.cvlvzfkoarlwhvjwwppn`
