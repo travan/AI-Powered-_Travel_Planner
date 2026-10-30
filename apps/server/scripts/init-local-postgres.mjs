@@ -123,6 +123,9 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
     `grant select, insert, update, delete on private.password_resets to ${role}`,
   );
   await client.query(
+    `grant select, insert, update, delete on private.refresh_tokens to ${role}`,
+  );
+  await client.query(
     `grant select, insert, update, delete on all tables in schema public to ${role}`,
   );
   await client.query(

@@ -42,7 +42,7 @@ export class LocalJwtService implements JwtSigner {
     if (!payload || typeof payload !== "object") return null;
 
     const record = payload as JwtPayload;
-    if (typeof record.exp === "number" && record.exp < Math.floor(Date.now() / 1000)) {
+    if (typeof record.exp === "number" && record.exp <= Math.floor(Date.now() / 1000)) {
       return null;
     }
 

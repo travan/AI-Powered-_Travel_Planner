@@ -49,6 +49,14 @@ export class LoginDto {
   password!: string;
 }
 
+export class RefreshDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(64)
+  @MaxLength(64)
+  refresh_token?: string;
+}
+
 export class ForgotPasswordDto {
   @Transform(normalizeEmail)
   @IsEmail()

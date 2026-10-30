@@ -22,6 +22,7 @@ export function AccountMenu({
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAuthenticated = Boolean(avatarUrl || displayName || email);
@@ -54,13 +55,27 @@ export function AccountMenu({
   async function handleSignOut() {
     setSigningOut(true);
     const supabase = createClient();
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setSignOutError(true);
+      setSigningOut(false);
+      return;
+    }
+    setSignOutError(false);
     router.replace("/login");
     router.refresh();
   }
 
   return (
     <div ref={menuRef} className="relative">
+      {signOutError && (
+        <p
+          role="alert"
+          className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl bg-error-container p-3 text-sm text-on-error-container"
+        >
+          {t("Không thể đăng xuất. Kiểm tra kết nối rồi thử lại.")}
+        </p>
+      )}
       {/* Avatar trigger */}
       <button
         onClick={() => setOpen((prev) => !prev)}

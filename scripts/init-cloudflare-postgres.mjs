@@ -120,6 +120,7 @@ try {
     grant execute on all functions in schema journey_internal to ${role};
     grant usage on schema private to ${role};
     grant select, insert, update, delete on private.password_resets to ${role};
+    grant select, insert, update, delete on private.refresh_tokens to ${role};
     alter role ${role} set search_path to travel_cloud, extensions, public;`);
   const tables = await client.query(
     "select tablename from pg_tables where schemaname='travel_cloud' and tablename <> 'schema_migrations'",
