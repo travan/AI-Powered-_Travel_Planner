@@ -115,6 +115,8 @@ jobs:
           DATABASE_PROVIDER: postgres
           POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           POSTGRES_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
+      - name: Install Chromium for browser session security checks
+        run: pnpm exec playwright install --with-deps chromium
       - name: Test API persistence, private memory and approved spending
         run: pnpm exec playwright test --config playwright.server.config.ts
         env:
