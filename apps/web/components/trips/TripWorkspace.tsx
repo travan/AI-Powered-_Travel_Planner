@@ -127,6 +127,7 @@ type BillDraftState = {
   rawText: string;
 };
 type ExpenseFormState = {
+  expenseType?: string;
   title: string;
   description: string;
   amount: string;
@@ -1138,6 +1139,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
 
     const amount = Number(expenseForm.amount);
     const input: CreateExpenseInput = {
+      expense_type: expenseForm.expenseType ?? "other",
       title: expenseForm.title,
       description: expenseForm.description || undefined,
       amount,
@@ -3064,6 +3066,11 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
               data-testid="web-expense-title"
             />
+            <label className="text-sm font-semibold">{formattingLocale === "vi" ? "Hạng mục chi tiêu" : "Expense category"}
+              <select aria-label={formattingLocale === "vi" ? "Hạng mục chi tiêu" : "Expense category"} className="mt-1 w-full rounded-2xl border border-outline-variant/40 p-3" value={props.expenseForm.expenseType ?? "other"} onChange={e=>props.onExpenseFormChange({expenseType:e.target.value})}>
+                {[["food","Ăn uống","Food"],["accommodation","Lưu trú","Accommodation"],["transport","Đi lại","Transport"],["activity","Hoạt động","Activities"],["shopping","Mua sắm","Shopping"],["other","Khác / chưa phân loại","Other / unclassified"]].map(([value,vi,en])=><option key={value} value={value}>{formattingLocale === "vi" ? vi : en}</option>)}
+              </select>
+            </label>
             <input
               value={props.expenseForm.amount}
               onChange={(event) =>

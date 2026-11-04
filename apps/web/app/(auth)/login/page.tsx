@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Login - Horizon" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirectTo?: string }>;
+  searchParams: Promise<{ redirectTo?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const redirectTo =
@@ -21,7 +21,7 @@ export default async function LoginPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect(redirectTo);
+  if (user && !params.error?.startsWith("google_")) redirect(redirectTo);
 
   return <AuthExperience mode="login" />;
 }

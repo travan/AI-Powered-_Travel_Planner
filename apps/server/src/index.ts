@@ -1,3 +1,4 @@
+import { logEvent } from "./observability/logger.js";
 import "reflect-metadata";
 import { buildApp } from "./app.js";
 import path from "node:path";
@@ -65,6 +66,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Failed to start Nest API server:", err);
+  if (process.env.NODE_ENV === "production") logEvent("server.start_failed", "error");
+  else console.error("Failed to start Nest API server:", err);
   process.exit(1);
 });

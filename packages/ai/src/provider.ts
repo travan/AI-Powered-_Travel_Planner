@@ -6,6 +6,7 @@ import type {
 } from "@travel/types";
 
 export interface PreFetchedCityData {
+  learning_context?: import("@travel/types").PlannerLearningContext;
   city: string;
   country: string;
   timezone: string;

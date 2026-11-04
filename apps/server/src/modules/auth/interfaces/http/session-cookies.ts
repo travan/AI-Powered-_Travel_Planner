@@ -55,6 +55,13 @@ export function authResponse(
   response.setHeader("Cache-Control", "no-store");
   if (request.headers["x-auth-client"] !== "web") return value;
   assertBrowserRequest(request);
+  setSessionCookies(value, request, response);
+  // Native clients store refresh tokens in OS SecureStore; browsers only get a cookie.
+  return { ...value, session: { ...value.session, refresh_token: "" } };
+}
+
+export function setSessionCookies(value: AuthResponse, request: Request, response: Response) {
+  response.setHeader("Cache-Control", "no-store");
   response.cookie(ACCESS_COOKIE, value.session.access_token, {
     ...options(request),
     maxAge: ACCESS_TTL_SECONDS * 1000,
@@ -63,6 +70,4 @@ export function authResponse(
     ...options(request),
     maxAge: REFRESH_TTL_SECONDS * 1000,
   });
-  // Native clients store refresh tokens in OS SecureStore; browsers only get a cookie.
-  return { ...value, session: { ...value.session, refresh_token: "" } };
 }

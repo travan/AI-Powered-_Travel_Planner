@@ -11,6 +11,7 @@ export type ExpenseSplit = {
 };
 
 export type Expense = {
+  expenseType?: string;
   id: string;
   tripId: string;
   activityId: string | null;

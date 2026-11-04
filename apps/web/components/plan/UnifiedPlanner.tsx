@@ -1,5 +1,6 @@
 "use client";
 
+import { ResolveCitySearch } from "./ResolveCitySearch";
 import {
   UiText,
   useUiText,
@@ -350,12 +351,19 @@ export function UnifiedPlanner() {
       }
     })();
   }, [ready]);
-  const addCity = (slug: string, name: string) => {
+  const addCity = (
+    slug: string,
+    name: string,
+    names?: Record<string, string>,
+  ) => {
+    const labels =
+      names ??
+      [...popularCities, ...suggestions].find((c) => c.slug === slug)?.name;
     setForm((f) => ({
       ...f,
       cities: f.cities.some((c) => c.slug === slug)
         ? f.cities
-        : [...f.cities, { slug, name }],
+        : [...f.cities, { slug, name, ...(labels ? { names: labels } : {}) }],
     }));
     setCityQuery("");
   };
@@ -831,8 +839,24 @@ export function UnifiedPlanner() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && cityQuery.trim()) {
                             e.preventDefault();
-                            const city = createManualCity(cityQuery);
-                            addCity(city.slug, city.name);
+                            const matches = suggestions.filter((c) =>
+                              [c.slug, ...Object.values(c.name)].some(
+                                (n) =>
+                                  n.toLocaleLowerCase() ===
+                                  cityQuery.trim().toLocaleLowerCase(),
+                              ),
+                            );
+                            if (matches.length === 1)
+                              addCity(
+                                matches[0]!.slug,
+                                matches[0]!.name[locale] ??
+                                  matches[0]!.name.en ??
+                                  matches[0]!.slug,
+                              );
+                            else {
+                              const draft = createManualCity(cityQuery);
+                              addCity(draft.slug, draft.name);
+                            }
                           }
                         }}
                       />
@@ -868,21 +892,20 @@ export function UnifiedPlanner() {
                             }
                             className="block text-primary"
                           >
-                            {c.name.vi ?? c.name.en ?? c.slug}
+                            {c.name[locale] ?? c.name.en ?? c.slug}
                           </button>
                         ))}
-                        <button
-                          type="button"
-                          className="text-sm text-primary"
-                          onClick={() => {
-                            const c = createManualCity(cityQuery);
-                            addCity(c.slug, c.name);
-                          }}
-                        >
-                          {" "}
-                          <UiText id="tfe10ec9aaf89" fallback="Thêm “" />
-                          {cityQuery}”
-                        </button>
+                        <ResolveCitySearch
+                          query={cityQuery}
+                          onSelect={addCity}
+                        />
+                        {!suggestions.length && (
+                          <p className="text-sm text-on-surface-variant">
+                            {locale === "vi"
+                              ? "Nhấn Enter để dùng tên tiếng Việt hoặc tiếng Anh. Hệ thống sẽ tự đối chiếu khi tạo lịch trình; tên trùng cần thêm quốc gia/khu vực."
+                              : "Press Enter to use a Vietnamese or English name. It will be resolved when generating; ambiguous names need a country/region."}
+                          </p>
+                        )}
                       </div>
                     )}
                     <ol className="space-y-2">
@@ -893,7 +916,12 @@ export function UnifiedPlanner() {
                           className="flex items-center justify-between rounded-lg bg-surface-container-low p-3"
                         >
                           <span>
-                            {i + 1}. {c.name}
+                            {i + 1}.{" "}
+                            {c.names?.[locale] ??
+                              [...popularCities, ...suggestions].find(
+                                (city) => city.slug === c.slug,
+                              )?.name[locale] ??
+                              c.name}
                           </span>
                           <div className="flex gap-3">
                             <button

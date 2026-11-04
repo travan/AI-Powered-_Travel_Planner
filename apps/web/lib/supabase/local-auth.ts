@@ -1,3 +1,4 @@
+import { startGoogleAuth } from "../google-auth";
 import type {
   MockAuthCallback,
   MockAuthChangeEvent,
@@ -220,11 +221,15 @@ export function createLocalBrowserClient(): MockAuthClient {
         emitAuthChange("SIGNED_IN", result.data.session);
         return result;
       },
-      async signInWithOAuth({ provider }) {
-        return {
-          data: { provider, url: null },
-          error: new Error("OAuth provider is not configured for local auth"),
-        };
+      async signInWithOAuth({ provider, options }) {
+        try {
+          if (provider !== "google") throw new Error("Unsupported provider");
+          const callback = new URL(options?.redirectTo ?? "/", window.location.origin);
+          const url = await startGoogleAuth({ intent: "signin", next: callback.searchParams.get("next") ?? "/plan" });
+          return { data: { provider, url }, error: null };
+        } catch (error) {
+          return { data: { provider, url: null }, error: error as Error };
+        }
       },
       async resetPasswordForEmail(email) {
         try {

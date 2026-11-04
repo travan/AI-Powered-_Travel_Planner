@@ -1,6 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { SQL_CLIENT, type SqlClient } from "../../../database/database.tokens.js";
-import type { TripMember, TripMemberRole, TripMemberStatus } from "../../trips/domain/trip.entity.js";
+import {
+  SQL_CLIENT,
+  type SqlClient,
+} from "../../../database/database.tokens.js";
+import type {
+  TripMember,
+  TripMemberRole,
+  TripMemberStatus,
+} from "../../trips/domain/trip.entity.js";
 import type { Expense, ExpenseSplit } from "../domain/expense.entity.js";
 import type {
   ExpenseDraft,
@@ -19,6 +26,7 @@ type TripMemberRow = {
 };
 
 type ExpenseRow = {
+  expense_type?: string;
   id: string;
   trip_id: string;
   activity_id: string | null;
@@ -49,13 +57,16 @@ type ExpenseSplitRow = {
 export class PostgresExpenseRepository implements ExpenseRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
-  async findTripMember(input: { tripId: string; userId: string }): Promise<TripMember | null> {
+  async findTripMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null> {
     const result = await this.sql.query<TripMemberRow>(
       `select trip_id::text, user_id::text, role, status, invited_by_user_id::text, joined_at::text
        from trip_members
        where trip_id = $1 and user_id = $2
        limit 1`,
-      [input.tripId, input.userId]
+      [input.tripId, input.userId],
     );
     return result.rows[0] ? mapMember(result.rows[0]) : null;
   }
@@ -66,7 +77,7 @@ export class PostgresExpenseRepository implements ExpenseRepository {
        from trip_members
        where trip_id = $1 and status = 'active'
        order by joined_at asc`,
-      [tripId]
+      [tripId],
     );
     return result.rows.map(mapMember);
   }
@@ -76,32 +87,38 @@ export class PostgresExpenseRepository implements ExpenseRepository {
       `${expenseSelectSql}
        where e.trip_id = $1
        order by e.created_at desc`,
-      [tripId]
+      [tripId],
     );
     return this.hydrateExpenses(expenses.rows);
   }
 
-  async findForTrip(input: { tripId: string; expenseId: string }): Promise<Expense | null> {
+  async findForTrip(input: {
+    tripId: string;
+    expenseId: string;
+  }): Promise<Expense | null> {
     const expenses = await this.sql.query<ExpenseRow>(
       `${expenseSelectSql}
        where e.trip_id = $1 and e.id = $2
        limit 1`,
-      [input.tripId, input.expenseId]
+      [input.tripId, input.expenseId],
     );
     const [expense] = await this.hydrateExpenses(expenses.rows);
     return expense ?? null;
   }
 
-  async create(input: { expense: ExpenseDraft; splits: ExpenseSplitDraft[] }): Promise<Expense> {
+  async create(input: {
+    expense: ExpenseDraft;
+    splits: ExpenseSplitDraft[];
+  }): Promise<Expense> {
     const result = await this.sql.query<ExpenseRow>(
       `insert into expenses (
          trip_id, activity_id, bill_upload_id, title, description, amount, currency,
          paid_by_user_id, created_by_user_id, expense_type, approval_status
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'other', $10)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $11, $10)
        returning id::text, trip_id::text, activity_id::text, bill_upload_id::text, title, description,
                  amount, currency, paid_by_user_id::text, created_by_user_id::text, updated_by_user_id::text,
-                 approval_status as status, created_at::text, updated_at::text`,
+                 expense_type, approval_status as status, created_at::text, updated_at::text`,
       [
         input.expense.tripId,
         input.expense.activityId ?? null,
@@ -113,14 +130,23 @@ export class PostgresExpenseRepository implements ExpenseRepository {
         input.expense.paidByUserId,
         input.expense.createdByUserId,
         input.expense.status,
-      ]
+        input.expense.expenseType ?? "other",
+      ],
     );
     const expense = mapExpense(result.rows[0]!);
     await this.replaceSplits(expense.id, input.splits);
-    return (await this.findForTrip({ tripId: expense.tripId, expenseId: expense.id }))!;
+    return (await this.findForTrip({
+      tripId: expense.tripId,
+      expenseId: expense.id,
+    }))!;
   }
 
-  async update(input: { tripId: string; expenseId: string; patch: ExpensePatch; splits?: ExpenseSplitDraft[] }): Promise<Expense | null> {
+  async update(input: {
+    tripId: string;
+    expenseId: string;
+    patch: ExpensePatch;
+    splits?: ExpenseSplitDraft[];
+  }): Promise<Expense | null> {
     const result = await this.sql.query<ExpenseRow>(
       `update expenses
        set title = coalesce($3, title),
@@ -131,12 +157,13 @@ export class PostgresExpenseRepository implements ExpenseRepository {
            activity_id = coalesce($8, activity_id),
            bill_upload_id = coalesce($9, bill_upload_id),
            approval_status = coalesce($10, approval_status),
+           expense_type = coalesce($12,expense_type),
            updated_by_user_id = $11,
            updated_at = now()
        where trip_id = $1 and id = $2
        returning id::text, trip_id::text, activity_id::text, bill_upload_id::text, title, description,
                  amount, currency, paid_by_user_id::text, created_by_user_id::text, updated_by_user_id::text,
-                 approval_status as status, created_at::text, updated_at::text`,
+                 expense_type, approval_status as status, created_at::text, updated_at::text`,
       [
         input.tripId,
         input.expenseId,
@@ -149,11 +176,15 @@ export class PostgresExpenseRepository implements ExpenseRepository {
         input.patch.billUploadId ?? null,
         input.patch.status ?? null,
         input.patch.updatedByUserId,
-      ]
+        input.patch.expenseType ?? null,
+      ],
     );
     if (!result.rows[0]) return null;
     if (input.splits) await this.replaceSplits(input.expenseId, input.splits);
-    return this.findForTrip({ tripId: input.tripId, expenseId: input.expenseId });
+    return this.findForTrip({
+      tripId: input.tripId,
+      expenseId: input.expenseId,
+    });
   }
 
   async updateSplitStatus(input: {
@@ -170,7 +201,7 @@ export class PostgresExpenseRepository implements ExpenseRepository {
        where s.expense_id = e.id and e.trip_id = $1 and s.expense_id = $2 and s.id = $3
        returning s.id::text, s.expense_id::text, null::text as activity_id, s.user_id::text,
                  s.share_amount as amount, s.status, s.settled_at::text`,
-      [input.tripId, input.expenseId, input.splitId, input.status]
+      [input.tripId, input.expenseId, input.splitId, input.status],
     );
     return result.rows[0] ? mapSplit(result.rows[0]) : null;
   }
@@ -195,17 +226,22 @@ export class PostgresExpenseRepository implements ExpenseRepository {
         input.action,
         input.before ?? null,
         input.after ?? null,
-      ]
+      ],
     );
   }
 
-  private async replaceSplits(expenseId: string, splits: ExpenseSplitDraft[]): Promise<void> {
-    await this.sql.query(`delete from expense_splits where expense_id = $1`, [expenseId]);
+  private async replaceSplits(
+    expenseId: string,
+    splits: ExpenseSplitDraft[],
+  ): Promise<void> {
+    await this.sql.query(`delete from expense_splits where expense_id = $1`, [
+      expenseId,
+    ]);
     for (const split of splits) {
       await this.sql.query(
         `insert into expense_splits (expense_id, user_id, share_amount, status)
          values ($1, $2, $3, 'owed')`,
-        [expenseId, split.userId, split.amount]
+        [expenseId, split.userId, split.amount],
       );
     }
   }
@@ -219,7 +255,7 @@ export class PostgresExpenseRepository implements ExpenseRepository {
        from expense_splits
        where expense_id = any($1::uuid[])
        order by id asc`,
-      [expenseIds]
+      [expenseIds],
     );
     const splitsByExpense = new Map<string, ExpenseSplit[]>();
     for (const row of splitResult.rows) {
@@ -235,7 +271,7 @@ export class PostgresExpenseRepository implements ExpenseRepository {
 }
 
 const expenseSelectSql = `select e.id::text, e.trip_id::text, e.activity_id::text, e.bill_upload_id::text,
-                                 e.title, e.description, e.amount, e.currency, e.paid_by_user_id::text,
+                                 e.title, e.description, e.amount, e.currency, e.expense_type, e.paid_by_user_id::text,
                                  e.created_by_user_id::text, e.updated_by_user_id::text,
                                  e.approval_status as status,
                                  e.created_at::text, e.updated_at::text
@@ -254,6 +290,7 @@ function mapMember(row: TripMemberRow): TripMember {
 
 function mapExpense(row: ExpenseRow): Expense {
   return {
+    expenseType: row.expense_type ?? "other",
     id: row.id,
     tripId: row.trip_id,
     activityId: row.activity_id,

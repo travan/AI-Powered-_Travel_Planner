@@ -48,6 +48,49 @@ export function BudgetBreakdown({ breakdown }: Props) {
         )}
       </div>
 
+      {breakdown.complete === false && (
+        <p
+          role="status"
+          className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          {formattingLocale === "vi"
+            ? "Tổng tạm tính các khoản đã có giá. Chưa bao gồm: "
+            : "Subtotal of priced items. Not yet included: "}
+          {breakdown.missing_items?.join(", ")}
+        </p>
+      )}
+      {breakdown.transport_details && (
+        <div className="space-y-1 text-sm">
+          {Object.entries(breakdown.transport_details).map(([kind, amount]) => (
+            <p key={kind}>
+              {
+                (
+                  {
+                    flight:
+                      formattingLocale === "vi" ? "Vé máy bay" : "Flights",
+                    intercity:
+                      formattingLocale === "vi" ? "Liên tỉnh" : "Intercity",
+                    airport_transfer:
+                      formattingLocale === "vi"
+                        ? "Đưa đón sân bay"
+                        : "Airport transfers",
+                    local:
+                      formattingLocale === "vi"
+                        ? "Đi lại nội đô"
+                        : "Local transport",
+                  } as Record<string, string>
+                )[kind]
+              }
+              :{" "}
+              {amount == null
+                ? formattingLocale === "vi"
+                  ? "Chưa có giá"
+                  : "Unknown"
+                : `${amount.toLocaleString(formattingLocale)} ${breakdown.currency}`}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
         {/* Pie chart */}
         {categories.length > 0 && (

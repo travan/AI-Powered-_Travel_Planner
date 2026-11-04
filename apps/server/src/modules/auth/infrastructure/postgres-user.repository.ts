@@ -31,7 +31,7 @@ type UserRow = {
 };
 
 type UserWithPasswordRow = UserRow & {
-  password_hash: string;
+  password_hash: string | null;
 };
 
 @Injectable()
@@ -68,7 +68,7 @@ export class PostgresUserRepository implements UserRepository {
     );
     const user = result.rows[0];
     if (!user) return null;
-    if (!(await verifyPassword(input.password, user.password_hash)))
+    if (!user.password_hash || !(await verifyPassword(input.password, user.password_hash)))
       return null;
     return mapUser(user);
   }

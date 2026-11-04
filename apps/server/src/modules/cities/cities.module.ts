@@ -1,3 +1,4 @@
+import { PlaceLookupService } from "./application/place-lookup.service.js";
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module.js";
 import { CityCatalogWorker } from "./application/city-catalog.worker.js";
@@ -11,6 +12,7 @@ import { CitiesController } from "./interfaces/http/cities.controller.js";
   controllers: [CitiesController],
   providers: [
     CitiesService,
+    PlaceLookupService,
     CityCatalogWorker,
     {
       provide: CITY_REPOSITORY,

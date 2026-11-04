@@ -1,3 +1,6 @@
+import { PlannerLearningService } from "./learning/learning.service.js";
+import { PlannerLearningController } from "./learning/learning.controller.js";
+import { WeatherService } from "./enrichment/weather.service.js";
 import { JourneyController } from "./journey/journey.controller.js";
 import { JourneyService } from "./journey/journey.service.js";
 import { Module } from "@nestjs/common";
@@ -10,8 +13,10 @@ import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
 
 @Module({
   imports: [DatabaseModule, CitiesModule],
-  controllers: [JourneyController, ItineraryController],
+  controllers: [JourneyController, ItineraryController, PlannerLearningController],
   providers: [
+    PlannerLearningService,
+    WeatherService,
     ItineraryService,
     JourneyService,
     {

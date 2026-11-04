@@ -12,3 +12,7 @@ export * from "./trip-permissions";
 export * from "./journey";
 
 export * from "./translation";
+
+export * from "./travel-display";
+
+export * from "./learning";

@@ -1,3 +1,5 @@
+import { GoogleAuthService } from "./application/google-auth.service.js";
+import { GoogleAuthController } from "./interfaces/http/google-auth.controller.js";
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module.js";
 import { SharedAuthModule } from "../../shared/nest/shared-auth.module.js";
@@ -12,9 +14,10 @@ import { RecoveryMailer } from "./infrastructure/recovery-mailer.js";
 
 @Module({
   imports: [DatabaseModule, SharedAuthModule],
-  controllers: [AuthController],
+  controllers: [AuthController, GoogleAuthController],
   providers: [
     AuthService,
+    GoogleAuthService,
     PasswordRecoveryService,
     PasswordRecoveryRepository,
     RecoveryMailer,

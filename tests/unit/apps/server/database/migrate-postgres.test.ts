@@ -61,3 +61,24 @@ describe("migration runner", () => {
       );
     }));
 });
+
+it("uses the caller transaction and adopts pre-checksum cloud history without replay", async () =>
+  fixture(async (directory) => {
+    const query = vi.fn(async (sql: string) => ({
+      rows: sql.startsWith("select checksum") ? [{ checksum: null }] : [],
+    }));
+    await migratePostgres({ query }, directory, {
+      schema: "travel_cloud",
+      outerTransaction: true,
+    });
+    const calls = query.mock.calls.map((c) => c[0]);
+    expect(calls).toContain("select pg_advisory_xact_lock(781247193)");
+    expect(
+      calls.some((sql) =>
+        sql.startsWith("update travel_cloud.schema_migrations set checksum"),
+      ),
+    ).toBe(true);
+    expect(calls).not.toContain("begin");
+    expect(calls).not.toContain("commit");
+    expect(calls).not.toContain("select 1;");
+  }));

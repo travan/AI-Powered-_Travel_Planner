@@ -10,11 +10,11 @@ function createRepository() {
 const taipeiRow = {
   slug: "taipei",
   name: { en: "Taipei", vi: "Taipei" },
-  country: "",
-  timezone: "",
-  currency: "",
-  lat: null,
-  lon: null,
+  country: "TW",
+  timezone: "Asia/Taipei",
+  currency: "TWD",
+  lat: 25.03,
+  lon: 121.56,
   popular: false,
 };
 
@@ -75,24 +75,11 @@ describe("PostgresCityRepository", () => {
     expect(query.mock.calls[3]?.[0]).toContain("from activity_catalog");
   });
 
-  it("stores a manually entered city without inventing coordinates", async () => {
+  it("requires resolving unknown cities instead of copying a local name into English", async () => {
     const { repository, query } = createRepository();
-    query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [taipeiRow] });
-
-    await expect(repository.remember("Taipei")).resolves.toMatchObject({
-      slug: "taipei",
-      name: { en: "Taipei", vi: "Taipei" },
-      lat: null,
-      lon: null,
-    });
-    expect(query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining("on conflict (slug) do nothing"),
-      ["taipei", "Taipei"],
-    );
+    query.mockResolvedValueOnce({ rows: [] });
+    await expect(repository.remember("Taipei")).rejects.toMatchObject({response:{code:"CITY_UNRESOLVED"}});
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it("reuses an existing city by its display name instead of duplicating it", async () => {

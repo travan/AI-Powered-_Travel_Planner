@@ -2,6 +2,7 @@ import type { GenerateRequest, GenerateResponse } from "./api";
 import type { CitySuggestion, TripStyleKey } from "./constants";
 
 export interface SelectedCity {
+  names?: Record<string, string>;
   slug: string;
   name: string;
 }
@@ -54,10 +55,11 @@ export function createManualCity(input: string): SelectedCity {
 
 export function createCityFromSuggestion(
   suggestion: CitySuggestion,
-  locale = "en"
+  locale = "en",
 ): SelectedCity {
   return {
     slug: suggestion.slug,
+    names: suggestion.name,
     name:
       suggestion.name[locale] ??
       suggestion.name.en ??
@@ -66,7 +68,9 @@ export function createCityFromSuggestion(
   };
 }
 
-export function buildGenerateRequest(input: BuildGenerateRequestInput): GenerateRequest {
+export function buildGenerateRequest(
+  input: BuildGenerateRequestInput,
+): GenerateRequest {
   const budget =
     input.budget === null || input.budget === undefined || input.budget === ""
       ? undefined
@@ -95,7 +99,7 @@ export function buildGenerateRequest(input: BuildGenerateRequestInput): Generate
 }
 
 export function resolveGenerateNavigationTarget(
-  response: GenerateResponse
+  response: GenerateResponse,
 ): GenerateNavigationTarget | null {
   if (response.status === "queued") {
     return response.job_id ? { kind: "queued", id: response.job_id } : null;

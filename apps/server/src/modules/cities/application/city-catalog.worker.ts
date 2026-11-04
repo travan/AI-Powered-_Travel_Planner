@@ -1,3 +1,4 @@
+import { logEvent } from "../../../observability/logger.js";
 import {
   Inject,
   Injectable,
@@ -128,7 +129,8 @@ export class CityCatalogWorker implements OnModuleInit, OnModuleDestroy {
             updateMessage,
           );
         }
-        this.logger.error(`City catalog job ${job.id} failed`, message);
+        if (process.env.NODE_ENV === "production") logEvent("catalog.job_failed", "error", { jobId: job.id, code: "CATALOG_JOB_FAILED" });
+        else this.logger.error(`City catalog job ${job.id} failed`, message);
       } else {
         const details = error instanceof Error ? error.stack ?? error.message : message;
         this.logger.error("Could not poll the city catalog ingestion queue", details);

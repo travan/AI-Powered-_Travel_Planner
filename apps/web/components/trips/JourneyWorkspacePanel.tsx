@@ -16,6 +16,8 @@ import {
   getPlanRevisions,
   journeyRequest,
 } from "../../lib/journey-api";
+import { mapUrl } from "@travel/types";
+import { BookingLinks } from "../itinerary/BookingLinks";
 import type {
   AccommodationBooking,
   Hotel,
@@ -59,6 +61,11 @@ export function JourneyWorkspacePanel({
   const [plan, setPlan] = useState<Itinerary | null>(null),
     [stays, setStays] = useState<AccommodationBooking[]>([]),
     [revisions, setRevisions] = useState<PlanRevision[]>([]);
+  const cityLabel = (slug?: string, fallback?: string) =>
+    (slug
+      ? (plan?.city_catalog?.[slug]?.name[locale] ??
+        plan?.city_catalog?.[slug]?.name.en)
+      : undefined) ?? fallback;
   const [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
@@ -464,9 +471,14 @@ export function JourneyWorkspacePanel({
                 >
                   <h3 className="font-bold">{h.name}</h3>
                   <p className="text-sm">
-                    {h.city} · {h.price_per_night || h.price_range}
+                    {cityLabel(h.city_slug, h.city)} ·{" "}
+                    {h.price_per_night || h.price_range}
                   </p>
                   <p className="text-sm leading-6">{h.note}</p>
+                  <BookingLinks
+                    links={h.booking_links}
+                    context={`${h.name} · ${cityLabel(h.city_slug, h.city) ?? ""} · ${plan?.days[0]?.date ?? ""} — ${plan?.days.at(-1)?.date ?? ""} · ${plan?.num_travelers ?? ""}`}
+                  />
                   {canEdit && (
                     <button
                       disabled={busy}
@@ -720,7 +732,7 @@ export function JourneyWorkspacePanel({
                   <option key={d.id ?? d.day_number} value={d.day_number}>
                     {" "}
                     <UiText id="t368c4575744a" fallback="Ngày" /> {d.day_number}
-                    : {d.city}
+                    : {cityLabel(d.city_slug, d.city)}
                   </option>
                 ))}
               </select>
@@ -813,7 +825,8 @@ export function JourneyWorkspacePanel({
                 >
                   <h3 className="font-bold">{r.name}</h3>
                   <p className="text-sm">
-                    {r.cuisine} · {r.price_per_person || r.price_range}
+                    {cityLabel(r.city_slug, r.city)} · {r.cuisine} ·{" "}
+                    {r.price_per_person || r.price_range}
                   </p>
                   <p className="text-sm leading-6">{r.note}</p>
                   <p className="text-xs">
@@ -843,15 +856,18 @@ export function JourneyWorkspacePanel({
                       <UiText id="t861dafdead09" fallback="Bỏ qua" />{" "}
                     </button>
                     <a
-                      href={
-                        safe(r.maps_link) ??
-                        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name} ${r.city ?? ""}`)}`
-                      }
+                      href={mapUrl(r)}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
                       {" "}
-                      <UiText id="tc97139683ce3" fallback="Mở bản đồ" />{" "}
+                      {locale === "vi"
+                        ? r.map_precision === "verified"
+                          ? "Mở vị trí trên bản đồ"
+                          : "Tìm trên bản đồ"
+                        : r.map_precision === "verified"
+                          ? "Open location on Maps"
+                          : "Search on Maps"}{" "}
                     </a>
                   </div>
                 </article>

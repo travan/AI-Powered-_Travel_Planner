@@ -1,4 +1,5 @@
 "use client";
+import { useAppLanguage } from "../i18n/LanguageProvider";
 import { UiText, useUiText } from "../i18n/UiText";
 
 import { useState, useRef, useEffect } from "react";
@@ -12,6 +13,7 @@ interface Props {
 
 export function CityInputField({ cities, onChange }: Props) {
   const t = useUiText();
+  const { locale } = useAppLanguage();
 
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<
@@ -47,7 +49,8 @@ export function CityInputField({ cities, onChange }: Props) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && query.trim()) {
       e.preventDefault();
-      addCity(query.trim());
+      const exact = suggestions.filter(s => Object.values(s.name).some(n => n.toLowerCase() === query.trim().toLowerCase()));
+      if (exact.length === 1) addCity(exact[0]!.name.en ?? exact[0]!.slug);
     }
   };
 
@@ -98,7 +101,7 @@ export function CityInputField({ cities, onChange }: Props) {
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-gray-50"
                 >
                   <span className="flex-1 font-medium text-gray-900">
-                    {s.name["en"] ?? s.slug}
+                    {s.name[locale] ?? s.name.en ?? s.slug}
                   </span>
                   <Badge variant="outline">{s.country}</Badge>
                 </button>

@@ -22,7 +22,11 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@travel/hooks", () => ({
   usePopularCities: () => ({ cities: [] }),
-  useCitySearch: () => ({ suggestions: [] }),
+  useCitySearch: (query: string) => ({ suggestions: [
+    {slug:"da-nang",name:{en:"Da Nang",vi:"Đà Nẵng"},country:"VN"},
+    {slug:"hue",name:{en:"Hue",vi:"Huế"},country:"VN"},
+    {slug:"taipei",name:{en:"Taipei",vi:"Đài Bắc"},country:"TW"},
+  ].filter(c=>Object.values(c.name).some(n=>n.toLowerCase()===query.trim().toLowerCase())) }),
 }));
 vi.mock("../../../../../../apps/web/components/layout/SiteHeader", () => ({
   SiteHeader: () => null,
@@ -108,7 +112,7 @@ describe("unified bilingual planner", () => {
   });
   it("generates with unbooked conflicting draft times and optional accommodation", async () => {
     const draft = emptyPlanner();
-    draft.cities = [{ slug: "taiwan", name: "Taiwan" }];
+    draft.cities = [{ slug: "taipei", name: "Taipei" }];
     draft.planning.journey.origin.label = "Hà Nội";
     draft.planning.transport_preferences.arrival_at = "2026-11-03T15:07";
     draft.planning.transport_preferences.departure_at = "2026-11-01T15:07";
@@ -160,7 +164,7 @@ describe("unified bilingual planner", () => {
     fireEvent.change(screen.getByLabelText("Destinations"), {
       target: { value: "Đà Nẵng" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add “\s*Đà Nẵng”/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Da Nang" }));
     fireEvent.click(screen.getByRole("button", { name: "Generate itinerary" }));
     await waitFor(() => expect(mock.generate).toHaveBeenCalledTimes(1));
     const request = mock.generate.mock.calls[0]![0];
@@ -231,9 +235,9 @@ describe("unified bilingual planner", () => {
       await screen.findByText("Choose at least one destination."),
     ).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Destinations"), {
-      target: { value: "Taiwan" },
+      target: { value: "Taipei" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add “\s*Taiwan”/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Taipei" }));
     await waitFor(() =>
       expect(screen.queryByText("Choose at least one destination.")).toBeNull(),
     );
@@ -248,7 +252,7 @@ describe("unified bilingual planner", () => {
     await waitFor(() => expect(mock.generate).toHaveBeenCalledTimes(1));
     const request = mock.generate.mock.calls[0]![0];
     expect(request.cities).toHaveLength(1);
-    expect(request.city_names).toEqual(["Taiwan"]);
+    expect(request.city_names).toEqual(["Taipei"]);
     expect(request.planning.journey.destinations).toEqual(request.cities);
   });
   it("marks conditional dates/endpoints and expands hidden fields with validation errors", async () => {
@@ -281,7 +285,7 @@ describe("unified bilingual planner", () => {
     fireEvent.change(screen.getByLabelText("Destinations"), {
       target: { value: "Huế" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add “\s*Huế”/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Hue" }));
     fireEvent.click(
       screen.getByText("Customize more (optional)", { exact: true }),
     );
@@ -356,7 +360,7 @@ describe("unified bilingual planner", () => {
       screen.getByPlaceholderText("Bạn muốn đi đâu? Ví dụ: Đà Nẵng"),
       { target: { value: "Đà Nẵng" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Thêm “\s*Đà Nẵng”/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Đà Nẵng" }));
     expect(await screen.findByLabelText("Số người lớn")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Ngân sách tổng cả nhóm (VND)"), {
       target: { value: "8000000" },

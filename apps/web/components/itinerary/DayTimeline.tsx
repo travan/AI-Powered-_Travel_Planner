@@ -250,6 +250,8 @@ export function DayTimeline({
                 key={`${day.day_number}-${index}`}
                 activity={activity}
                 index={index}
+                city={day.city}
+                city_slug={day.city_slug}
               />
             ))}
           </div>

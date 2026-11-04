@@ -4,6 +4,8 @@ import { useAppLanguage } from "../i18n/LanguageProvider";
 import { UiText, useUiText } from "../i18n/UiText";
 
 import React from "react";
+import { PlaceLookup } from "./PlaceLookup";
+import { mapUrl } from "@travel/types";
 import type { Activity, GoldenMoment, TicketOption } from "@travel/types";
 import { Badge } from "@travel/ui";
 
@@ -17,7 +19,7 @@ function TicketChip({ option }: { option: TicketOption }) {
       rel="noopener noreferrer"
       className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium ring-1 ring-gray-300 hover:ring-brand-400 hover:text-brand-700 transition-colors"
     >
-      {option.platform}
+      {option.platform} · <UiText text="Search" />
       {option.price_from && (
         <span className="text-gray-400">
           {" "}
@@ -54,9 +56,21 @@ function GoldenBadge({ moment }: { moment: GoldenMoment }) {
 interface ActivityCardProps {
   activity: Activity;
   index: number;
+  city?: string;
+  city_slug?: string;
 }
 
-export function ActivityCard({ activity, index }: ActivityCardProps) {
+export function ActivityCard({
+  activity: original,
+  index,
+  city,
+  city_slug,
+}: ActivityCardProps) {
+  const activity = {
+    ...original,
+    city: original.city ?? city,
+    city_slug: original.city_slug ?? city_slug,
+  };
   const t = useUiText();
   const { locale: formattingLocale } = useAppLanguage();
 
@@ -83,7 +97,6 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
       check_out: "Trả phòng",
       rest: "Nghỉ ngơi",
     };
-    const safe = (url?: string) => !!url && /^https?:\/\//i.test(url);
     const source =
       activity.evidence?.source === "catalog"
         ? "Dữ liệu địa điểm"
@@ -104,6 +117,9 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
               {t(labels[activity.kind] ?? activity.kind)} · {scheduleMeta}
             </p>
             <h4 className="mt-1 font-bold">{activity.name}</h4>
+            <p className="text-sm text-on-surface-variant">
+              {activity.city} {activity.address && `· ${activity.address}`}
+            </p>
           </div>
           <span className="text-sm">
             {activity.price?.amount != null ? (
@@ -164,17 +180,25 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
         </details>
         <a
           className="mt-3 inline-block text-sm font-semibold text-primary"
-          href={
-            safe(activity.maps_link)
-              ? activity.maps_link
-              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.name)}`
-          }
+          href={mapUrl(activity)}
           target="_blank"
           rel="noopener noreferrer"
         >
           {" "}
-          <UiText id="tc97139683ce3" fallback="Mở bản đồ" />{" "}
+          {formattingLocale === "vi"
+            ? activity.map_precision === "verified"
+              ? "Mở vị trí trên bản đồ"
+              : "Tìm trên bản đồ"
+            : activity.map_precision === "verified"
+              ? "Open location on Maps"
+              : "Search on Maps"}{" "}
         </a>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {ticketActivities.map((option, i) => (
+            <TicketChip key={i} option={option} />
+          ))}
+        </div>
+        {activity.map_precision !== "verified" && <PlaceLookup citySlug={activity.city_slug} name={activity.name} />}
       </article>
     );
   }
@@ -196,6 +220,7 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-semibold text-gray-900">{activity.name}</h4>
+              <span className="text-xs text-gray-500">{activity.city}</span>
               {typeof activity.category === "string" && activity.category && (
                 <Badge variant="default" className="text-xs">
                   {activity.category.replace(/_/g, " ")}
@@ -250,7 +275,7 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
         <div className="flex flex-wrap gap-3 pt-1">
           {activity.maps_link && (
             <a
-              href={activity.maps_link}
+              href={mapUrl(activity)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
@@ -266,7 +291,13 @@ export function ActivityCard({ activity, index }: ActivityCardProps) {
                   clipRule="evenodd"
                 />
               </svg>{" "}
-              <UiText id="t63f9a32c3e91" fallback="View on Maps" />{" "}
+              {formattingLocale === "vi"
+                ? activity.map_precision === "verified"
+                  ? "Mở vị trí trên bản đồ"
+                  : "Tìm trên bản đồ"
+                : activity.map_precision === "verified"
+                  ? "Open location on Maps"
+                  : "Search on Maps"}{" "}
             </a>
           )}
           {activity.booking_link && (

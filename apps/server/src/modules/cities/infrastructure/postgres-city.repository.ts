@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import * as travelTypes from "@travel/types";
 import {
   SQL_CLIENT,
@@ -38,13 +38,17 @@ export class PostgresCityRepository implements CityRepository {
   async search(query: string): Promise<City[]> {
     const result = await this.sql.query<CityRow>(
       `select slug, name, country, timezone, currency, lat, lon, popular
-       from cities
-       where slug ilike $1
+       from cities candidate
+       where (lookup_keys @> array[$2]::text[] or slug ilike $1
           or search_text ilike $1
-          or name::text ilike $1
+          or name::text ilike $1)
+         and (candidate.country<>'' and candidate.lat is not null and candidate.lon is not null
+           or not exists(select 1 from cities canonical where canonical.slug<>candidate.slug
+             and canonical.country<>'' and canonical.lat is not null and canonical.lon is not null
+             and canonical.lookup_keys && candidate.lookup_keys))
        order by popular desc, slug asc
        limit 20`,
-      [`%${query.trim()}%`],
+      [`%${query.trim()}%`, normalizeCityInput(query)],
     );
     return result.rows.map(mapCity);
   }
@@ -75,19 +79,20 @@ export class PostgresCityRepository implements CityRepository {
     const result = await this.sql.query<CityRow>(
       `select slug, name, country, timezone, currency, lat, lon, popular
        from cities
-       where slug = $1
+       where lookup_keys @> array[$2]::text[] or slug = $1
           or lower(name->>'en') = lower($1)
           or lower(name->>'vi') = lower($1)
-       order by case when slug = $1 then 0 else 1 end
+          or exists(select 1 from unnest(aliases) alias where lower(alias)=lower($1))
+       order by (country<>'' and lat is not null and lon is not null) desc, case when slug = $1 then 0 else 1 end
        limit 1`,
-      [value.trim()],
+      [value.trim(), normalizeCityInput(value)],
     );
     const row = result.rows[0];
     if (!row) return null;
 
     const [places, catalogPlaces, activities] = await Promise.all([
       this.sql.query<CityPlaceRow>(
-        `select id::text, last_verified_at::text, current_name as name,
+        `select id::text, last_verified_at::text, lat, lon, google_place_id, current_name as name,
                 type,
                 category,
                 normalized_address as address,
@@ -105,7 +110,7 @@ export class PostgresCityRepository implements CityRepository {
         [row.slug],
       ),
       this.sql.query<CityPlaceRow>(
-        `select id::text, last_verified_at::text, name,
+        `select id::text, last_verified_at::text, lat, lon, google_place_id, name,
                 case
                   when category='cafe' then 'cafe'
                   when category in ('restaurant','food') then 'restaurant'
@@ -154,36 +159,24 @@ export class PostgresCityRepository implements CityRepository {
     const existingByName = await this.sql.query<CityRow>(
       `select slug, name, country, timezone, currency, lat, lon, popular
        from cities
-       where lower(name->>'en') = lower($1)
+       where lookup_keys @> array[$2]::text[] or slug = $1 or lower(name->>'en') = lower($1)
           or lower(name->>'vi') = lower($1)
-       order by slug asc
-       limit 1`,
-      [normalizedName],
+          or exists(select 1 from unnest(aliases) alias where lower(alias)=lower($1))
+       order by case when slug=$1 then 0 when country<>'' and lat is not null and lon is not null then 1 else 2 end, slug asc
+       limit 3`,
+      [normalizedName, normalizeCityInput(normalizedName)],
     );
-    if (existingByName.rows[0]) return mapCity(existingByName.rows[0]);
-
-    const slug = slugifyCityName(normalizedName);
-    if (!slug) throw new Error("City name must contain letters or numbers");
-
-    await this.sql.query(
-      `insert into cities (
-         slug, name, country, timezone, currency, lat, lon, popular, search_text
-       )
-       values ($1, jsonb_build_object('en', $2::text, 'vi', $2::text), '', '', '', null, null, false, lower($2))
-       on conflict (slug) do nothing`,
-      [slug, normalizedName],
+    const identified = existingByName.rows.filter(
+      (row) => row.country && row.lat != null && row.lon != null,
     );
-
-    const saved = await this.sql.query<CityRow>(
-      `select slug, name, country, timezone, currency, lat, lon, popular
-       from cities
-       where slug = $1
-       limit 1`,
-      [slug],
-    );
-    const row = saved.rows[0];
-    if (!row) throw new Error(`City "${normalizedName}" was not saved`);
-    return mapCity(row);
+    const exact = identified.find((row) => row.slug === normalizedName);
+    if (exact) return mapCity(exact);
+    if (identified.length === 1) return mapCity(identified[0]!);
+    throw new BadRequestException({
+      code: identified.length > 1 ? "CITY_AMBIGUOUS" : "CITY_UNRESOLVED",
+      message:
+        "Select a city with its country/region if the name is ambiguous.",
+    });
   }
 }
 
@@ -198,4 +191,13 @@ function mapCity(row: CityRow): City {
     lon: row.lon,
     popular: row.popular,
   };
+}
+
+export function normalizeCityInput(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]/g, "");
 }

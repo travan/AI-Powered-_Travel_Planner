@@ -40,6 +40,9 @@ export class ExpenseSplitInputDto {
 }
 
 export class CreateExpenseDto {
+  @IsOptional()
+  @IsIn(["accommodation", "food", "activity", "transport", "shopping", "other"])
+  expense_type?: string;
   @IsString()
   @MinLength(1)
   @MaxLength(160)
@@ -91,6 +94,9 @@ export class CreateExpenseDto {
 }
 
 export class UpdateExpenseDto {
+  @IsOptional()
+  @IsIn(["accommodation", "food", "activity", "transport", "shopping", "other"])
+  expense_type?: string;
   @IsOptional()
   @IsString()
   @MinLength(1)

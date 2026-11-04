@@ -71,7 +71,7 @@ export class ItineraryController {
     }
     return {
       itinerary: detail.result
-        ? { id: detail.id, ...normalizeOllamaItinerary(detail.result) }
+        ? { id: detail.id, ...(await this.itineraries.presentStored(detail.result)) }
         : null,
     };
   }
@@ -105,7 +105,7 @@ export class ItineraryController {
     const detail = result.value;
     return {
       itineraries: detail.result
-        ? [{ id: detail.id, ...normalizeOllamaItinerary(detail.result) }]
+        ? [{ id: detail.id, ...(await this.itineraries.presentStored(detail.result)) }]
         : [],
     };
   }

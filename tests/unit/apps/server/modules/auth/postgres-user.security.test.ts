@@ -47,7 +47,7 @@ describe("PostgreSQL credential and session security", () => {
     ).toBeNull();
   });
 
-  it.each(["", "plaintext-password", "scrypt$salt$00", "bcrypt$salt$key"])(
+  it.each([null, "", "plaintext-password", "scrypt$salt$00", "bcrypt$salt$key"])(
     "rejects corrupt or unsupported password hashes: %s",
     async (password_hash) => {
       const query = vi

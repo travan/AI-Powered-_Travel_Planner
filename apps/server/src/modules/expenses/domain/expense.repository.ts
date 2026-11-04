@@ -4,6 +4,7 @@ import type { Expense, ExpenseSplit } from "./expense.entity.js";
 export const EXPENSE_REPOSITORY = Symbol("EXPENSE_REPOSITORY");
 
 export type ExpenseDraft = {
+  expenseType?: string;
   tripId: string;
   activityId?: string | null;
   billUploadId?: string | null;
@@ -22,17 +23,33 @@ export type ExpenseSplitDraft = {
   amount: number;
 };
 
-export type ExpensePatch = Partial<Omit<ExpenseDraft, "tripId" | "createdByUserId">> & {
+export type ExpensePatch = Partial<
+  Omit<ExpenseDraft, "tripId" | "createdByUserId">
+> & {
   updatedByUserId: string;
 };
 
 export type ExpenseRepository = {
-  findTripMember(input: { tripId: string; userId: string }): Promise<TripMember | null>;
+  findTripMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null>;
   listActiveTripMembers(tripId: string): Promise<TripMember[]>;
   listForTrip(tripId: string): Promise<Expense[]>;
-  findForTrip(input: { tripId: string; expenseId: string }): Promise<Expense | null>;
-  create(input: { expense: ExpenseDraft; splits: ExpenseSplitDraft[] }): Promise<Expense>;
-  update(input: { tripId: string; expenseId: string; patch: ExpensePatch; splits?: ExpenseSplitDraft[] }): Promise<Expense | null>;
+  findForTrip(input: {
+    tripId: string;
+    expenseId: string;
+  }): Promise<Expense | null>;
+  create(input: {
+    expense: ExpenseDraft;
+    splits: ExpenseSplitDraft[];
+  }): Promise<Expense>;
+  update(input: {
+    tripId: string;
+    expenseId: string;
+    patch: ExpensePatch;
+    splits?: ExpenseSplitDraft[];
+  }): Promise<Expense | null>;
   updateSplitStatus(input: {
     tripId: string;
     expenseId: string;

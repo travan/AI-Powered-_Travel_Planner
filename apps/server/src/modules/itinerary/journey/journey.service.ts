@@ -1,3 +1,4 @@
+import { logEvent } from "../../../observability/logger.js";
 import { createHash } from "node:crypto";
 import {
   createAIProvider,
@@ -250,7 +251,8 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     } catch (error) {
-      this.logger.error(
+      if (process.env.NODE_ENV === "production") logEvent("journey.job_failed", "error", { jobId: job?.id, code: "JOURNEY_JOB_FAILED" });
+      else this.logger.error(
         `Journey job ${job?.id ?? "claim"} failed`,
         error instanceof Error ? error.message : String(error),
       );
@@ -318,8 +320,11 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     sourceKind: "itinerary" | "trip",
     sourceId: string,
   ) {
+    // Forecast refreshes are independent of the saved text/revision being translated.
+    const sourcePlan = { ...plan };
+    delete sourcePlan.weather;
     return createHash("sha256")
-      .update(JSON.stringify({ sourceKind, sourceId, plan }))
+      .update(JSON.stringify({ sourceKind, sourceId, plan: sourcePlan }))
       .digest("hex");
   }
   async listTranslations(
@@ -797,7 +802,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
             "Giá phòng đã chọn chưa đủ cho toàn bộ các đêm; tổng ngân sách phòng vẫn là ước tính.",
         });
     }
-    return plan;
+    return this.itineraries.refreshPresentation(plan);
   }
   async lockPlan(
     tripId: string,
@@ -1111,8 +1116,8 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         "Lựa chọn lưu trú; cần kiểm tra lại tuyến từ chỗ ở mới.",
       );
     const saved = await this.sql.query<{ id: string }>(
-      `insert into trip_plan_revisions(trip_id,user_id,base_version,previous_plan,candidate,diff) values($1,$2,$3,$4,$5,$6) returning id::text`,
-      [tripId, userId, before.version, before, candidate, diff],
+      `insert into trip_plan_revisions(trip_id,user_id,base_version,previous_plan,candidate,diff,instruction,scope) values($1,$2,$3,$4,$5,$6,$7,$8) returning id::text`,
+      [tripId, userId, before.version, before, candidate, diff, dto.instruction ?? null, dto.scope],
     );
     return saved.rows[0]!.id;
   }

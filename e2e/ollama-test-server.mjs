@@ -57,6 +57,14 @@ createServer(async (req, res) => {
           ],
     budget_breakdown: { activities_estimate: 10 },
   };
+  if (mode === "learning-quality") {
+    result.days=[{city:"Tokyo",date:"2026-11-04",day_number:1,title:"Detailed day",activities:[
+      ["07:00","meal","breakfast"],["08:00","visit"],["09:00","visit"],["10:00","visit"],["11:00","visit"],["12:00","meal","lunch"],["13:00","visit"],["14:00","visit"],["18:00","meal","dinner"]
+    ].map(([time,kind,meal_slot],index)=>({name:kind==="meal"?`Restaurant ${index}`:`Tokyo venue ${index}`,time,kind,meal_slot,category:kind==="meal"?"food":"attraction",duration:"1h",duration_minutes:60,travel_minutes:0,cost:5,currency:"USD",description:"Spend time discovering the local collection and its main highlights. Take a quiet break to enjoy the atmosphere and understand the neighborhood. Bring water and confirm opening hours before leaving for the next nearby stop.",maps_link:""})),daily_cost_estimate:45}];
+    result.transport_summary=[{segment:"Walking route",from:"Tokyo",to:"Tokyo",recommended_mode:"walk",price:{amount:0,currency:"USD",scope:"group",status:"estimated"},options:[]}];
+    result.hotels=[];result.restaurants=[];result.suggestions=[];
+    result.budget_breakdown={accommodation:0,food:15,activities:30,transport:0,contingency:5,total:50,currency:"USD",per_person:50,per_day:50};
+  }
   const content =
     mode === "malformed"
       ? '{"days":'
