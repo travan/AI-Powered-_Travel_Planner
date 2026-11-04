@@ -224,7 +224,7 @@ describe("ItineraryService.generate", () => {
           }),
         }),
       );
-      expect(cities.remember).toHaveBeenCalledWith("Unknown Place");
+      expect(cities.remember).toHaveBeenCalledWith("Unknown Place", "unknown-place");
       expect(cities.findForPlanning).toHaveBeenCalledWith("unknown-place");
     } finally {
       vi.unstubAllEnvs();

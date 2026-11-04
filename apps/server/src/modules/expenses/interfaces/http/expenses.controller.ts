@@ -1,5 +1,17 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { CurrentUser, type CurrentUserValue } from "../../../../shared/nest/current-user.decorator.js";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  CurrentUser,
+  type CurrentUserValue,
+} from "../../../../shared/nest/current-user.decorator.js";
 import { throwServiceError } from "../../../../shared/nest/http-errors.js";
 import { JwtAuthGuard } from "../../../../shared/nest/jwt-auth.guard.js";
 import { ExpensesService } from "../../application/expenses.service.js";
@@ -15,11 +27,19 @@ import {
 @Controller("api/trips/:tripId/expenses")
 @UseGuards(JwtAuthGuard)
 export class ExpensesController {
-  constructor(@Inject(ExpensesService) private readonly expenses: ExpensesService) {}
+  constructor(
+    @Inject(ExpensesService) private readonly expenses: ExpensesService,
+  ) {}
 
   @Get()
-  async list(@Param() params: ExpenseTripParamsDto, @CurrentUser() user: CurrentUserValue) {
-    const result = await this.expenses.listForTrip({ tripId: params.tripId, actorUserId: user.sub });
+  async list(
+    @Param() params: ExpenseTripParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.expenses.listForTrip({
+      tripId: params.tripId,
+      actorUserId: user.sub,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -28,9 +48,13 @@ export class ExpensesController {
   async create(
     @Param() params: ExpenseTripParamsDto,
     @Body() dto: CreateExpenseDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
-    const result = await this.expenses.create({ tripId: params.tripId, actorUserId: user.sub, dto });
+    const result = await this.expenses.create({
+      tripId: params.tripId,
+      actorUserId: user.sub,
+      dto,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -39,7 +63,7 @@ export class ExpensesController {
   async update(
     @Param() params: ExpenseParamsDto,
     @Body() dto: UpdateExpenseDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
     const result = await this.expenses.update({
       tripId: params.tripId,
@@ -55,7 +79,7 @@ export class ExpensesController {
   async updateSplitStatus(
     @Param() params: ExpenseSplitParamsDto,
     @Body() dto: UpdateExpenseSplitStatusDto,
-    @CurrentUser() user: CurrentUserValue
+    @CurrentUser() user: CurrentUserValue,
   ) {
     const result = await this.expenses.updateSplitStatus({
       tripId: params.tripId,

@@ -118,7 +118,7 @@ export class AuthService {
     return { ok: true };
   }
 
-  private async signSession(jwt: JwtSigner, user: User): Promise<AuthSession> {
+  async signSession(jwt: JwtSigner, user: User): Promise<AuthSession> {
     const tokens = this.newTokens(jwt, user);
     const { expiresAt } = await this.users.createSession(tokens);
     return this.sessionResponse(user, tokens, expiresAt);

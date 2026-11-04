@@ -1,4 +1,8 @@
 "use client";
+import { localizedPlan } from "@travel/types";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+import { PlannerLearningPanel } from "./PlannerLearningPanel";
+import { WeatherPanel } from "./WeatherPanel";
 import React, { useState } from "react";
 import type { Itinerary } from "@travel/types";
 import { TranslationControls } from "./TranslationControls";
@@ -19,7 +23,8 @@ export function ItineraryContents({
   token: string;
 }) {
   const [translation, setTranslation] = useState<Itinerary | null>(null);
-  const display = translation ?? plan;
+  const { locale } = useAppLanguage();
+  const display = localizedPlan(translation ?? plan, locale);
   return (
     <>
       <TranslationControls
@@ -28,6 +33,8 @@ export function ItineraryContents({
         token={token}
         onChange={setTranslation}
       />
+      <PlannerLearningPanel plan={display} token={token} itineraryId={sourceId} />
+      <WeatherPanel plan={display} />
       <OverviewCard itinerary={display} />
       <JourneySummary plan={display} />
       {display.seasonal_notes && (

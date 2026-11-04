@@ -1,3 +1,11 @@
+import { PlannerLearningService } from "../learning/learning.service.js";
+import { WeatherService } from "../enrichment/weather.service.js";
+import {
+  enrichTravel,
+  itineraryQuality,
+  reconcileBudget,
+} from "../enrichment/travel-enrichment.js";
+import { normalizeOllamaItinerary } from "@travel/ai";
 import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
@@ -44,6 +52,9 @@ export class ItineraryService {
     private readonly itineraries: ItineraryRepository,
     @Inject(CitiesService)
     private readonly cities: CitiesService,
+    @Inject(WeatherService) private readonly weather?: WeatherService,
+    @Inject(PlannerLearningService)
+    private readonly learning?: PlannerLearningService,
   ) {}
 
   async getVisible(input: {
@@ -98,38 +109,65 @@ export class ItineraryService {
       request.budget = request.planning.budget.total;
       request.currency = request.planning.budget.currency;
     }
+    const requestId = await this.learning?.record(
+      input.userId,
+      "generation_request",
+      { request },
+    );
     await input.onStage?.("catalog");
     const names = input.dto.city_names?.length
       ? input.dto.city_names
       : input.dto.cities;
-    const rememberedCities = await Promise.all(
-      names.map(async (name) => {
-        const city = await this.cities.remember(name);
-        const planningData = await this.cities.findForPlanning(city.slug);
-        const displayName =
-          city.name[request.locale] ??
-          city.name.en ??
-          Object.values(city.name)[0] ??
-          city.slug;
-        return {
-          catalogReference: { slug: city.slug, name: displayName },
-          planningData: planningData
-            ? toPreFetchedCityData(
-                planningData,
-                request.currency,
-                request.locale,
-              )
-            : toMinimalCityData(name, request.currency),
-        };
-      }),
-    );
+    const rememberedCities = [];
+    for (const [index, name] of names.entries()) {
+      const city = await this.cities.remember(name, input.dto.cities[index]);
+      const planningData = await this.cities.findForPlanning(city.slug);
+      const displayName =
+        city.name[request.locale] ??
+        city.name.en ??
+        Object.values(city.name)[0] ??
+        city.slug;
+      rememberedCities.push({
+        city: planningData ?? { ...city, places: [], activities: [] },
+        catalogReference: {
+          slug: city.slug,
+          name: city.name.en ?? displayName,
+        },
+        planningData: planningData
+          ? toPreFetchedCityData(planningData, request.currency, request.locale)
+          : toMinimalCityData(name, request.currency),
+      });
+    }
+    request.cities = rememberedCities.map(({ city }) => city.slug);
     const cityData = rememberedCities.map(({ planningData }) => planningData);
+    const memory =
+      this.learning && requestId
+        ? await this.learning.context(input.userId, request, requestId)
+        : undefined;
+    if (memory && cityData[0]) cityData[0].learning_context = memory;
     const providerName = process.env["AI_PROVIDER"] ?? "mock";
     const cacheKey = generationCacheKey(
       request,
       rememberedCities.map(({ catalogReference }) => catalogReference.slug),
       providerName,
-      createHash("sha256").update(JSON.stringify(cityData)).digest("hex"),
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            cityData.map((city) => ({
+              ...city,
+              learning_context: city.learning_context
+                ? {
+                    preferences: city.learning_context.preferences,
+                    costs: city.learning_context.costs,
+                  }
+                : undefined,
+              places: city.places.filter(trustedCatalogEntry),
+              restaurants: city.restaurants.filter(trustedCatalogEntry),
+              hotels: city.hotels.filter(trustedCatalogEntry),
+            })),
+          ),
+        )
+        .digest("hex"),
     );
     if (!input.dto.force_refresh) {
       const reusable = await this.itineraries.findReusable({
@@ -137,10 +175,17 @@ export class ItineraryService {
         cacheKey,
       });
       if (reusable) {
+        if (this.learning)
+          await this.learning.record(
+            input.userId,
+            "plan_returned",
+            { cache_hit: true, request_id: requestId },
+            reusable.id,
+          );
         return {
           status: "cached",
           itinerary_id: reusable.id,
-          result: reusable.result,
+          result: await this.refreshPresentation(reusable.result),
           cache_hit: true,
         };
       }
@@ -160,6 +205,41 @@ export class ItineraryService {
       overview = await provider.generateOverview(request, cityData);
       await input.onStage?.("detail");
       detail = await provider.generateDetail(request, overview, cityData);
+      if (this.learning)
+        await this.learning.record(input.userId, "model_candidate", {
+          request_id: requestId,
+          provider: providerName,
+          attempt: 1,
+          result: detail,
+        });
+      const quality = itineraryQuality(detail, request);
+      if (quality.length && providerName !== "mock") {
+        await input.onStage?.("repair");
+        try {
+          const repaired = await provider.generateDetail(
+            {
+              ...request,
+              prompt_text: `${request.prompt_text ?? ""}\nRepair the following quality issues once; preserve the trip constraints and return the complete itinerary JSON:\n${quality.map((i) => i.message).join("\n")}`,
+            },
+            overview,
+            cityData,
+          );
+          if (this.learning)
+            await this.learning.record(input.userId, "model_candidate", {
+              request_id: requestId,
+              provider: providerName,
+              attempt: 2,
+              result: repaired,
+            });
+          if (
+            repaired.days?.length &&
+            itineraryQuality(repaired, request).length < quality.length
+          )
+            detail = repaired;
+        } catch {
+          /* Keep the usable original and explicit issues when repair fails. */
+        }
+      }
       const usage = provider.getUsage?.() ?? [];
       if (usage.length) {
         detail.ai_usage = usage;
@@ -218,44 +298,31 @@ export class ItineraryService {
       detail = upgradeJourneyPlan(detail, request);
       detail.locale = request.locale === "vi" ? "vi" : "en";
       detail.trip_style = request.trip_style;
-      const known = cityData
-        .flatMap((city) => [
-          ...city.places,
-          ...city.restaurants,
-          ...city.hotels,
-        ])
-        .filter((value) => value && typeof value === "object") as Record<
-        string,
-        unknown
-      >[];
-      const evidenceFor = (name: string) => {
-        const match = known.find(
-          (place) =>
-            String(place["name"] ?? "")
-              .trim()
-              .toLocaleLowerCase() === name.trim().toLocaleLowerCase(),
-        );
-        return match &&
-          !["ai_generated", "user_submission"].includes(String(match["source"]))
-          ? {
-              source: "catalog" as const,
-              source_id:
-                typeof match["id"] === "string" ? match["id"] : undefined,
-              verified_at:
-                typeof match["last_verified_at"] === "string"
-                  ? match["last_verified_at"]
-                  : undefined,
-            }
-          : { source: "ai_suggestion" as const };
-      };
-      for (const day of detail.days)
-        for (const activity of day.activities)
-          activity.evidence = evidenceFor(activity.name);
-      for (const hotel of detail.hotels)
-        hotel.evidence = evidenceFor(hotel.name);
-      for (const restaurant of detail.restaurants)
-        restaurant.evidence = evidenceFor(restaurant.name);
     }
+    detail.locale = request.locale === "vi" ? "vi" : "en";
+    detail = enrichTravel(
+      detail,
+      rememberedCities.map((c) => c.city),
+      request,
+    );
+    detail.issues = [
+      ...(detail.issues ?? []),
+      ...itineraryQuality(detail, request),
+    ];
+    detail = reconcileBudget(detail, request);
+    if (this.weather)
+      detail.weather = await this.weather.forPlan(
+        detail,
+        new Map(rememberedCities.map((c) => [c.city.slug, c.city])),
+      );
+    if (memory)
+      detail.learning_summary = {
+        past_plans: memory.past_plans,
+        approved_expense_samples: memory.costs.reduce(
+          (n, c) => n + c.samples,
+          0,
+        ),
+      };
     detail.generation_cache_key = cacheKey;
     const itineraryId = await this.itineraries.createComplete({
       userId: input.userId,
@@ -265,12 +332,39 @@ export class ItineraryService {
         ({ catalogReference }) => catalogReference,
       ),
     });
+    if (this.learning)
+      await this.learning.record(
+        input.userId,
+        "plan_returned",
+        { cache_hit: false, request_id: requestId },
+        itineraryId,
+      );
     return {
       status: "cached" as const,
       itinerary_id: itineraryId,
       result: detail,
       cache_hit: false,
     };
+  }
+  async refreshPresentation(plan: Itinerary): Promise<Itinerary> {
+    if (!this.weather) return plan;
+    const values = [
+      ...new Set(plan.days.map((d) => d.city_slug ?? d.city).filter(Boolean)),
+    ];
+    const cities = (
+      await Promise.all(
+        values.map((value) => this.cities.findForPlanning(value)),
+      )
+    ).filter((c): c is CityPlanningData => !!c);
+    const display = enrichTravel(plan, cities);
+    display.weather = await this.weather.forPlan(
+      display,
+      new Map(cities.map((c) => [c.slug, c])),
+    );
+    return display;
+  }
+  async presentStored(result: Record<string, unknown>): Promise<Itinerary> {
+    return this.refreshPresentation(normalizeOllamaItinerary(result));
   }
   private async recordFailure(
     userId: string,
@@ -300,6 +394,17 @@ export class ItineraryService {
   }
 }
 
+function trustedCatalogEntry(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "source" in value &&
+    !["ai_generated", "user_submission", "user_added"].includes(
+      String(value.source),
+    )
+  );
+}
+
 function generationCacheKey(
   request: ItineraryInput,
   citySlugs: string[],
@@ -317,7 +422,7 @@ function generationCacheKey(
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: 3,
+        version: 5,
         planning: request.planning ?? null,
         catalog_version: process.env["CITY_CATALOG_VERSION"] ?? "1",
         catalogFingerprint,
@@ -353,6 +458,9 @@ function toPreFetchedCityData(
     Object.values(city.name)[0] ??
     city.slug;
   const placeData = city.places.map((place) => ({
+    lat: place.lat,
+    lon: place.lon,
+    google_place_id: place.google_place_id,
     id: place.id,
     last_verified_at: place.last_verified_at,
     name: place.name,
@@ -400,7 +508,8 @@ function toPreFetchedCityData(
     sunrise: "Unknown",
     sunset: "Unknown",
     daylight_hours: "Unknown",
-    weather_note: "No verified local weather data was provided.",
+    weather_note:
+      "Live weather is displayed separately by city and date; do not invent forecasts in seasonal notes.",
     weather_highlights: [],
     weather_warnings: [],
     transport_options: [],
@@ -422,7 +531,8 @@ function toMinimalCityData(city: string, currency: string): PreFetchedCityData {
     sunrise: "Unknown",
     sunset: "Unknown",
     daylight_hours: "Unknown",
-    weather_note: "No verified local weather data was provided.",
+    weather_note:
+      "Live weather is displayed separately by city and date; do not invent forecasts in seasonal notes.",
     weather_highlights: [],
     weather_warnings: [],
     transport_options: [],

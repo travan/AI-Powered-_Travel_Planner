@@ -6,6 +6,8 @@ import { workerRequestContext } from "../dist/cloudflare/request-context.js";
 import { JourneyService } from "../dist/modules/itinerary/journey/journey.service.js";
 import { CityCatalogWorker } from "../dist/modules/cities/application/city-catalog.worker.js";
 
+import { withWorkerLogs, logEvent } from "../dist/observability/logger.js";
+
 let ready;
 function application() {
   ready ??= (async () => {
@@ -37,16 +39,18 @@ async function inRequest(env, ctx, work) {
 
 export default {
   async fetch(request, env, ctx) {
-    return inRequest(env, ctx, async () => {
+    return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
       const { handler } = await application();
-      return handler.fetch(request, env, ctx);
-    });
+      const response = await handler.fetch(request, env, ctx);
+      if (response.status >= 500) logEvent("http.failed", "error", { code: `HTTP_${response.status}` });
+      return response;
+    }));
   },
   async scheduled(_event, env, ctx) {
-    return inRequest(env, ctx, async () => {
+    return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
       const { app } = await application();
       await app.get(JourneyService).processNextJob();
       await app.get(CityCatalogWorker).processNextJob();
-    });
+    }), true);
   },
 };

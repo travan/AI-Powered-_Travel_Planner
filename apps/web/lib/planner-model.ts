@@ -3,11 +3,12 @@ import {
   localTripInstant,
   type PlanningCriteria,
   type GenerateRequest,
+  type SelectedCity,
 } from "@travel/types";
 import { restorePlanningPreferences } from "./planning-preferences";
 export type PlannerDraft = {
   planning: PlanningCriteria;
-  cities: { slug: string; name: string }[];
+  cities: SelectedCity[];
   start: string;
   end: string;
   days: number;

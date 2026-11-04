@@ -1,10 +1,16 @@
 "use client";
 import { UiText, useUiText } from "../i18n/UiText";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getGoogleAccountMethods,
+  type GoogleAccountMethods,
+} from "@/lib/google-auth";
 
 interface AccountMenuProps {
   avatarUrl: string | null;
@@ -18,17 +24,35 @@ export function AccountMenu({
   email,
 }: AccountMenuProps) {
   const t = useUiText();
+  const authText = useTranslations("auth");
 
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [methods, setMethods] = useState<GoogleAccountMethods | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAuthenticated = Boolean(avatarUrl || displayName || email);
   const signInHref = pathname
     ? `/login?redirectTo=${encodeURIComponent(pathname)}`
     : "/login";
+
+  useEffect(() => {
+    if (!open || !LOCAL_AUTH_ENABLED || !isAuthenticated) return;
+    let active = true;
+    setMethods(null);
+    createClient()
+      .auth.getSession()
+      .then(() => getGoogleAccountMethods())
+      .then((value) => {
+        if (active) setMethods(value);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [open, isAuthenticated]);
 
   // Close on outside click
   useEffect(() => {
@@ -130,6 +154,19 @@ export function AccountMenu({
                 </span>{" "}
                 <UiText id="tbdb1c97b12c9" fallback="My trips" />{" "}
               </Link>
+              {LOCAL_AUTH_ENABLED &&
+                methods?.hasPassword &&
+                !methods.googleLinked &&
+                methods.googleEnabled && (
+                  <Link
+                    role="menuitem"
+                    href="/account/security"
+                    onClick={() => setOpen(false)}
+                    className="block px-4 py-3 text-sm hover:bg-surface-container-low"
+                  >
+                    {authText("google_link_title")}
+                  </Link>
+                )}
               <button
                 role="menuitem"
                 onClick={handleSignOut}

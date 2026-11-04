@@ -315,6 +315,7 @@ export function normalizeOllamaItinerary(
                     const priceFrom = text(ticketRecord["price_from"]);
                     const note = text(ticketRecord["note"]);
                     return {
+                      ...ticketRecord,
                       platform,
                       url,
                       ...(priceFrom ? { price_from: priceFrom } : {}),
@@ -371,6 +372,7 @@ export function normalizeOllamaItinerary(
     },
     total_cost: totalCost ?? total,
     budget_breakdown: {
+      ...Object.fromEntries(["items", "complete", "missing_items", "transport_details"].filter(key => key in rawBudget).map(key => [key, rawBudget[key]])),
       accommodation,
       food,
       activities,

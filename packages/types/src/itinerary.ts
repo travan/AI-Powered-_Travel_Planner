@@ -86,9 +86,55 @@ export type SSEEventType =
   | "complete"
   | "error";
 
+export interface BookingLink {
+  platform: string;
+  url: string;
+  kind: "search" | "product";
+}
+export interface PlaceLocation {
+  city_slug?: string;
+  city?: string;
+  country?: string;
+  address?: string;
+  lat?: number | null;
+  lon?: number | null;
+  google_place_id?: string;
+  map_precision?: "verified" | "search";
+}
+export interface TripWeather {
+  reference_only?: boolean;
+  city_slug: string;
+  date: string;
+  timezone: string;
+  status: "forecast" | "climate" | "unavailable";
+  partial?: boolean;
+  temperature_min?: number;
+  temperature_max?: number;
+  precipitation_mm?: number;
+  symbol?: string;
+  source: string;
+  source_url: string;
+  updated_at?: string;
+  climate_period?: string;
+}
+export interface BudgetItem {
+  id: string;
+  category:
+    | "accommodation"
+    | "food"
+    | "activities"
+    | "transport"
+    | "contingency";
+  transport_kind?: "flight" | "intercity" | "airport_transfer" | "local";
+  label: string;
+  amount: number | null;
+  status: "estimated" | "user_confirmed";
+}
+
 // ─── Ticket & Suggestion ──────────────────────────────────────────────────────
 
 export interface TicketOption {
+  kind?: "search" | "product";
   platform: TicketPlatform;
   url: string;
   price_from?: string;
@@ -128,6 +174,16 @@ export interface TransportOption {
 }
 
 export interface TransportSegment {
+  booking_context?: {
+    start_date?: string;
+    end_date?: string;
+    travelers: number;
+  };
+  from_city_slug?: string;
+  to_city_slug?: string;
+  price?: ScopedPrice;
+  transport_kind?: BudgetItem["transport_kind"];
+  booking_links?: BookingLink[];
   id?: string;
   segment: string;
   from: string;
@@ -138,7 +194,8 @@ export interface TransportSegment {
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
-export interface Activity {
+export interface Activity extends PlaceLocation {
+  meal_slot?: "breakfast" | "lunch" | "dinner";
   id?: string;
   kind?: TimelineKind;
   duration_minutes?: number;
@@ -164,6 +221,8 @@ export interface Activity {
 // ─── Day ──────────────────────────────────────────────────────────────────────
 
 export interface ItineraryDay {
+  city_slug?: string;
+  city_names?: Record<string, string>;
   id?: string;
   day_number: number;
   date: string;
@@ -176,7 +235,8 @@ export interface ItineraryDay {
 
 // ─── Hotels & Restaurants ─────────────────────────────────────────────────────
 
-export interface Hotel {
+export interface Hotel extends PlaceLocation {
+  booking_links?: BookingLink[];
   id?: string;
   city?: string;
   rooms?: number;
@@ -194,7 +254,8 @@ export interface Hotel {
   note?: string;
 }
 
-export interface Restaurant {
+export interface Restaurant extends PlaceLocation {
+  meal_slot?: "breakfast" | "lunch" | "dinner";
   id?: string;
   city?: string;
   day_number?: number;
@@ -229,6 +290,12 @@ export interface SeasonalNotes {
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
 export interface BudgetBreakdown {
+  items?: BudgetItem[];
+  complete?: boolean;
+  missing_items?: string[];
+  transport_details?: Partial<
+    Record<NonNullable<BudgetItem["transport_kind"]>, number | null>
+  >;
   accommodation: number;
   food: number;
   activities: number;
@@ -243,6 +310,12 @@ export interface BudgetBreakdown {
 // ─── Itinerary ────────────────────────────────────────────────────────────────
 
 export interface Itinerary {
+  learning_summary?: { past_plans: number; approved_expense_samples: number };
+  weather?: TripWeather[];
+  city_catalog?: Record<
+    string,
+    { name: Record<string, string>; country: string; timezone: string }
+  >;
   locale?: "en" | "vi";
   trip_style?: TripStyle;
   schema_version?: number;

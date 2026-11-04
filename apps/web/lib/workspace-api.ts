@@ -190,6 +190,7 @@ export type ExpenseSplit = {
 };
 
 export type Expense = {
+  expenseType?: string;
   id: string;
   tripId: string;
   activityId: string | null;
@@ -289,6 +290,7 @@ export type DataQualitySignal = {
 };
 
 export type CreateExpenseInput = {
+  expense_type?: string;
   title: string;
   description?: string;
   amount: number;

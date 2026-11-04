@@ -58,6 +58,8 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
         </div>
         {showBudgetSummary && (
           <Badge variant="info" className="text-sm px-3 py-1">
+            {itinerary.budget_breakdown?.complete === false &&
+              (formattingLocale === "vi" ? "Tạm tính · " : "Subtotal · ")}
             {itinerary.currency}{" "}
             {itinerary.total_cost.toLocaleString(formattingLocale)}
           </Badge>

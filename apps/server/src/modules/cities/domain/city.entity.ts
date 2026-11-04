@@ -10,6 +10,9 @@ export type City = {
 };
 
 export type CityPlace = {
+  lat?: number | null;
+  lon?: number | null;
+  google_place_id?: string;
   id?: string;
   last_verified_at?: string;
   name: string;

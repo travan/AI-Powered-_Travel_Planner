@@ -19,7 +19,7 @@ import {
 
 export async function middleware(request: NextRequest) {
   if (LOCAL_AUTH_ENABLED) {
-    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
+    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile", "/account"];
     const isProtected = protectedPaths.some((p) =>
       request.nextUrl.pathname.startsWith(p),
     );
@@ -74,7 +74,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (MOCK_AUTH_ENABLED) {
-    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
+    const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile", "/account"];
     const isProtected = protectedPaths.some((p) =>
       request.nextUrl.pathname.startsWith(p),
     );
@@ -130,7 +130,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile"];
+  const protectedPaths = ["/dashboard", "/saved", "/trips", "/profile", "/account"];
   const isProtected = protectedPaths.some((p) =>
     request.nextUrl.pathname.startsWith(p),
   );

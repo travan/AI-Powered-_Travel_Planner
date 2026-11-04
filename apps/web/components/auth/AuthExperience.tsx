@@ -3,10 +3,11 @@ import { UiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { requestPasswordRecovery } from "@/lib/password-recovery";
+import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 import { createClient } from "@/lib/supabase/client";
 import { checkAccountExists } from "@/lib/api";
 import { normalizeSupabaseAuthError } from "@travel/types";
@@ -22,6 +23,13 @@ type LikeAuthError = {
   status?: number;
   code?: string;
 };
+
+function googleErrorKey(code?: string) {
+  if (code === "google_link_required") return "google_link_required";
+  if (code === "google_cancelled") return "google_cancelled";
+  if (code === "google_reauth_required") return "google_reauth_required";
+  return "google_error";
+}
 
 const HERO_BACKGROUND_IMAGE =
   "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80";
@@ -67,6 +75,21 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
   const [checkingAccount, setCheckingAccount] = useState(false);
 
   const isLogin = mode === "login";
+  const localGoogle = LOCAL_AUTH_ENABLED && process.env.NEXT_PUBLIC_E2E_FORCE_REAL_AUTH_CLIENT !== "true";
+  const [googleEnabled, setGoogleEnabled] = useState(!localGoogle);
+  useEffect(() => {
+    if (!localGoogle) return;
+    const controller = new AbortController();
+    fetch("/api/auth/providers", { signal: controller.signal, cache: "no-store" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => setGoogleEnabled(data?.google === true)).catch(() => {});
+    return () => controller.abort();
+  }, [localGoogle]);
+  const googleError = (code?: string) => t(googleErrorKey(code));
+  useEffect(() => {
+    const code = searchParams.get("error");
+    if (code?.startsWith("google_")) setErrorMessage(t(googleErrorKey(code)));
+  }, [searchParams, t]);
 
   function setNormalizedAuthError(error: unknown) {
     const normalized = normalizeSupabaseAuthError(error as LikeAuthError);
@@ -92,7 +115,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
       });
 
       if (error) {
-        setErrorMessage(t(normalizeSupabaseAuthError(error).i18nKey));
+        setErrorMessage(localGoogle ? googleError((error as LikeAuthError).code) : t(normalizeSupabaseAuthError(error).i18nKey));
         return;
       }
 
@@ -285,7 +308,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
               <p className="text-on-surface-variant">{t("subtitle")}</p>
             </header>
 
-            <button
+            {googleEnabled && <button
               type="button"
               disabled={loading}
               onClick={handleGoogleAuth}
@@ -294,7 +317,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
             >
               <GoogleIcon />
               {t("with_google")}
-            </button>
+            </button>}
 
             <div className="relative mb-8 flex items-center">
               <div className="h-px flex-1 bg-outline-variant/45" />
@@ -462,21 +485,18 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
             </form>
 
             <footer className="mt-auto flex justify-center gap-6 pt-10 text-xs font-medium text-on-surface-variant/80">
-              <Link href="/terms" className="transition hover:text-on-surface">
-                {t("terms")}
-              </Link>
               <Link
                 href="/privacy"
                 className="transition hover:text-on-surface"
               >
                 {t("privacy")}
               </Link>
-              <Link
-                href="/support"
+              <a
+                href="mailto:travan.it.96@gmail.com"
                 className="transition hover:text-on-surface"
               >
                 {t("support")}
-              </Link>
+              </a>
             </footer>
           </div>
         </div>

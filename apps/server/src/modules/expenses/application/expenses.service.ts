@@ -88,6 +88,7 @@ export class ExpensesService {
         activityId: input.dto.activity_id ?? null,
         billUploadId: input.dto.bill_upload_id ?? null,
         title: input.dto.title.trim(),
+        expenseType: input.dto.expense_type ?? "other",
         description: input.dto.description?.trim() || null,
         amount: input.dto.amount,
         currency: input.dto.currency.toUpperCase(),
@@ -178,6 +179,7 @@ export class ExpensesService {
       expenseId: input.expenseId,
       patch: {
         title: input.dto.title?.trim(),
+        expenseType: input.dto.expense_type,
         description: input.dto.description?.trim(),
         amount: input.dto.amount,
         currency: input.dto.currency?.toUpperCase(),

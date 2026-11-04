@@ -103,3 +103,7 @@ Expo Web tests do not establish native compatibility. Password recovery also
 requires a configured mail transport. Video transcription is unavailable with the
 configured Cloudflare text model. Free service quotas still apply; AI failures are
 returned instead of substituting mock output.
+
+## Google sign-in and observability costs
+
+See [Google OAuth and free observability runbook](google-auth-observability.md) for configuration, quotas, deployment, testing and rollback. Google remains disabled until its credentials are configured.

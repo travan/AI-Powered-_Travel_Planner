@@ -141,6 +141,16 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
   // Browser roles receive no grants. The dedicated server role needs explicit
   // policies for server-only tables protected by RLS.
   for (const table of [
+    "planner_learning_settings",
+    "planner_learning_events",
+    "planner_feedback",
+    "bill_ocr_documents",
+    "city_reconciliation_report",
+    "catalog_versions",
+    "travel_external_cache",
+    "external_service_limits",
+    "auth_identities",
+    "oauth_transactions",
     "itinerary_jobs",
     "trip_plan_revisions",
     "accommodations",

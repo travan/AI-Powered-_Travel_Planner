@@ -9,7 +9,23 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
 
   const issueText = useIssueText();
   const t = useUiText();
-  if (!plan.planning) return null;
+  if (!plan.planning)
+    return plan.issues?.length ? (
+      <section
+        className="rounded-xl bg-amber-50 p-4 text-amber-900"
+        aria-label={
+          formattingLocale === "vi"
+            ? "Cần kiểm tra trước khi đặt"
+            : "Check before booking"
+        }
+      >
+        <ul className="list-disc space-y-1 pl-5 text-sm">
+          {plan.issues.map((issue, i) => (
+            <li key={`${issue.code}:${i}`}>{issueText(issue)}</li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
   const p = plan.planning,
     end = p.journey.return_to_origin ? p.journey.origin : p.journey.endpoint;
   // Travel days can already include the origin and final destination.

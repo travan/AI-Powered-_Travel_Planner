@@ -1,3 +1,4 @@
+import { migratePostgres } from "../apps/server/scripts/migrate-postgres.mjs";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
@@ -78,30 +79,7 @@ try {
       "Runtime role already exists but its local credentials are missing; refusing to rotate it",
     );
   }
-  await client.query(`create table if not exists travel_cloud.schema_migrations
-    (name text primary key, applied_at timestamptz not null default now())`);
-  const folder = new URL("apps/server/src/database/migrations/", root);
-  const files = (await fs.readdir(folder))
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-  for (const name of files) {
-    const done = await client.query(
-      "select 1 from travel_cloud.schema_migrations where name=$1",
-      [name],
-    );
-    if (done.rowCount) continue;
-    let sql = await fs.readFile(new URL(name, folder), "utf8");
-    // Keep the source migrations unchanged; isolate their explicit table references.
-    sql = sql
-      .replace(/\bpublic\./g, "travel_cloud.")
-      .replace(/^\s*(begin|commit);\s*$/gim, "");
-    await client.query(sql);
-    await client.query(
-      "insert into travel_cloud.schema_migrations(name) values($1)",
-      [name],
-    );
-    console.log(`Validated migration: ${name}`);
-  }
+  await migratePostgres(client, undefined, { schema: "travel_cloud", outerTransaction: true });
   await client.query(`create table if not exists travel_cloud.user_prompt_history (
     id uuid primary key default gen_random_uuid(), user_id uuid not null references travel_cloud.users(id) on delete cascade,
     prompt_text text not null default '', normalized_query jsonb not null default '{}', created_at timestamptz not null default now());

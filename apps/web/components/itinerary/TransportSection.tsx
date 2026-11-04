@@ -2,6 +2,7 @@
 import { UiText } from "../i18n/UiText";
 
 import React from "react";
+import { BookingLinks } from "./BookingLinks";
 import type { TransportSegment } from "@travel/types";
 
 const MODE_ICONS: Record<string, string> = {
@@ -70,6 +71,10 @@ export function TransportSection({ segments }: Props) {
               </div>
             </div>
 
+            <BookingLinks
+              links={seg.booking_links}
+              context={`${seg.from} → ${seg.to} · ${seg.booking_context?.start_date ?? ""} — ${seg.booking_context?.end_date ?? ""} · ${seg.booking_context?.travelers ?? ""}`}
+            />
             <div className="space-y-2">
               {(Array.isArray(seg.options) ? seg.options : [])
                 .filter((option) => option && typeof option === "object")

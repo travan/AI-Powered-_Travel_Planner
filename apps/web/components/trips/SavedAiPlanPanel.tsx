@@ -1,4 +1,8 @@
 "use client";
+import { localizedPlan } from "@travel/types";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+import { PlannerLearningPanel } from "../itinerary/PlannerLearningPanel";
+import { WeatherPanel } from "../itinerary/WeatherPanel";
 import React, { useState } from "react";
 import { TranslationControls } from "../itinerary/TranslationControls";
 import { UiText } from "../i18n/UiText";
@@ -42,6 +46,7 @@ export function SavedAiPlanPanel({
   onImportToSchedule,
   onOpenSchedule,
 }: Props) {
+  const { locale } = useAppLanguage();
   const [translated, setTranslated] = useState<Itinerary | null>(null);
   if (loading) {
     return (
@@ -93,7 +98,7 @@ export function SavedAiPlanPanel({
         buildEditedScheduleDays(plan, scheduleActivities),
       )
     : plan;
-  const displayPlan = translated ?? originalDisplay;
+  const displayPlan = localizedPlan(translated ?? originalDisplay, locale);
 
   return (
     <section className="space-y-5" data-testid="web-saved-ai-plan">
@@ -168,6 +173,8 @@ export function SavedAiPlanPanel({
       </div>
 
       <JourneySummary plan={displayPlan} />
+      {tripId && token && <PlannerLearningPanel plan={displayPlan} token={token} tripId={tripId} />}
+      <WeatherPanel plan={displayPlan} />
       <OverviewCard
         itinerary={displayPlan}
         showBudgetSummary={!hasEditedSchedule}
