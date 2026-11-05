@@ -55,10 +55,27 @@ export function StayDiningRecommendations({
               >
                 <h3 className="font-bold">{hotel.name}</h3>
                 <p className="text-sm">{hotel.city}</p>
-                <BookingLinks links={hotel.booking_links} context={`${hotel.name} · ${hotel.city ?? ""} · ${itinerary.days?.[0]?.date ?? ""} → ${itinerary.days?.at(-1)?.date ?? ""} · ${itinerary.num_travelers} ${locale === "vi" ? "khách" : "travelers"}`} />
-                <p className="text-sm">
-                  {hotel.price_per_night || hotel.price_range}
-                </p>
+                <BookingLinks
+                  links={hotel.booking_links}
+                  context={`${hotel.name} · ${hotel.city ?? ""} · ${itinerary.days?.[0]?.date ?? ""} → ${itinerary.days?.at(-1)?.date ?? ""} · ${itinerary.num_travelers} ${locale === "vi" ? "khách" : "travelers"}`}
+                />
+                {hotel.estimate_basis !== "planning_estimate" && (
+                  <p className="text-sm">
+                    {hotel.price_per_night || hotel.price_range}
+                  </p>
+                )}
+                {hotel.nightly_estimate != null &&
+                  hotel.estimate_basis === "planning_estimate" && (
+                    <p className="rounded-lg bg-primary-fixed/30 p-3 text-sm leading-6">
+                      {locale === "vi" ? "Dự toán " : "Allowance "}
+                      {hotel.nightly_estimate.toLocaleString(locale)}{" "}
+                      {itinerary.currency}
+                      {locale === "vi" ? "/phòng/đêm" : "/room/night"} ·{" "}
+                      {hotel.rooms} {locale === "vi" ? "phòng" : "rooms"} ×{" "}
+                      {hotel.nights} {locale === "vi" ? "đêm" : "nights"}.{" "}
+                      {hotel.estimate_assumption}
+                    </p>
+                  )}
                 {hotel.address && (
                   <p className="text-sm text-on-surface-variant">
                     {hotel.address}
@@ -77,7 +94,9 @@ export function StayDiningRecommendations({
                       rel="noopener noreferrer"
                     >
                       {" "}
-                      {locale === "vi" ? "Tìm / mở bản đồ" : "Search / open Maps"}{" "}
+                      {locale === "vi"
+                        ? "Tìm / mở bản đồ"
+                        : "Search / open Maps"}{" "}
                     </a>
                   )}
                   {safeUrl(hotel.booking_url) && (
@@ -122,7 +141,9 @@ export function StayDiningRecommendations({
                 className="space-y-3 rounded-xl border border-outline-variant/30 bg-surface p-5"
               >
                 <h3 className="font-bold">{restaurant.name}</h3>
-                <p className="text-sm">{restaurant.city} · {restaurant.time}</p>
+                <p className="text-sm">
+                  {restaurant.city} · {restaurant.time}
+                </p>
                 <p className="text-sm">
                   {restaurant.cuisine} ·{" "}
                   {restaurant.price_per_person || restaurant.price_range}
@@ -145,7 +166,9 @@ export function StayDiningRecommendations({
                     className="text-sm font-semibold text-primary"
                   >
                     {" "}
-                    {locale === "vi" ? "Tìm / mở bản đồ" : "Search / open Maps"}{" "}
+                    {locale === "vi"
+                      ? "Tìm / mở bản đồ"
+                      : "Search / open Maps"}{" "}
                   </a>
                 )}
               </article>

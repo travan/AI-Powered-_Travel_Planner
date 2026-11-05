@@ -214,37 +214,40 @@ export function DayTimeline({
             </div>
           </div>
 
-          {showDailyBudget && (
-            <div className="ml-14 flex items-center justify-between gap-4 rounded-xl border border-primary/25 bg-primary-fixed/40 px-4 py-3">
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-on-primary-fixed-variant">
+          {showDailyBudget &&
+            day.daily_cost_estimate != null &&
+            Number.isFinite(day.daily_cost_estimate) &&
+            day.daily_cost_estimate > 0 && (
+              <div className="sm:ml-14 flex items-center justify-between gap-4 rounded-xl border border-primary/25 bg-primary-fixed/40 px-4 py-3">
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-on-primary-fixed-variant">
+                    {" "}
+                    <UiText
+                      id="t3ecae6cbba22"
+                      fallback="Estimated daily budget"
+                    />{" "}
+                  </p>
+                  <p className="mt-0.5 text-xl font-black text-on-surface">
+                    {formatMoney(
+                      day.daily_cost_estimate ??
+                        activitiesForDay(day, currency).reduce(
+                          (sum, activity) => sum + (activity.cost ?? 0),
+                          0,
+                        ),
+                      currency,
+                      formattingLocale,
+                    )}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-on-primary">
                   {" "}
-                  <UiText
-                    id="t3ecae6cbba22"
-                    fallback="Estimated daily budget"
-                  />{" "}
-                </p>
-                <p className="mt-0.5 text-xl font-black text-on-surface">
-                  {formatMoney(
-                    day.daily_cost_estimate ??
-                      activitiesForDay(day, currency).reduce(
-                        (sum, activity) => sum + (activity.cost ?? 0),
-                        0,
-                      ),
-                    currency,
-                    formattingLocale,
-                  )}
-                </p>
+                  <UiText id="t987b9ced08d4" fallback="Day" /> {day.day_number}
+                </span>
               </div>
-              <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-on-primary">
-                {" "}
-                <UiText id="t987b9ced08d4" fallback="Day" /> {day.day_number}
-              </span>
-            </div>
-          )}
+            )}
 
           {/* Activities */}
-          <div className="pl-14">
+          <div className="sm:pl-14">
             {activitiesForDay(day, currency).map((activity, index) => (
               <ActivityCard
                 key={`${day.day_number}-${index}`}

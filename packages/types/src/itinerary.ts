@@ -118,6 +118,9 @@ export interface TripWeather {
   climate_period?: string;
 }
 export interface BudgetItem {
+  day_number?: number;
+  assumption?: string;
+  basis?: ScopedPrice["basis"];
   id: string;
   category:
     | "accommodation"
@@ -209,6 +212,7 @@ export interface Activity extends PlaceLocation {
   name: string;
   description: string;
   duration: string;
+  /** Group allowance after server enrichment; price preserves the quoted planning unit. */
   cost: number | null;
   currency: string;
   category: ActivityCategory;
@@ -236,6 +240,8 @@ export interface ItineraryDay {
 // ─── Hotels & Restaurants ─────────────────────────────────────────────────────
 
 export interface Hotel extends PlaceLocation {
+  estimate_basis?: ScopedPrice["basis"];
+  estimate_assumption?: string;
   booking_links?: BookingLink[];
   id?: string;
   city?: string;
@@ -255,6 +261,8 @@ export interface Hotel extends PlaceLocation {
 }
 
 export interface Restaurant extends PlaceLocation {
+  estimate_basis?: ScopedPrice["basis"];
+  estimate_assumption?: string;
   meal_slot?: "breakfast" | "lunch" | "dinner";
   id?: string;
   city?: string;

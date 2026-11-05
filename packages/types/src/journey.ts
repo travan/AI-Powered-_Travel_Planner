@@ -70,6 +70,8 @@ export type TimelineKind =
   | "check_out"
   | "rest";
 export interface ScopedPrice {
+  basis?: "planning_estimate" | "catalog" | "user";
+  assumption?: string;
   amount: number | null;
   currency: string;
   scope: "person" | "group" | "room_night" | "segment";

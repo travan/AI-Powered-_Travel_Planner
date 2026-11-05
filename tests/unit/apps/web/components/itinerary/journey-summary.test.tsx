@@ -105,3 +105,41 @@ describe("journey summary route", () => {
     ]);
   });
 });
+
+describe("booking review messages", () => {
+  it("omits internal diagnostics while keeping actionable conflicts", () => {
+    const plan = {
+      days: [],
+      issues: [
+        {
+          code: "MEAL_MISSING",
+          message: "Day 1: missing breakfast.",
+          severity: "warning",
+        },
+        {
+          code: "STAY_NOT_SELECTED",
+          message: "Accommodation will be suggested.",
+          severity: "warning",
+        },
+        {
+          code: "SCHEDULE_DETAILS_MISSING",
+          message: "Missing transfer time.",
+          severity: "warning",
+        },
+        {
+          code: "SCHEDULE_CONFLICT",
+          message: "Dinner overlaps your departure.",
+          severity: "warning",
+        },
+      ],
+    } as Itinerary;
+    render(
+      <LanguageProvider initialLocale="en">
+        <JourneySummary plan={plan} />
+      </LanguageProvider>,
+    );
+    expect(screen.queryByText("Day 1: missing breakfast.")).toBeNull();
+    expect(screen.queryByText("Accommodation will be suggested.")).toBeNull();
+    expect(screen.getByText("Dinner overlaps your departure.")).toBeTruthy();
+  });
+});

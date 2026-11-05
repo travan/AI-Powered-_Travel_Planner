@@ -228,15 +228,17 @@ describe("normalizeOllamaItinerary", () => {
       );
 
       expect(result.days[0]?.activities[0]?.name).toBe("Visit Senso-ji");
-      expect(provider.getUsage()).toEqual([{
-        operation: "detail",
-        provider: "ollama",
-        model: "qwen3.5:9b",
-        input_tokens: 260,
-        output_tokens: 140,
-        total_tokens: 400,
-        duration_ms: 1750,
-      }]);
+      expect(provider.getUsage()).toEqual([
+        {
+          operation: "detail",
+          provider: "ollama",
+          model: "qwen3.5:9b",
+          input_tokens: 260,
+          output_tokens: 140,
+          total_tokens: 400,
+          duration_ms: 1750,
+        },
+      ]);
       expect(fetchMock).toHaveBeenCalledWith(
         "http://127.0.0.1:11434/api/chat",
         expect.objectContaining({ method: "POST" }),
@@ -246,7 +248,7 @@ describe("normalizeOllamaItinerary", () => {
         model: "qwen3.5:9b",
         think: false,
         format: "json",
-        stream: false,
+        stream: true,
         options: { num_predict: 8192 },
       });
     } finally {
@@ -329,7 +331,7 @@ describe("normalizeOllamaItinerary", () => {
 
     expect(prompt).toContain("3500 USD total for the entire group of 2");
     expect(prompt).toContain('Preserve style "mid_range"');
-    expect(prompt).toContain("6-8 distinct non-meal activities");
+    expect(prompt).toContain("4-6 distinct non-meal activities");
     expect(prompt).toContain("Meals do not count toward this minimum");
     expect(prompt).toContain(
       "Every activity name must identify a specific real venue or named area",
@@ -398,19 +400,210 @@ describe("Ollama response failures", () => {
   });
 });
 
-it("allows larger output for a detailed seven-day local itinerary", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: { content: JSON.stringify({ days: [] }) } }), { status: 200 }));
+it("builds a seven-day itinerary through an outline and complete daily contracts", async () => {
+  const outlines = Array.from({ length: 7 }, (_, i) => ({
+    day_number: i + 1,
+    city: "Hanoi",
+    title: `Area ${i + 1}`,
+    places: Array.from({ length: 5 }, (_, j) => `Place ${i + 1}-${j + 1}`),
+    all_day: false,
+  }));
+  const fetchMock = vi.fn().mockImplementation(async (_url, init) => {
+    const body = JSON.parse(init.body),
+      prompt = body.messages[1].content;
+    let result;
+    if (prompt.startsWith("Plan a geographically clustered"))
+      result = {
+        title: "Hanoi",
+        overview: "A varied week.",
+        days: outlines,
+        hotels: [],
+        transport_summary: [],
+      };
+    else {
+      const slots = JSON.parse(prompt.match(/REQUIRED SLOTS: ([^\n]+)/)[1]);
+      const outline = JSON.parse(
+        prompt.match(/TODAY'S ROUTE[^\n]*: ([^\n]+)/)[1],
+      );
+      let visit = 0;
+      result = {
+        activities: slots.map((slot) => ({
+          slot_id: slot.slot_id,
+          name:
+            slot.place_name ??
+            (slot.kind === "visit" ? outline.places[visit++] : slot.slot_id),
+          description:
+            "Explore this named stop at a comfortable pace and focus on the interesting local details along the way. This fits the neighborhood route well and offers a useful break. Bring water and keep enough time for the next stop.",
+          price: {
+            amount: ["return", "check_in", "check_out"].includes(slot.slot_id)
+              ? 0
+              : 10,
+            currency: "USD",
+            scope: "person",
+            status: "estimated",
+            basis: "planning_estimate",
+            assumption:
+              "Rounded allowance per person; not a live service quote.",
+          },
+        })),
+      };
+    }
+    return new Response(
+      JSON.stringify({
+        message: { content: JSON.stringify(result) },
+        done_reason: "stop",
+      }),
+      { status: 200 },
+    );
+  });
   vi.stubGlobal("fetch", fetchMock);
   try {
-    const provider = new OllamaProvider({ baseURL: "http://localhost:11434/v1", overviewModel: "gemma4:latest", detailModel: "qwen3.5:9b" });
-    await provider.generateDetail(
-      { cities: ["hanoi"], num_days: 7, currency: "USD", trip_style: "budget", locale: "en", num_travelers: 3 },
-      { title: "Hanoi", overview: "Hanoi", cities: ["Hanoi"], total_days: 7, estimated_budget: { min: 500, max: 500, currency: "USD" }, day_plan: ["Hanoi"] },
+    const provider = new OllamaProvider({
+      baseURL: "http://localhost:11434/v1",
+      overviewModel: "gemma4:latest",
+      detailModel: "qwen3.5:9b",
+    });
+    const result = await provider.generateDetail(
+      {
+        cities: ["hanoi"],
+        num_days: 7,
+        currency: "USD",
+        trip_style: "budget",
+        locale: "en",
+        num_travelers: 3,
+      },
+      {
+        title: "Hanoi",
+        overview: "",
+        cities: ["Hanoi"],
+        total_days: 7,
+        estimated_budget: { min: 0, max: 0, currency: "USD" },
+        day_plan: [],
+      },
       [emptyCityData("Hanoi")],
     );
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
-    expect(body.options.num_predict).toBe(21596);
-    expect(body.messages[1].content).toContain("6-8 distinct non-meal activities");
-    expect(body.messages[1].content).toContain("Never return empty objects, placeholder routes");
-  } finally { vi.unstubAllGlobals(); }
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(result.days).toHaveLength(7);
+    expect(
+      result.days
+        .flatMap((day) => day.activities)
+        .filter((a) => a.kind === "meal"),
+    ).toHaveLength(21);
+    expect(
+      new Set(
+        result.days
+          .flatMap((day) => day.activities)
+          .filter((a) => a.kind === "visit")
+          .map((a) => a.name),
+      ).size,
+    ).toBe(35);
+    expect(result.days[0]?.activities[0]?.price).toMatchObject({
+      basis: "planning_estimate",
+      amount: 10,
+      scope: "person",
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+describe("Ollama streamed responses", () => {
+  const run = () =>
+    new OllamaProvider({
+      baseURL: "http://127.0.0.1:11434/v1",
+      overviewModel: "gemma4:latest",
+      detailModel: "qwen3.5:9b",
+    }).generateDetail(
+      {
+        cities: ["osaka"],
+        num_days: 1,
+        currency: "USD",
+        trip_style: "mid_range",
+        locale: "vi",
+        num_travelers: 2,
+      },
+      {
+        title: "Osaka",
+        overview: "",
+        cities: ["Osaka"],
+        total_days: 1,
+        estimated_budget: { min: 0, max: 0, currency: "USD" },
+        day_plan: ["Day 1: Osaka"],
+      },
+      [emptyCityData("Osaka")],
+    );
+  it("joins streamed deltas without stripping whitespace or corrupting split UTF-8", async () => {
+    const lines = [
+      { message: { content: '{"title":"Ăn' }, done: false },
+      { message: { content: " " }, done: false },
+      { message: { content: 'sáng", "days":[]}' }, done: false },
+      {
+        message: { content: "" },
+        done: true,
+        done_reason: "stop",
+        prompt_eval_count: 12,
+        eval_count: 20,
+      },
+    ]
+      .map((value) => JSON.stringify(value))
+      .join("\n");
+    const bytes = new TextEncoder().encode(lines);
+    const stream = new ReadableStream({
+      start(controller) {
+        for (let index = 0; index < bytes.length; index += 7)
+          controller.enqueue(bytes.slice(index, index + 7));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          headers: { "content-type": "application/x-ndjson" },
+        }),
+      ),
+    );
+    try {
+      expect((await run()).title).toBe("Ăn sáng");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("rejects interrupted streams even if an earlier chunk contains valid JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            message: { content: '{"days":[]}' },
+            done: false,
+          }) + "\n",
+          { headers: { "content-type": "application/x-ndjson" } },
+        ),
+      ),
+    );
+    try {
+      await expect(run()).rejects.toThrow("stream ended before completion");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("surfaces an Ollama error frame instead of presenting a partial itinerary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: "model ran out of memory" }) + "\n",
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+        ),
+    );
+    try {
+      await expect(run()).rejects.toThrow("model ran out of memory");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

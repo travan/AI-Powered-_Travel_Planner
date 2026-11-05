@@ -85,6 +85,38 @@ Set `API_PROXY_TARGET=https://travel-planner-api.travan-it-96.workers.dev` for
 Production and Preview. Leave `NEXT_PUBLIC_API_URL` empty to use same-origin
 rewrites. Authentication defaults to `local`. Rebuild after changing these values.
 
+## Shared daily itinerary planning
+
+Trips of three or more days use the same daily planner through both the Ollama
+adapter and Cloudflare Workers AI adapter. The planner builds an outline, assigns
+separate meal/activity/return slots, generates each day, validates it and repairs
+only an incomplete day. The JSON normalizer is provider-independent. This code
+uses ordinary JavaScript data structures; it has no filesystem, local model or
+HTTP endpoint dependency.
+
+The existing Worker selects `AI_PROVIDER=cloudflare` and
+`CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.3-70b-instruct-fp8-fast` in
+`apps/server/wrangler.jsonc`. Inference goes through the request-scoped `AI`
+binding. Each outline/day request uses Workers AI's
+[`response_format` JSON schema](https://developers.cloudflare.com/workers-ai/features/json-mode/).
+Application validation is still required: schema mode does not guarantee a
+usable itinerary. Incomplete responses and binding/quota failures propagate;
+the cloud adapter does not fall back to a local model or mock itinerary.
+
+Prices may be planning allowances. Such amounts carry
+`basis=planning_estimate`, `status=estimated`, an explicit `assumption` and a
+person/group scope. Hotel allowances identify room and night counts. Budget
+reconciliation multiplies these units once, includes return transport and
+separates the contingency. A planning allowance is not a verified service quote.
+The same reconciliation and UI apply to local and cloud results.
+
+`scripts/review-local-itinerary.mts` is a development harness only. Its model
+requests, saved responses and reports live in ignored `test-results/`; Docker
+excludes that directory. Production generation uses the server's city catalog,
+public reference data packaged with the application and the selected model
+binding, not saved local test responses. Jobs continue through the existing
+server-side itinerary job queue and Worker scheduled handler.
+
 ## Validation and limits
 
 On October 26, 2026, the deployed API passed health (PostgreSQL), registration,

@@ -74,7 +74,13 @@ export function ActivityCard({
   const t = useUiText();
   const { locale: formattingLocale } = useAppLanguage();
 
-  const scheduleMeta = [activity.time, activity.duration]
+  const scheduleMeta = [
+    activity.time,
+    activity.duration ||
+      (activity.duration_minutes
+        ? `${activity.duration_minutes} ${formattingLocale === "vi" ? "phút" : "min"}`
+        : ""),
+  ]
     .filter(Boolean)
     .join(" · ");
   const ticketActivities = Array.isArray(activity.ticket_activities)
@@ -88,14 +94,24 @@ export function ActivityCard({
     : [];
 
   if (activity.kind) {
+    const vi = formattingLocale === "vi";
+    const mealLabels = {
+      breakfast: vi ? "Ăn sáng" : "Breakfast",
+      lunch: vi ? "Ăn trưa" : "Lunch",
+      dinner: vi ? "Ăn tối" : "Dinner",
+    };
     const labels: Record<string, string> = {
-      visit: "Tham quan",
-      meal: "Ăn uống",
+      visit: vi ? "Tham quan" : "Sightseeing",
+      meal: activity.meal_slot
+        ? mealLabels[activity.meal_slot]
+        : vi
+          ? "Ăn uống"
+          : "Dining",
       cafe: "Café",
-      transfer: "Di chuyển",
-      check_in: "Nhận phòng",
-      check_out: "Trả phòng",
-      rest: "Nghỉ ngơi",
+      transfer: vi ? "Di chuyển" : "Transfer",
+      check_in: vi ? "Nhận phòng" : "Check-in",
+      check_out: vi ? "Trả phòng" : "Check-out",
+      rest: vi ? "Nghỉ ngơi" : "Rest",
     };
     const source =
       activity.evidence?.source === "catalog"
@@ -114,24 +130,53 @@ export function ActivityCard({
         <div className="flex flex-wrap justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-primary">
-              {t(labels[activity.kind] ?? activity.kind)} · {scheduleMeta}
+              {[labels[activity.kind] ?? activity.kind, scheduleMeta]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
             <h4 className="mt-1 font-bold">{activity.name}</h4>
             <p className="text-sm text-on-surface-variant">
               {activity.city} {activity.address && `· ${activity.address}`}
             </p>
           </div>
-          <span className="text-sm">
-            {activity.price?.amount != null ? (
-              `${activity.price.amount.toLocaleString(formattingLocale)} ${activity.currency}${t(scope)}`
-            ) : activity.cost != null ? (
-              `${activity.cost.toLocaleString(formattingLocale)} ${activity.currency}${t("/cả nhóm")}`
-            ) : (
-              <UiText id="t1006ab49c0bf" fallback="Chưa có giá" />
-            )}
-          </span>
+          {(activity.price?.amount != null || activity.cost != null) && (
+            <span className="shrink-0 text-sm">
+              {activity.price?.status !== "user_confirmed" &&
+                (formattingLocale === "vi" ? "Dự toán · " : "Estimate · ")}
+              {activity.price?.amount != null ? (
+                `${activity.price.amount.toLocaleString(formattingLocale)} ${activity.currency}${t(scope)}`
+              ) : activity.cost != null ? (
+                `${activity.cost.toLocaleString(formattingLocale)} ${activity.currency}${t("/cả nhóm")}`
+              ) : (
+                <UiText id="t1006ab49c0bf" fallback="Chưa có giá" />
+              )}
+            </span>
+          )}
         </div>
+        {activity.description && (
+          <p className="mt-3 text-sm leading-6 text-on-surface">
+            {activity.description}
+          </p>
+        )}
+        {activity.travel_minutes != null && activity.travel_minutes > 0 && (
+          <p className="mt-2 text-xs text-on-surface-variant">
+            {formattingLocale === "vi"
+              ? "Di chuyển từ điểm trước: khoảng"
+              : "Travel from previous stop: about"}{" "}
+            {activity.travel_minutes}{" "}
+            {formattingLocale === "vi" ? "phút" : "min"}
+          </p>
+        )}
         {activity.reason && <p className="mt-2 text-sm">{activity.reason}</p>}
+        {activity.price?.basis === "planning_estimate" &&
+          activity.price.assumption && (
+            <p className="mt-2 rounded-lg bg-primary-fixed/30 p-2 text-xs leading-5 text-on-surface-variant">
+              {formattingLocale === "vi"
+                ? "Giả định dự toán: "
+                : "Budget assumption: "}
+              {activity.price.assumption}
+            </p>
+          )}
         <details className="mt-3 text-sm">
           <summary className="cursor-pointer font-semibold text-primary">
             {" "}
@@ -141,18 +186,6 @@ export function ActivityCard({
             />{" "}
           </summary>
           <div className="mt-3 space-y-2 leading-6">
-            <p>{activity.description}</p>
-            {activity.travel_minutes != null && (
-              <p>
-                {" "}
-                <UiText
-                  id="t3ae9d22794ab"
-                  fallback="Di chuyển từ điểm trước: khoảng"
-                />{" "}
-                {activity.travel_minutes}{" "}
-                <UiText id="t41cdffb3a96c" fallback="phút." />{" "}
-              </p>
-            )}
             <p>
               {t(source)}
               {activity.evidence?.verified_at
@@ -166,16 +199,17 @@ export function ActivityCard({
                 {activity.alternative}
               </p>
             )}
-            <p>
-              {activity.price?.status === "user_confirmed" ? (
-                <UiText id="t58154db14870" fallback="Giá do bạn xác nhận" />
-              ) : (
-                <UiText
-                  id="t470c0565dedc"
-                  fallback="Chi phí ước tính; xác minh trước khi đặt."
-                />
-              )}
-            </p>
+            {(activity.price?.amount != null || activity.cost != null) && (
+              <p>
+                {activity.price?.status === "user_confirmed"
+                  ? formattingLocale === "vi"
+                    ? "Giá do bạn xác nhận"
+                    : "Price confirmed by you"
+                  : formattingLocale === "vi"
+                    ? "Chi phí ước tính; xác minh trước khi đặt."
+                    : "Estimated cost; verify before booking."}
+              </p>
+            )}
           </div>
         </details>
         <a
@@ -198,7 +232,9 @@ export function ActivityCard({
             <TicketChip key={i} option={option} />
           ))}
         </div>
-        {activity.map_precision !== "verified" && <PlaceLookup citySlug={activity.city_slug} name={activity.name} />}
+        {activity.map_precision !== "verified" && (
+          <PlaceLookup citySlug={activity.city_slug} name={activity.name} />
+        )}
       </article>
     );
   }

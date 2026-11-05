@@ -1,3 +1,5 @@
+import { generateDailyPlan } from "./daily-plan.js";
+import { normalizeItinerary } from "../normalize-itinerary.js";
 import {
   translationPrompt,
   TRANSLATION_SYSTEM,
@@ -54,6 +56,22 @@ export class CloudflareAIProvider implements AIProvider {
     overview: ItineraryOverview,
     cities: PreFetchedCityData[],
   ) {
+    if (overview.total_days >= 3)
+      return generateDailyPlan(
+        input,
+        overview,
+        cities,
+        (prompt, tokens, schema, system) =>
+          this.generate<Record<string, unknown>>(
+            prompt,
+            input.locale,
+            "detail",
+            tokens,
+            system,
+            schema,
+          ),
+        normalizeItinerary,
+      );
     return this.generate<Itinerary>(
       buildDetailPrompt(input, overview, cities),
       input.locale,
@@ -78,6 +96,7 @@ export class CloudflareAIProvider implements AIProvider {
     operation?: AiTokenUsage["operation"],
     maxTokens = 2000,
     system?: string,
+    schema?: Record<string, unknown>,
   ): Promise<T> {
     const output = (await this.ai.run(this.model, {
       messages: [
@@ -87,7 +106,9 @@ export class CloudflareAIProvider implements AIProvider {
         },
         { role: "user", content: prompt },
       ],
-      response_format: { type: "json_object" },
+      response_format: schema
+        ? { type: "json_schema", json_schema: schema }
+        : { type: "json_object" },
       max_tokens: maxTokens,
       temperature: 0.2,
     })) as {

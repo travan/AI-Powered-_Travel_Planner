@@ -56,10 +56,19 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
             />
           </p>
         </div>
-        {showBudgetSummary && (
+        {showBudgetSummary && itinerary.total_cost > 0 && (
           <Badge variant="info" className="text-sm px-3 py-1">
-            {itinerary.budget_breakdown?.complete === false &&
-              (formattingLocale === "vi" ? "Tạm tính · " : "Subtotal · ")}
+            {itinerary.budget_breakdown?.complete === false
+              ? formattingLocale === "vi"
+                ? "Tạm tính · "
+                : "Subtotal · "
+              : itinerary.budget_breakdown?.items?.some(
+                    (item) => item.basis === "planning_estimate",
+                  )
+                ? formattingLocale === "vi"
+                  ? "Dự toán · "
+                  : "Estimate · "
+                : ""}
             {itinerary.currency}{" "}
             {itinerary.total_cost.toLocaleString(formattingLocale)}
           </Badge>
@@ -119,29 +128,32 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
       </div>
 
       {/* Budget estimate */}
-      {showBudgetSummary && itinerary.budget_breakdown && (
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3">
-          <svg
-            className="h-5 w-5 text-emerald-600 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span className="text-sm font-medium text-emerald-800">
-            {" "}
-            <UiText id="t39d834c693bb" fallback="Estimated budget:" />{" "}
-            {itinerary.budget_breakdown.currency ?? itinerary.currency}{" "}
-            {budgetTotal.toLocaleString(formattingLocale)}
-          </span>
-        </div>
-      )}
+      {showBudgetSummary &&
+        itinerary.budget_breakdown &&
+        itinerary.budget_breakdown.complete !== false &&
+        budgetTotal > 0 && (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3">
+            <svg
+              className="h-5 w-5 text-emerald-600 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span className="text-sm font-medium text-emerald-800">
+              {" "}
+              <UiText id="t39d834c693bb" fallback="Estimated budget:" />{" "}
+              {itinerary.budget_breakdown.currency ?? itinerary.currency}{" "}
+              {budgetTotal.toLocaleString(formattingLocale)}
+            </span>
+          </div>
+        )}
 
       {/* Highlights */}
       {itinerary.seasonal_notes?.highlights &&
