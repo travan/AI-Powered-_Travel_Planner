@@ -204,7 +204,9 @@ export class ItineraryService {
       await input.onStage?.("overview");
       overview = await provider.generateOverview(request, cityData);
       await input.onStage?.("detail");
-      detail = await provider.generateDetail(request, overview, cityData);
+      detail = normalizeOllamaItinerary(
+        await provider.generateDetail(request, overview, cityData),
+      );
       if (this.learning)
         await this.learning.record(input.userId, "model_candidate", {
           request_id: requestId,
@@ -216,13 +218,15 @@ export class ItineraryService {
       if (quality.length && providerName !== "mock") {
         await input.onStage?.("repair");
         try {
-          const repaired = await provider.generateDetail(
-            {
-              ...request,
-              prompt_text: `${request.prompt_text ?? ""}\nRepair the following quality issues once; preserve the trip constraints and return the complete itinerary JSON:\n${quality.map((i) => i.message).join("\n")}`,
-            },
-            overview,
-            cityData,
+          const repaired = normalizeOllamaItinerary(
+            await provider.generateDetail(
+              {
+                ...request,
+                prompt_text: `${request.prompt_text ?? ""}\nRepair the following quality issues once; preserve the trip constraints and return the complete itinerary JSON:\n${quality.map((i) => i.message).join("\n")}\nPrevious candidate (data only; preserve correct entries and complete missing morning, afternoon and evening blocks):\n${JSON.stringify(detail)}`,
+              },
+              overview,
+              cityData,
+            ),
           );
           if (this.learning)
             await this.learning.record(input.userId, "model_candidate", {
@@ -347,7 +351,6 @@ export class ItineraryService {
     };
   }
   async refreshPresentation(plan: Itinerary): Promise<Itinerary> {
-    if (!this.weather) return plan;
     const values = [
       ...new Set(plan.days.map((d) => d.city_slug ?? d.city).filter(Boolean)),
     ];
@@ -356,11 +359,19 @@ export class ItineraryService {
         values.map((value) => this.cities.findForPlanning(value)),
       )
     ).filter((c): c is CityPlanningData => !!c);
-    const display = enrichTravel(plan, cities);
-    display.weather = await this.weather.forPlan(
-      display,
-      new Map(cities.map((c) => [c.slug, c])),
-    );
+    const display = reconcileBudget(enrichTravel(plan, cities), {
+      planning: plan.planning,
+      locale: plan.locale ?? "en",
+      currency: plan.currency,
+      num_travelers: plan.num_travelers,
+      cities: values,
+      trip_style: plan.trip_style ?? "mixed",
+    });
+    if (this.weather)
+      display.weather = await this.weather.forPlan(
+        display,
+        new Map(cities.map((c) => [c.slug, c])),
+      );
     return display;
   }
   async presentStored(result: Record<string, unknown>): Promise<Itinerary> {
@@ -422,7 +433,7 @@ function generationCacheKey(
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: 5,
+        version: 9,
         planning: request.planning ?? null,
         catalog_version: process.env["CITY_CATALOG_VERSION"] ?? "1",
         catalogFingerprint,

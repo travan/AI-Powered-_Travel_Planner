@@ -9,7 +9,7 @@ import type {
 } from "@travel/types";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
 import * as types from "@travel/types";
-const { mapUrl } =
+const { mapUrl, timelineMinutes, activityMinutes, mealSlot } =
   (types as unknown as { default?: typeof types }).default ?? types;
 const norm = (s: string) =>
   s
@@ -56,6 +56,16 @@ export function bookingSearches(
     link("Traveloka", "https://www.traveloka.com/en-vn/hotel"),
   ];
 }
+
+const isAllowance = (price?: ScopedPrice) =>
+  !!price &&
+  price.basis === "planning_estimate" &&
+  typeof price.assumption === "string" &&
+  price.assumption.trim().length >= 8 &&
+  typeof price.amount === "number" &&
+  Number.isFinite(price.amount) &&
+  price.amount >= 0 &&
+  ["person", "group", "segment", "room_night"].includes(price.scope);
 
 export function enrichTravel(
   plan: Itinerary,
@@ -121,7 +131,7 @@ export function enrichTravel(
     item.lon = verified ? match.lon : undefined;
     item.google_place_id = verified ? match.google_place_id : undefined;
     item.address =
-      match?.address ??
+      (verified ? match?.address : undefined) ??
       (item.evidence?.source === "user" ? item.address : "") ??
       "";
     item.map_precision =
@@ -150,6 +160,47 @@ export function enrichTravel(
     for (const a of day.activities) {
       a.city = city?.name.en ?? day.city;
       setPlace(a, city);
+      // Planning allowances are useful estimates, and remain distinct from verified venue facts.
+      const catalogCost = city?.activities.find(
+        (entry) =>
+          norm(entry.title) === norm(a.name) &&
+          !!entry.last_verified_at &&
+          !["ai_generated", "user_submission", "user_added"].includes(
+            entry.source,
+          ) &&
+          entry.currency === a.currency &&
+          entry.estimated_cost != null &&
+          entry.estimated_cost >= 0,
+      );
+      if (!input && a.price?.status === "user_confirmed") {
+        a.cost = a.price.amount;
+      } else if (catalogCost) {
+        a.cost = catalogCost.estimated_cost;
+        a.price = {
+          amount: catalogCost.estimated_cost,
+          currency: a.currency,
+          scope: "person",
+          status: "estimated",
+          basis: "catalog",
+        };
+      } else if (isAllowance(a.price)) {
+        a.cost = a.price!.amount;
+      } else if (input || a.price?.status !== "user_confirmed") {
+        a.cost = null;
+        if (a.price) a.price.amount = null;
+      }
+
+      // Legacy trip rows store cost for the whole party; price retains its explicit unit.
+      if (
+        a.price?.amount != null &&
+        Number.isFinite(a.price.amount) &&
+        a.price.amount >= 0
+      ) {
+        a.currency = a.price.currency;
+        a.cost =
+          a.price.amount * (a.price.scope === "person" ? out.num_travelers : 1);
+      }
+
       a.booking_link = undefined;
       a.ticket_activities =
         a.category === "attraction" || a.kind === "visit"
@@ -170,15 +221,90 @@ export function enrichTravel(
     setPlace(item, city);
   }
   for (const h of out.hotels) {
+    if (
+      h.evidence?.source !== "user" &&
+      !(
+        h.estimate_basis === "planning_estimate" &&
+        h.estimate_assumption?.trim() &&
+        Number.isFinite(h.nightly_estimate) &&
+        h.nightly_estimate! >= 0
+      )
+    ) {
+      h.nightly_estimate = undefined;
+      h.price_per_night = "";
+      h.price_range = "";
+    }
     h.booking_url = "";
     h.airbnb_url = "";
     h.booking_links = bookingSearches("stay", h.name, h.city ?? "", input);
   }
   for (const r of out.restaurants) {
+    if (
+      r.evidence?.source !== "user" &&
+      !(
+        r.estimate_basis === "planning_estimate" &&
+        r.estimate_assumption?.trim()
+      )
+    ) {
+      r.estimated_per_person = undefined;
+      r.price_per_person = "";
+      r.price_range = "";
+    }
     r.tiktok_search_link = "";
     r.ig_search_link = "";
   }
+  const planning = input?.planning ?? out.planning;
+  if (planning?.journey.return_to_origin) {
+    for (const kind of ["flight", "airport_transfer"] as const) {
+      const legs = out.transport_summary.filter(
+        (leg) =>
+          leg.transport_kind === kind ||
+          (kind === "flight" && leg.recommended_mode === "flight"),
+      );
+      if (legs.length !== 1 || !isAllowance(legs[0]!.price)) continue;
+      const leg = legs[0]!,
+        price = leg.price!;
+      const roundTrip = /khứ hồi|round.?trip/iu.test(price.assumption ?? "");
+      const unit =
+        price.scope === "person"
+          ? input?.locale === "vi"
+            ? "người"
+            : "person"
+          : input?.locale === "vi"
+            ? "cả nhóm"
+            : "group";
+      if (roundTrip)
+        price.assumption =
+          input?.locale === "vi"
+            ? `Dự trù ${price.amount} ${price.currency}/${unit} cho cả hành trình khứ hồi; chưa phải báo giá.`
+            : `Planning allowance of ${price.amount} ${price.currency}/${unit} for the round trip, not a quote.`;
+      out.transport_summary.push({
+        ...structuredClone(leg),
+        id: leg.id ? `${leg.id}:return` : undefined,
+        segment: `${leg.to} → ${leg.from}`,
+        from: leg.to,
+        to: leg.from,
+        price: {
+          ...price,
+          amount: roundTrip ? 0 : price.amount,
+          assumption: roundTrip
+            ? input?.locale === "vi"
+              ? "Chiều về đã tính trong khoản dự trù khứ hồi, không cộng thêm lần nữa."
+              : "Return is already included in the round-trip allowance; no second charge."
+            : input?.locale === "vi"
+              ? `Tạm dành cho chiều về cùng mức ${price.amount} ${price.currency}/${unit} như chiều đi; sẽ cập nhật khi chọn dịch vụ.`
+              : `Allow the same ${price.amount} ${price.currency}/${unit} as the outbound leg for budgeting; update when selecting services.`,
+        },
+      });
+    }
+  }
   for (const leg of out.transport_summary) {
+    if (
+      leg.price &&
+      !isAllowance(leg.price) &&
+      (input || leg.price.status !== "user_confirmed")
+    )
+      leg.price.amount = null;
     leg.from_city_slug = resolveCity(
       cities,
       leg.from_city_slug ?? leg.from,
@@ -199,7 +325,10 @@ export function enrichTravel(
       leg.recommended_mode === "flight"
         ? bookingSearches("flight", leg.from, leg.to, input)
         : [];
-    for (const option of leg.options ?? []) option.booking_url = "";
+    for (const option of leg.options ?? []) {
+      option.booking_url = "";
+      option.price_range = "";
+    }
   }
   // Generated suggestions must not carry invented product URLs or price claims.
   out.suggestions = out.suggestions.map((s) => ({
@@ -208,13 +337,22 @@ export function enrichTravel(
     platform: "Klook",
     price_from: undefined,
   }));
+  // A model-generated reserve has no confirmed cost basis either.
+  if (out.budget_breakdown) out.budget_breakdown.contingency = 0;
+  for (const day of out.days) {
+    const priced = day.activities.filter((a) => a.cost != null);
+    day.daily_cost_estimate = priced.reduce(
+      (sum, a) =>
+        sum +
+        (a.price?.amount ?? a.cost ?? 0) *
+          (a.price?.scope === "person" ? out.num_travelers : 1),
+      0,
+    );
+  }
   return out;
 }
 
-const minutes = (time: string) =>
-  /^\d{2}:\d{2}$/.test(time) && +time.slice(0, 2) < 24 && +time.slice(3) < 60
-    ? +time.slice(0, 2) * 60 + +time.slice(3)
-    : null;
+const minutes = timelineMinutes;
 export function itineraryQuality(
   plan: Itinerary,
   input?: ItineraryInput,
@@ -249,11 +387,7 @@ export function itineraryQuality(
     for (const { slot, start, end } of slots) {
       if (availableStart >= end || availableEnd <= start) continue;
       const meal = day.activities.some((a) => {
-        const t = minutes(a.time);
-        return (
-          (a.kind === "meal" || (a.category === "food" && a.kind !== "cafe")) &&
-          (a.meal_slot === slot || (t != null && t >= start && t < end))
-        );
+        return mealSlot(a) === slot;
       });
       if (!meal)
         add(
@@ -266,15 +400,23 @@ export function itineraryQuality(
     }
     const visits = day.activities.filter(
       (a) =>
-        a.kind === "visit" ||
-        (!a.kind && ["attraction", "leisure", "shopping"].includes(a.category)),
+        !mealSlot(a) &&
+        (a.kind === "visit" ||
+          (!a.kind &&
+            ["attraction", "leisure", "shopping"].includes(a.category))),
     );
     const minimum =
       input?.planning?.experience_preferences.pace === "relaxed" ||
       input?.trip_style === "relax"
         ? 3
-        : 6;
-    if (availableEnd - availableStart >= 720 && visits.length < minimum)
+        : input?.planning?.experience_preferences.pace === "packed"
+          ? 6
+          : 4;
+    if (
+      availableEnd - availableStart >= 720 &&
+      visits.length < minimum &&
+      visits.reduce((sum, a) => sum + activityMinutes(a), 0) < 360
+    )
       add(
         "ACTIVITIES_MISSING",
         vi
@@ -282,24 +424,51 @@ export function itineraryQuality(
           : `Day ${day.day_number}: too few activities for the selected pace.`,
         day.id,
       );
+    const dinner = day.activities.find((a) => mealSlot(a) === "dinner");
+    const dinnerStart = dinner ? minutes(dinner.time) : null;
+    if (availableEnd >= 1320 && dinnerStart != null) {
+      const dinnerEnd = dinnerStart + activityMinutes(dinner!);
+      if (!visits.some((a) => (minutes(a.time) ?? -1) >= dinnerEnd))
+        add(
+          "EVENING_MISSING",
+          vi
+            ? `Ngày ${day.day_number}: cần hoạt động sau bữa tối.`
+            : `Day ${day.day_number}: include an after-dinner experience.`,
+          day.id,
+        );
+      if (
+        input?.planning?.stay_preferences.type !== "none" &&
+        !day.activities.some(
+          (a) =>
+            (a.kind === "transfer" || a.kind === "rest") &&
+            (minutes(a.time) ?? -1) >= dinnerEnd,
+        )
+      )
+        add(
+          "HOTEL_RETURN_MISSING",
+          vi
+            ? `Ngày ${day.day_number}: cần chặng về chỗ ở cuối ngày.`
+            : `Day ${day.day_number}: include the evening return to lodging.`,
+          day.id,
+        );
+    }
     let previousEnd = availableStart;
     for (const a of day.activities) {
       const time = minutes(a.time);
-      const duration =
-        a.duration_minutes ??
-        +(a.duration.match(/([\d.]+)\s*h/)?.[1] ?? 0) * 60 +
-          +(a.duration.match(/(\d+)\s*(?:m|min|phút)/)?.[1] ?? 0);
-      if (time == null || duration <= 0 || a.travel_minutes == null)
+      const duration = activityMinutes(a);
+      if (time == null || duration <= 0)
         add(
           "SCHEDULE_DETAILS_MISSING",
           vi
-            ? `${a.name}: thiếu giờ, thời lượng hoặc thời gian di chuyển.`
-            : `${a.name}: missing time, duration or transfer time.`,
+            ? `${a.name}: thiếu giờ bắt đầu hoặc thời lượng.`
+            : `${a.name}: missing start time or duration.`,
           day.id,
         );
-      if (time != null && a.kind !== "transfer") {
+      if (time != null) {
         if (
-          time < previousEnd + (a.travel_minutes ?? 0) ||
+          time <
+            previousEnd +
+              (a.kind === "transfer" ? 0 : (a.travel_minutes ?? 0)) ||
           time + duration > availableEnd
         )
           add(
@@ -351,6 +520,11 @@ export function reconcileBudget(
   if (!b) return plan;
   const items: BudgetItem[] = [];
   const missing = new Set<string>();
+  const activityDays = new Map(
+    plan.days.flatMap((day) =>
+      day.activities.map((activity) => [activity, day.day_number] as const),
+    ),
+  );
   const groupAmount = (price?: ScopedPrice, fallback?: number | null) => {
     const amount = price
       ? price.currency === plan.currency
@@ -376,10 +550,13 @@ export function reconcileBudget(
         items.push({
           id: a.id ?? `${category}:${index}`,
           category,
-          label: a.name,
+          day_number: activityDays.get(a),
+          label: `${(input?.locale ?? plan.locale) === "vi" ? "Ngày" : "Day"} ${activityDays.get(a)}: ${a.name}`,
           amount:
             a.currency === plan.currency ? groupAmount(a.price, a.cost) : null,
           status: a.price?.status ?? "estimated",
+          basis: a.price?.basis,
+          assumption: a.price?.assumption,
         });
     else
       items.push({
@@ -392,7 +569,7 @@ export function reconcileBudget(
   }
   for (const issue of itineraryQuality(plan, input))
     if (["MEAL_MISSING", "ACTIVITIES_MISSING"].includes(issue.code))
-      missing.add(issue.message);
+      missing.add(issue.code === "MEAL_MISSING" ? "food" : "activities");
   const overnight = [
     ...new Set(plan.days.slice(0, -1).map((d) => d.city_slug ?? d.city)),
   ];
@@ -407,7 +584,9 @@ export function reconcileBudget(
       items.push({
         id: `stay:${city}`,
         category: "accommodation",
-        label: h?.name ?? city,
+        label: h ? `${h.name} · ${rooms} × ${nights}` : city,
+        basis: h?.estimate_basis,
+        assumption: h?.estimate_assumption,
         amount:
           h?.nightly_estimate != null && h.nightly_estimate >= 0
             ? h.nightly_estimate * rooms * nights
@@ -453,8 +632,25 @@ export function reconcileBudget(
         label: `${leg.from} → ${leg.to}`,
         amount: groupAmount(leg.price),
         status: leg.price?.status ?? "estimated",
+        basis: leg.price?.basis,
+        assumption: leg.price?.assumption,
       });
   }
+  // Each day's local transport allowance is separate from main/airport legs.
+  // Transfers with no standalone estimate remain covered by those legs and are not double counted.
+  for (const [dayIndex, day] of plan.days.entries())
+    for (const [index, a] of day.activities.entries())
+      if (a.kind === "transfer" && isAllowance(a.price) && a.price!.amount! > 0)
+        items.push({
+          id: a.id ?? `local:${dayIndex}:${index}`,
+          category: "transport",
+          transport_kind: "local",
+          label: `Day ${day.day_number}: ${a.name}`,
+          amount: groupAmount(a.price),
+          status: "estimated",
+          basis: a.price!.basis,
+          assumption: a.price!.assumption,
+        });
   if (confirmedTotal != null && !usedConfirmed)
     items.push({
       id: "confirmed:transport",
@@ -478,10 +674,27 @@ export function reconcileBudget(
     });
   if (!plan.transport_summary.length && confirmedTotal == null)
     missing.add("transport");
+  const hasAllowances = items.some(
+    (item) => item.basis === "planning_estimate" && item.amount != null,
+  );
+  if (hasAllowances)
+    b.contingency = Math.round(
+      items.reduce((sum, item) => sum + (item.amount ?? 0), 0) * 0.1,
+    );
   items.push({
     id: "contingency",
+    basis: hasAllowances ? "planning_estimate" : undefined,
+    assumption: hasAllowances
+      ? input?.locale === "vi"
+        ? "Dự phòng 10% các khoản dự toán; không phải phí dịch vụ đã xác nhận."
+        : "10% planning contingency, not a confirmed service charge."
+      : undefined,
     category: "contingency",
-    label: "contingency",
+    label: hasAllowances
+      ? (input?.locale ?? plan.locale) === "vi"
+        ? "Dự phòng 10%"
+        : "10% contingency"
+      : "contingency",
     amount:
       Number.isFinite(b.contingency) && b.contingency >= 0
         ? b.contingency

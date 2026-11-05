@@ -224,3 +224,355 @@ describe("travel enrichment", () => {
     ).toContain("Hanoi");
   });
 });
+
+describe("itinerary review regressions", () => {
+  it("does not flag a known time/duration solely because transfer time is unknown", () => {
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Lunch at Kani Doraku",
+        time: "1:00 PM",
+        duration: "1 hour",
+        description: "Local meal",
+        category: "food",
+        cost: null,
+        currency: "VND",
+        maps_link: "",
+      },
+    ];
+    const issues = itineraryQuality(p);
+    expect(issues.some((i) => i.code === "SCHEDULE_DETAILS_MISSING")).toBe(
+      false,
+    );
+    expect(
+      issues.some(
+        (i) =>
+          i.code === "MEAL_MISSING" && i.message === "Day 1: missing lunch.",
+      ),
+    ).toBe(false);
+  });
+  it("keeps meal diagnostics out of financial missing items", () => {
+    const p = reconcileBudget(plan());
+    expect(p.budget_breakdown.complete).toBe(false);
+    expect(p.budget_breakdown.missing_items).toContain("food");
+    expect(
+      p.budget_breakdown.missing_items?.some((item) => item.includes("Day 1:")),
+    ).toBe(false);
+  });
+  it("removes model prices, invented addresses and false free access", () => {
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Unverified museum",
+        address: "Invented address",
+        time: "09:00",
+        duration: "1h",
+        description: "",
+        category: "attraction",
+        cost: 0,
+        price: {
+          amount: 0,
+          currency: "VND",
+          scope: "group",
+          status: "estimated",
+        },
+        currency: "VND",
+        maps_link: "",
+      },
+    ];
+    const result = enrichTravel(p, cities);
+    expect(result.days[0]!.activities[0]).toMatchObject({
+      address: "",
+      cost: null,
+      price: { amount: null },
+    });
+  });
+  it("uses a verified catalog estimate and counts the group once", () => {
+    const catalog = structuredClone(cities);
+    catalog[0]!.activities = [
+      {
+        title: "Museum",
+        source: "official",
+        last_verified_at: "2026-11-01",
+        estimated_cost: 20,
+        currency: "VND",
+        duration_minutes: 60,
+        tags: [],
+        category: "attraction",
+      },
+    ];
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Museum",
+        time: "09:00",
+        duration: "1h",
+        description: "",
+        category: "attraction",
+        cost: 500,
+        currency: "VND",
+        maps_link: "",
+      },
+    ];
+    const result = reconcileBudget(enrichTravel(p, catalog));
+    expect(result.budget_breakdown.activities).toBe(40);
+    expect(result.days[0]!.daily_cost_estimate).toBe(40);
+  });
+});
+
+describe("full-day coverage", () => {
+  it("requests an evening experience and hotel return when the plan ends at dinner", () => {
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Dinner",
+        kind: "meal",
+        meal_slot: "dinner",
+        time: "18:00",
+        duration: "1h",
+        description: "",
+        category: "food",
+        cost: null,
+        currency: "VND",
+        maps_link: "",
+      },
+    ];
+    expect(itineraryQuality(p).map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["EVENING_MISSING", "HOTEL_RETURN_MISSING"]),
+    );
+    const input = { planning: createPlanningCriteria() } as ItineraryInput;
+    input.planning!.transport_preferences.departure_at = "2026-12-01T20:00";
+    expect(
+      itineraryQuality(p, input).some(
+        (issue) => issue.code === "EVENING_MISSING",
+      ),
+    ).toBe(false);
+  });
+  it("allows a real full-day experience instead of padding the visit count", () => {
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Theme park",
+        kind: "visit",
+        time: "09:00",
+        duration: "6h",
+        description: "A full-day experience with breaks.",
+        category: "attraction",
+        cost: null,
+        currency: "VND",
+        maps_link: "",
+      },
+    ];
+    expect(
+      itineraryQuality(p).some(
+        (issue) =>
+          issue.code === "ACTIVITIES_MISSING" &&
+          issue.message.startsWith("Day 1:"),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("real model regression findings", () => {
+  it("does not charge an invented contingency after removing model prices", () => {
+    const p = plan();
+    p.budget_breakdown.contingency = 200;
+    const result = reconcileBudget(enrichTravel(p, cities));
+    expect(result.total_cost).toBe(0);
+    expect(result.budget_breakdown.contingency).toBe(0);
+  });
+  it("does not count a standalone transfer's own travel duration twice", () => {
+    const p = plan();
+    p.days[0]!.activities = [
+      {
+        name: "Breakfast",
+        kind: "meal",
+        meal_slot: "breakfast",
+        time: "08:00",
+        duration: "1h",
+        description: "",
+        category: "food",
+        currency: "VND",
+        cost: null,
+        maps_link: "",
+      },
+      {
+        name: "Transfer",
+        kind: "transfer",
+        time: "09:00",
+        duration: "30m",
+        travel_minutes: 30,
+        description: "",
+        category: "transport",
+        currency: "VND",
+        cost: null,
+        maps_link: "",
+      },
+      {
+        name: "Museum",
+        kind: "visit",
+        time: "09:30",
+        duration: "1h",
+        travel_minutes: 0,
+        description:
+          "Explore the exhibits in the museum and focus on the local history collection, allowing enough time for a relaxed visit.",
+        category: "attraction",
+        currency: "VND",
+        cost: null,
+        maps_link: "",
+      },
+    ];
+    expect(
+      itineraryQuality(p).filter((issue) => issue.code === "SCHEDULE_CONFLICT"),
+    ).toHaveLength(0);
+  });
+});
+
+describe("labelled planning allowances", () => {
+  it("retains itemized allowances and multiplies person/room/night scopes once", () => {
+    const p = plan();
+    const allowance = (amount: number) => ({
+      amount,
+      currency: "VND",
+      scope: "person" as const,
+      status: "estimated" as const,
+      basis: "planning_estimate" as const,
+      assumption:
+        "Rounded planning allowance per traveler; not a confirmed live price.",
+    });
+    p.days[0]!.activities = [
+      {
+        name: "Breakfast",
+        kind: "meal",
+        meal_slot: "breakfast",
+        time: "08:00",
+        duration: "45m",
+        description: "",
+        cost: 15,
+        currency: "VND",
+        category: "food",
+        maps_link: "",
+        price: allowance(15),
+      },
+      {
+        name: "Local rides allowance",
+        kind: "transfer",
+        time: "09:00",
+        duration: "15m",
+        description: "",
+        cost: 8,
+        currency: "VND",
+        category: "transport",
+        maps_link: "",
+        price: allowance(8),
+      },
+      {
+        name: "Return to hotel",
+        kind: "transfer",
+        time: "21:00",
+        duration: "30m",
+        description: "",
+        cost: 0,
+        currency: "VND",
+        category: "transport",
+        maps_link: "",
+        price: allowance(0),
+      },
+    ];
+    p.hotels = [
+      {
+        name: "Lodging area",
+        city: "Da Nang",
+        rooms: 1,
+        nights: 1,
+        nightly_estimate: 80,
+        estimate_basis: "planning_estimate",
+        estimate_assumption:
+          "One double room for one night, approximate allowance.",
+        price_per_night: "80 VND / room / night",
+        price_range: "",
+        booking_url: "",
+        airbnb_url: "",
+        address: "",
+        maps_link: "",
+      },
+    ];
+    p.transport_summary = [
+      {
+        segment: "Outbound",
+        from: "Home",
+        to: "Da Nang",
+        recommended_mode: "flight",
+        transport_kind: "flight",
+        price: allowance(200),
+        options: [],
+      },
+    ];
+    const result = reconcileBudget(enrichTravel(p, cities));
+    expect(result.days[0]!.activities[0]!.cost).toBe(30);
+    expect(result.days[0]!.activities[0]!.price?.amount).toBe(15);
+    expect(enrichTravel(result, cities).days[0]!.activities[0]!.cost).toBe(30);
+    expect(result.budget_breakdown).toMatchObject({
+      food: 30,
+      transport: 416,
+      accommodation: 80,
+      contingency: 53,
+      total: 579,
+    });
+    expect(result.days[0]!.activities[0]!.price?.basis).toBe(
+      "planning_estimate",
+    );
+    expect(
+      result.budget_breakdown.items?.find((item) => item.id === "contingency")
+        ?.assumption,
+    ).toContain("10%");
+    expect(result.hotels[0]!.nightly_estimate).toBe(80);
+  });
+});
+
+it("budgets a return airport transfer and never charges a round-trip airfare twice", () => {
+  const p = plan();
+  const planning = createPlanningCriteria();
+  planning.journey.return_to_origin = true;
+  const price = {
+    amount: 600,
+    currency: "VND",
+    scope: "person" as const,
+    status: "estimated" as const,
+    basis: "planning_estimate" as const,
+    assumption: "Dự trù vé máy bay khứ hồi, chưa phải báo giá.",
+  };
+  p.transport_summary = [
+    {
+      segment: "Flight",
+      from: "Home",
+      to: "Da Nang",
+      recommended_mode: "flight",
+      transport_kind: "flight",
+      price,
+      options: [],
+    },
+    {
+      segment: "Airport transfer",
+      from: "Airport",
+      to: "Hotel",
+      recommended_mode: "train",
+      transport_kind: "airport_transfer",
+      price: {
+        ...price,
+        amount: 25,
+        assumption: "Khoản dự trù một chiều từ sân bay đến chỗ ở.",
+      },
+      options: [],
+    },
+  ];
+  const result = reconcileBudget(
+    enrichTravel(p, [], { planning, locale: "vi" } as ItineraryInput),
+  );
+  expect(result.transport_summary).toHaveLength(4);
+  expect(result.budget_breakdown.transport).toBe(1300);
+  expect(
+    result.transport_summary.find((leg) => leg.from === "Da Nang")?.price
+      ?.amount,
+  ).toBe(0);
+});

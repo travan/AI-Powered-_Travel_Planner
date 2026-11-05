@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { useAppLanguage } from "../i18n/LanguageProvider";
 
 import { UiText } from "../i18n/UiText";
@@ -33,62 +34,79 @@ export function BudgetBreakdown({ breakdown }: Props) {
     { label: "Contingency", value: breakdown.contingency ?? 0 },
   ].filter((c) => c.value > 0);
 
+  if (!categories.length) return null;
+
+  const hasEstimates = breakdown.items?.some(
+    (item) => item.basis === "planning_estimate",
+  );
+  const money = (value: number) =>
+    value.toLocaleString(formattingLocale, { maximumFractionDigits: 2 });
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold text-gray-900 text-lg">
           {" "}
           <UiText id="tfa5c1ce38652" fallback="Budget Breakdown" />{" "}
         </h2>
-        {breakdown.total != null && (
-          <span className="text-xl font-bold text-emerald-700">
-            {breakdown.currency ?? "USD"}{" "}
-            {breakdown.total.toLocaleString(formattingLocale)}
+        {breakdown.total > 0 && (
+          <span className="whitespace-nowrap text-xl font-bold text-emerald-700">
+            {breakdown.complete === false &&
+              (formattingLocale === "vi" ? "Tạm tính · " : "Subtotal · ")}
+            {breakdown.currency ?? "USD"} {money(breakdown.total)}
           </span>
         )}
       </div>
 
+      {hasEstimates && (
+        <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
+          {formattingLocale === "vi"
+            ? "Dự toán lập ngân sách, chưa phải báo giá. Mỗi khoản bên dưới ghi rõ giả định và tính cho cả nhóm; giá thực tế phụ thuộc ngày đi và lựa chọn dịch vụ."
+            : "Planning allowances, not confirmed quotes. Item amounts below cover the entire group; actual prices depend on dates and service choices."}
+        </p>
+      )}
       {breakdown.complete === false && (
         <p
           role="status"
           className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"
         >
           {formattingLocale === "vi"
-            ? "Tổng tạm tính các khoản đã có giá. Chưa bao gồm: "
-            : "Subtotal of priced items. Not yet included: "}
-          {breakdown.missing_items?.join(", ")}
+            ? "Chỉ gồm các khoản đã có giá; chưa phải tổng chi phí chuyến đi."
+            : "Includes priced items only; this is not the full trip cost."}
         </p>
       )}
       {breakdown.transport_details && (
         <div className="space-y-1 text-sm">
-          {Object.entries(breakdown.transport_details).map(([kind, amount]) => (
-            <p key={kind}>
-              {
-                (
-                  {
-                    flight:
-                      formattingLocale === "vi" ? "Vé máy bay" : "Flights",
-                    intercity:
-                      formattingLocale === "vi" ? "Liên tỉnh" : "Intercity",
-                    airport_transfer:
-                      formattingLocale === "vi"
-                        ? "Đưa đón sân bay"
-                        : "Airport transfers",
-                    local:
-                      formattingLocale === "vi"
-                        ? "Đi lại nội đô"
-                        : "Local transport",
-                  } as Record<string, string>
-                )[kind]
-              }
-              :{" "}
-              {amount == null
-                ? formattingLocale === "vi"
-                  ? "Chưa có giá"
-                  : "Unknown"
-                : `${amount.toLocaleString(formattingLocale)} ${breakdown.currency}`}
-            </p>
-          ))}
+          {Object.entries(breakdown.transport_details)
+            .filter(([, amount]) => amount != null && Number.isFinite(amount))
+            .map(([kind, amount]) => (
+              <p key={kind}>
+                {
+                  (
+                    {
+                      flight:
+                        formattingLocale === "vi" ? "Vé máy bay" : "Flights",
+                      intercity:
+                        formattingLocale === "vi" ? "Liên tỉnh" : "Intercity",
+                      airport_transfer:
+                        formattingLocale === "vi"
+                          ? "Đưa đón sân bay"
+                          : "Airport transfers",
+                      local:
+                        formattingLocale === "vi"
+                          ? "Đi lại nội đô"
+                          : "Local transport",
+                    } as Record<string, string>
+                  )[kind]
+                }
+                :{" "}
+                {amount == null
+                  ? formattingLocale === "vi"
+                    ? "Chưa có giá"
+                    : "Unknown"
+                  : `${amount.toLocaleString(formattingLocale)} ${breakdown.currency}`}
+              </p>
+            ))}
         </div>
       )}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
@@ -138,8 +156,7 @@ export function BudgetBreakdown({ breakdown }: Props) {
                   <UiText text={cat.label} />
                 </span>
                 <span className="text-sm font-medium text-gray-900">
-                  {breakdown.currency ?? "USD"}{" "}
-                  {cat.value.toLocaleString(formattingLocale)}
+                  {breakdown.currency ?? "USD"} {money(cat.value)}
                 </span>
                 <span className="w-10 text-right text-xs text-gray-400">
                   {pct}%
@@ -150,31 +167,59 @@ export function BudgetBreakdown({ breakdown }: Props) {
         </ul>
       </div>
 
-      {/* Per person / per day */}
-      {(breakdown.per_person != null || breakdown.per_day != null) && (
-        <div className="flex flex-wrap gap-4 border-t border-gray-100 pt-4">
-          {breakdown.per_person != null && (
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">
-                {" "}
-                <UiText id="tb9da4f7105fa" fallback="Per person:" />{" "}
-              </span>{" "}
-              {breakdown.currency ?? "USD"}{" "}
-              {breakdown.per_person.toLocaleString(formattingLocale)}
-            </div>
-          )}
-          {breakdown.per_day != null && (
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">
-                {" "}
-                <UiText id="t83ec4f36d5e9" fallback="Per day:" />{" "}
-              </span>{" "}
-              {breakdown.currency ?? "USD"}{" "}
-              {breakdown.per_day.toLocaleString(formattingLocale)}
-            </div>
-          )}
-        </div>
+      {!!breakdown.items?.length && (
+        <details className="rounded-xl border border-gray-200 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-primary">
+            {formattingLocale === "vi"
+              ? "Dự toán từng khoản cho cả nhóm"
+              : "Itemized group budget"}
+          </summary>
+          <ul className="mt-4 divide-y divide-gray-100">
+            {breakdown.items
+              .filter((item) => item.amount != null)
+              .map((item) => (
+                <li key={item.id} className="py-3 text-sm">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium">{item.label}</span>
+                    <span className="whitespace-nowrap font-semibold">
+                      {breakdown.currency} {money(item.amount!)}
+                    </span>
+                  </div>
+                  {item.assumption && (
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
+                      {item.assumption}
+                    </p>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </details>
       )}
+
+      {/* Per person / per day */}
+      {breakdown.complete !== false &&
+        (breakdown.per_person != null || breakdown.per_day != null) && (
+          <div className="flex flex-wrap gap-4 border-t border-gray-100 pt-4">
+            {breakdown.per_person != null && (
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">
+                  {" "}
+                  <UiText id="tb9da4f7105fa" fallback="Per person:" />{" "}
+                </span>{" "}
+                {breakdown.currency ?? "USD"} {money(breakdown.per_person)}
+              </div>
+            )}
+            {breakdown.per_day != null && (
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">
+                  {" "}
+                  <UiText id="t83ec4f36d5e9" fallback="Per day:" />{" "}
+                </span>{" "}
+                {breakdown.currency ?? "USD"} {money(breakdown.per_day)}
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 }

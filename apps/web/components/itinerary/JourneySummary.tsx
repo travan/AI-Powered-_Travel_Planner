@@ -9,8 +9,22 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
 
   const issueText = useIssueText();
   const t = useUiText();
+  const diagnosticCodes = new Set([
+    "MEAL_MISSING",
+    "ACTIVITIES_MISSING",
+    "SCHEDULE_DETAILS_MISSING",
+    "ACTIVITY_DETAILS_MISSING",
+    "EVENING_MISSING",
+    "HOTEL_RETURN_MISSING",
+    "BUDGET_INCOMPLETE",
+    "STAY_UNSELECTED",
+    "STAY_NOT_SELECTED",
+  ]);
+  const issues = (plan.issues ?? []).filter(
+    (issue) => !diagnosticCodes.has(issue.code),
+  );
   if (!plan.planning)
-    return plan.issues?.length ? (
+    return issues.length ? (
       <section
         className="rounded-xl bg-amber-50 p-4 text-amber-900"
         aria-label={
@@ -20,7 +34,7 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
         }
       >
         <ul className="list-disc space-y-1 pl-5 text-sm">
-          {plan.issues.map((issue, i) => (
+          {issues.map((issue, i) => (
             <li key={`${issue.code}:${i}`}>{issueText(issue)}</li>
           ))}
         </ul>
@@ -75,16 +89,18 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
         <UiText id="t86f6edbb7eb6" fallback="phòng" />{" "}
       </p>
       <p className="text-sm">
-        <strong>
-          {plan.total_cost?.toLocaleString(formattingLocale)} {plan.currency}
-        </strong>{" "}
-        <UiText id="tb3428dd1453a" fallback="dự kiến cả nhóm. Ngân sách:" />{" "}
-        {p.budget.total?.toLocaleString(formattingLocale) ?? (
-          <UiText text="Chưa cố định" />
-        )}{" "}
-        {p.budget.currency}.
+        {plan.budget_breakdown?.complete !== false && plan.total_cost > 0 && (
+          <strong>
+            {plan.total_cost.toLocaleString(formattingLocale)} {plan.currency}
+            {" · "}
+          </strong>
+        )}
+        {formattingLocale === "vi" ? "Ngân sách của bạn: " : "Your budget: "}
+        {p.budget.total?.toLocaleString(formattingLocale) ??
+          t("Chưa cố định")}{" "}
+        {p.budget.currency}
       </p>
-      {!!plan.issues?.length && (
+      {!!issues.length && (
         <div className="rounded-xl bg-amber-50 p-4 text-amber-900">
           <h3 className="font-bold">
             {" "}
@@ -94,7 +110,7 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
             />{" "}
           </h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-            {plan.issues.map((i, index) => (
+            {issues.map((i, index) => (
               <li key={`${i.code}-${index}`}>
                 {i.severity === "error" ? (
                   <UiText id="t9c526b9e1211" fallback="Cần sửa: " />

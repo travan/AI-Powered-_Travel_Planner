@@ -5,11 +5,22 @@ export { ClaudeProvider } from "./providers/claude.js";
 export { MockAIProvider } from "./providers/mock.js";
 export { OllamaProvider } from "./providers/ollama.js";
 export type { OllamaProviderOptions } from "./providers/ollama.js";
-export { normalizeOllamaItinerary } from "./providers/ollama.js";
+export {
+  normalizeItinerary,
+  normalizeItinerary as normalizeOllamaItinerary,
+} from "./normalize-itinerary.js";
 
 import type { AIProvider } from "./provider.js";
-export type AIProviderName = "openai" | "gemini" | "claude" | "ollama" | "cloudflare";
-import { CloudflareAIProvider, type WorkersAIBinding } from "./providers/cloudflare.js";
+export type AIProviderName =
+  | "openai"
+  | "gemini"
+  | "claude"
+  | "ollama"
+  | "cloudflare";
+import {
+  CloudflareAIProvider,
+  type WorkersAIBinding,
+} from "./providers/cloudflare.js";
 export { CloudflareAIProvider } from "./providers/cloudflare.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import { GeminiProvider } from "./providers/gemini.js";
@@ -20,7 +31,11 @@ import { OllamaProvider } from "./providers/ollama.js";
 function isPlaceholder(value: string | undefined): boolean {
   if (!value) return true;
   const normalized = value.trim().toLowerCase();
-  return normalized.length === 0 || normalized.includes("placeholder") || normalized === "sk-...";
+  return (
+    normalized.length === 0 ||
+    normalized.includes("placeholder") ||
+    normalized === "sk-..."
+  );
 }
 
 function resolveKey(envVar: string, isDev: boolean): string | null {
@@ -38,8 +53,12 @@ export function createAIProvider(
 
   switch (provider) {
     case "cloudflare":
-      if (!options.workersAI) throw new Error("Cloudflare AI binding is required");
-      return new CloudflareAIProvider(options.workersAI, process.env.CLOUDFLARE_AI_MODEL);
+      if (!options.workersAI)
+        throw new Error("Cloudflare AI binding is required");
+      return new CloudflareAIProvider(
+        options.workersAI,
+        process.env.CLOUDFLARE_AI_MODEL,
+      );
     case "openai": {
       const key = resolveKey("OPENAI_API_KEY", isDev);
       return key === null ? new MockAIProvider() : new OpenAIProvider(key);
@@ -54,8 +73,10 @@ export function createAIProvider(
     }
     case "ollama":
       return new OllamaProvider({
-        baseURL: process.env["OLLAMA_BASE_URL"]?.trim() || "http://127.0.0.1:11434/v1",
-        overviewModel: process.env["OLLAMA_OVERVIEW_MODEL"]?.trim() || "gemma4:latest",
+        baseURL:
+          process.env["OLLAMA_BASE_URL"]?.trim() || "http://127.0.0.1:11434/v1",
+        overviewModel:
+          process.env["OLLAMA_OVERVIEW_MODEL"]?.trim() || "gemma4:latest",
         detailModel: process.env["OLLAMA_DETAIL_MODEL"]?.trim() || "qwen3.5:9b",
       });
     default:

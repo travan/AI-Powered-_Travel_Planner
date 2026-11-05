@@ -125,21 +125,24 @@ export function PlannerLearningPanel({
           ? "Lịch sử tạo, chỉnh sửa và chi tiêu giúp gợi ý sau phù hợp hơn với nhu cầu của bạn."
           : "Your planning history, changes and spending help personalize future suggestions."}
       </p>
-      {plan.learning_summary && (
-        <p className="text-sm">
-          {vi ? "Lịch sử có" : "Planning history"}:{" "}
-          {plan.learning_summary.past_plans}{" "}
-          {vi ? "lịch trình; đã tham khảo" : "previous plans; consulted"}{" "}
-          {plan.learning_summary.approved_expense_samples}{" "}
-          {vi
-            ? "khoản chi đã duyệt, cùng thành phố/tiền tệ/số người."
-            : "approved expense samples matching city, currency and group size."}
-        </p>
-      )}
+      {plan.learning_summary &&
+        (plan.learning_summary.past_plans > 0 ||
+          plan.learning_summary.approved_expense_samples > 0) && (
+          <p className="text-sm">
+            {vi ? "Lịch sử có" : "Planning history"}:{" "}
+            {plan.learning_summary.past_plans}{" "}
+            {vi ? "lịch trình; đã tham khảo" : "previous plans; consulted"}{" "}
+            {plan.learning_summary.approved_expense_samples}{" "}
+            {vi
+              ? "khoản chi đã duyệt, cùng thành phố/tiền tệ/số người."
+              : "approved expense samples matching city, currency and group size."}
+          </p>
+        )}
       {settings && (
         <div className="space-y-2 text-sm">
-          <label className="flex gap-2">
+          <label className="flex items-start gap-3 leading-6">
             <input
+              className="mt-1 h-4 w-4 shrink-0 accent-primary"
               type="checkbox"
               disabled={busy}
               checked={settings.memory_enabled}
@@ -149,8 +152,9 @@ export function PlannerLearningPanel({
               ? "Dùng lịch sử riêng của tôi để gợi ý tốt hơn"
               : "Use my private history for better suggestions"}
           </label>
-          <label className="flex gap-2">
+          <label className="flex items-start gap-3 leading-6">
             <input
+              className="mt-1 h-4 w-4 shrink-0 accent-primary"
               type="checkbox"
               disabled={busy}
               checked={settings.training_consent}
@@ -168,15 +172,15 @@ export function PlannerLearningPanel({
         </div>
       )}
       {(itineraryId || tripId) && (
-        <div className="space-y-3">
-          <label className="text-sm">
+        <div className="grid min-w-0 gap-4 border-t border-outline-variant/30 pt-4">
+          <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
             {vi ? "Đánh giá lịch trình" : "Rate this itinerary"}
             <select
               aria-label={vi ? "Đánh giá lịch trình" : "Rate this itinerary"}
               value={rating}
               disabled={busy}
               onChange={(e) => setRating(Number(e.target.value))}
-              className="ml-3 rounded-lg border p-2"
+              className="w-28 rounded-xl border border-outline-variant bg-surface-container-lowest py-2 pl-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {[1, 2, 3, 4, 5].map((n) => (
                 <option key={n} value={n}>
@@ -186,7 +190,8 @@ export function PlannerLearningPanel({
             </select>
           </label>
           <textarea
-            className="w-full rounded-xl border p-3 text-sm"
+            rows={4}
+            className="block min-h-28 w-full min-w-0 resize-y rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-sm leading-6 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
             maxLength={2000}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -205,7 +210,7 @@ export function PlannerLearningPanel({
             type="button"
             disabled={busy}
             onClick={save}
-            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
+            className="min-h-11 justify-self-start rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary disabled:opacity-50"
           >
             {vi ? "Lưu phản hồi" : "Save feedback"}
           </button>
