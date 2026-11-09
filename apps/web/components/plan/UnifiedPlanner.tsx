@@ -23,7 +23,6 @@ import {
   nextPlannerDate,
   setPlannerDeparture,
   needsSuggestedTravelTimes,
-  buildPlannerRequest,
   restorePlannerRequest,
   migratePlannerDraft,
   preparePlannerSubmission,
