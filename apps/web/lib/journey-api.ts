@@ -32,7 +32,18 @@ export async function journeyRequest<T>(
       signal,
       cache: "no-store",
     },
-  );
+  ).catch((error: unknown) => {
+    if (
+      path !== "planning/validate" ||
+      (error instanceof Error && error.name === "AbortError")
+    )
+      throw error;
+    throw new ApiRequestError(
+      "Planning service unavailable",
+      0,
+      "PLANNER_API_UNAVAILABLE",
+    );
+  });
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
     throw new ApiRequestError(
@@ -40,7 +51,11 @@ export async function journeyRequest<T>(
         ? detail.message
         : `Yêu cầu thất bại (${response.status}).`,
       response.status,
-      typeof detail?.code === "string" ? detail.code : undefined,
+      path === "planning/validate" && response.status >= 500
+        ? "PLANNER_API_UNAVAILABLE"
+        : typeof detail?.code === "string"
+          ? detail.code
+          : undefined,
       detail?.params,
     );
   }

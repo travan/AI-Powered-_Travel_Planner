@@ -11,7 +11,8 @@
     "submit": "Submit",
     "cancel": "Cancel",
     "days": "{count, plural, one {# day} other {# days}}",
-    "language": "Language"
+    "language": "Language",
+    "main_navigation": "Main navigation"
   },
   "nav": {
     "home": "Home",
@@ -1062,7 +1063,12 @@
     "REVISION_INVALID": "The preview has timing or constraint errors. Regenerate it before applying.",
     "CHECKLIST_NOT_FOUND": "Checklist task not found.",
     "PLANNING_INVALID": "Check the required planning criteria.",
-    "LODGING_OVER_BUDGET": "Accommodation alone exceeds the group budget."
+    "LODGING_OVER_BUDGET": "Accommodation alone exceeds the group budget.",
+    "MONTH_UNAVAILABLE": "Choose a month with enough remaining days for your trip.",
+    "MONTH_BOOKING_CONFLICT": "Choose specific dates when you already have booked tickets or accommodation.",
+    "PLANNER_API_UNAVAILABLE": "The planning service is unavailable. Your details have been kept.",
+    "GENERATION_FAILED": "The itinerary could not be created. Your details have been kept; please retry.",
+    "CURRENCY_RATE_UNAVAILABLE": "Exchange rates are unavailable. Your original amounts have been kept."
   },
   "translations": {
     "panel": "Itinerary translations",
@@ -1094,7 +1100,7 @@
     "day_count": "{count, plural, one {# day} other {# days}}",
     "adult_count": "{count, plural, one {# adult} other {# adults}}",
     "destinations_selected": "{count, plural, one {# destination selected} other {# destinations selected}}",
-    "add_destination_optional": "Add another destination (optional)",
+    "add_destination_optional": "Add a destination",
     "unconfirmed_times_suggested": "Your unbooked travel times conflict. We will suggest suitable times for this plan; your draft entries are kept for editing.",
     "fix_required": "Please fix before generating",
     "optional_notices": "For your information — no extra input needed",
@@ -1102,8 +1108,8 @@
     "preferences_title": "Make it yours",
     "preferences_hint": "Optional. Keep the suggestions or adjust what matters to you.",
     "trip_summary": "Trip summary",
-    "origin_placeholder": "Where are you leaving from? e.g. Hanoi",
-    "destination_placeholder": "Where would you like to go? e.g. Da Nang",
+    "origin_placeholder": "Departure city",
+    "destination_placeholder": "Destination city",
     "budget_heading": "Budget for your whole group",
     "budget_placeholder": "e.g. 10,000,000",
     "budget_hint": "Total for the whole group, including travel, stays, meals and activities. Leave blank for an estimate.",
@@ -1139,6 +1145,29 @@
       "result": "View result",
       "status": "View status",
       "return_hint": "After returning to the planner, open Recent requests to check this request."
-    }
+    },
+    "date_mode": "Travel dates",
+    "flexible_month": "Any dates in a month",
+    "travel_month": "Travel month",
+    "flexible_month_hint": "We pick dates within your month, prioritizing favorable weather and as many activities as your pace allows. Equally suitable dates are picked at random. For distant dates, weather is seasonal guidance only.",
+    "compact_heading": "Plan your trip",
+    "origin_label": "Where from?",
+    "destination_label": "Where to?",
+    "compact_customize": "Trip options",
+    "route_options": "Route & location",
+    "search_help": "Find a location",
+    "days_label": "Days",
+    "budget_label": "Group budget",
+    "time_help": "How dates are chosen",
+    "days_short": "days",
+    "travelers_short": "{count} travelers",
+    "cost_auto_short": "Estimated costs",
+    "departure_short": "Departure",
+    "return_short": "Return",
+    "recent_requests_short": "Recent requests",
+    "currency_converting": "Converting amounts…",
+    "currency_failed": "Exchange rates are unavailable. Your amounts remain unchanged in {currency}.",
+    "currency_retry": "Retry conversion",
+    "currency_converted": "Converted using indicative exchange rates"
   }
 }

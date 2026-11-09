@@ -1,5 +1,7 @@
 import {
   createPlanningCriteria,
+  createManualCity,
+  type CitySuggestion,
   localTripInstant,
   type PlanningCriteria,
   type GenerateRequest,
@@ -9,10 +11,13 @@ import { restorePlanningPreferences } from "./planning-preferences";
 export type PlannerDraft = {
   planning: PlanningCriteria;
   cities: SelectedCity[];
+  destinationQuery?: string;
   start: string;
   end: string;
   days: number;
   dated: boolean;
+  flexible?: boolean;
+  month?: string;
   prompt: string;
   step: number;
   style: string;
@@ -62,13 +67,19 @@ export function migratePlannerDraft(draft: PlannerDraft): PlannerDraft {
   };
 }
 
-export const emptyPlanner: () => PlannerDraft = () => ({
-  planning: createPlanningCriteria(),
+export const emptyPlanner = (locale: "en" | "vi" = "vi"): PlannerDraft => ({
+  planning: {
+    ...createPlanningCriteria(),
+    budget: { currency: locale === "en" ? "USD" : "VND" },
+  },
   cities: [],
+  destinationQuery: "",
   start: "",
   end: "",
   days: 3,
   dated: false,
+  flexible: false,
+  month: "",
   prompt: "",
   step: 0,
   style: "mixed",
@@ -96,7 +107,10 @@ export const buildPlannerRequest = (
   city_names: f.cities.map((c) => c.name),
   ...(f.dated
     ? { start_date: f.start, end_date: f.end }
-    : { num_days: f.days }),
+    : {
+        num_days: f.days,
+        ...(f.flexible ? { flexible_month: f.month ?? "" } : {}),
+      }),
   budget: f.planning.budget.total,
   currency: f.planning.budget.currency,
   trip_style: f.style as GenerateRequest["trip_style"],
@@ -183,10 +197,115 @@ export function restorePlannerRequest(request: GenerateRequest): PlannerDraft {
     })),
     start: request.start_date ?? "",
     end: request.end_date ?? "",
-    dated: !!request.start_date,
+    dated: !request.flexible_month && !!request.start_date,
+    flexible: request.flexible_month !== undefined,
+    month: request.flexible_month ?? "",
     days: request.num_days ?? 3,
     style: request.trip_style,
     forceRefresh: !!request.force_refresh,
     prompt: request.prompt_text ?? "",
   });
+}
+
+const cityTextKey = (value: string) =>
+  value
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[’'\s-]+/g, "");
+const cityKeys = (city: SelectedCity) =>
+  [city.slug, city.name, ...Object.values(city.names ?? {})].map(cityTextKey);
+
+/** Keep explicit city choices; an identified city can upgrade a manual name. */
+export function mergePlannerCity(
+  cities: SelectedCity[],
+  city: SelectedCity,
+): SelectedCity[] {
+  const keys = new Set(cityKeys(city));
+  const index = cities.findIndex(
+    (selected) =>
+      selected.slug === city.slug ||
+      (!(selected.names && city.names) &&
+        cityKeys(selected).some((key) => keys.has(key))),
+  );
+  if (index < 0) return [...cities, city];
+  const existing = cities[index]!;
+  if (existing.names && !city.names) return cities;
+  return cities.map((selected, i) =>
+    i === index
+      ? {
+          ...existing,
+          ...city,
+          ...(existing.names || city.names
+            ? { names: { ...existing.names, ...city.names } }
+            : {}),
+        }
+      : selected,
+  );
+}
+
+/** One immutable snapshot for validation, draft saving and generation. */
+export function preparePlannerSubmission(
+  form: PlannerDraft,
+  locale: "en" | "vi",
+  suggestions: CitySuggestion[] = [],
+): { draft: PlannerDraft; request: GenerateRequest } {
+  const pending = form.destinationQuery?.trim() ?? "";
+  let cities = form.cities.reduce<SelectedCity[]>(
+    (selected, city) => mergePlannerCity(selected, city),
+    [],
+  );
+  if (pending) {
+    const matches = suggestions.filter((city) =>
+      [city.slug, ...Object.values(city.name)].some(
+        (name) => cityTextKey(name) === cityTextKey(pending),
+      ),
+    );
+    const match = matches.length === 1 ? matches[0] : undefined;
+    const city = match
+      ? {
+          slug: match.slug,
+          name: match.name[locale] ?? match.name.en ?? match.slug,
+          names: match.name,
+        }
+      : createManualCity(pending);
+    cities = mergePlannerCity(cities, city);
+  }
+  const draft = migratePlannerDraft({
+    ...form,
+    cities,
+    destinationQuery: "",
+    forceRefresh: false,
+    planning: {
+      ...form.planning,
+      journey: {
+        ...form.planning.journey,
+        origin: {
+          ...form.planning.journey.origin,
+          label: form.planning.journey.origin.label.trim(),
+        },
+      },
+    },
+  });
+  return { draft, request: buildPlannerRequest(draft, locale) };
+}
+
+/** A language default must never silently relabel money already entered. */
+export function applyPlannerCurrencyDefault(
+  form: PlannerDraft,
+  locale: "en" | "vi",
+): PlannerDraft {
+  const p = form.planning;
+  if (
+    [
+      p.budget.total,
+      p.stay_preferences.nightly_budget,
+      p.dining_preferences.per_person_budget,
+      p.transport_preferences.total_price,
+    ].some((value) => value !== undefined)
+  )
+    return form;
+  const currency = locale === "en" ? "USD" : "VND";
+  if (p.budget.currency === currency) return form;
+  return { ...form, planning: { ...p, budget: { ...p.budget, currency } } };
 }

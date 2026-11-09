@@ -276,7 +276,13 @@ export interface CreateTripExpenseRequest {
   title: string;
   amount: number;
   currency?: string;
-  expense_type?: "accommodation" | "food" | "activity" | "transport" | "shopping" | "other";
+  expense_type?:
+    | "accommodation"
+    | "food"
+    | "activity"
+    | "transport"
+    | "shopping"
+    | "other";
   activity_id?: string | null;
   place_id?: string | null;
   split_user_ids?: string[];
@@ -367,7 +373,16 @@ export interface CreateBillUploadRequest {
   activity_id?: string | null;
   place_name?: string;
   place_address?: string;
-  place_type?: "hotel" | "homestay" | "cafe" | "restaurant" | "attraction" | "activity" | "transport_hub" | "shop" | "other";
+  place_type?:
+    | "hotel"
+    | "homestay"
+    | "cafe"
+    | "restaurant"
+    | "attraction"
+    | "activity"
+    | "transport_hub"
+    | "shop"
+    | "other";
   city_slug?: string;
   total_amount?: number;
   currency?: string;
@@ -426,4 +441,14 @@ export interface TripDetail extends TripSummary {
   change_requests: TripChangeRequestSummary[];
   place_submissions: UserPlaceSubmissionSummary[];
   audit_logs: TripAuditLogSummary[];
+}
+
+/** Indicative currency conversion quote; never a transaction/bank rate. */
+export interface CurrencyQuote {
+  from: string;
+  to: string;
+  rate: number;
+  updated_at: string;
+  expires_at: string;
+  source_url: string;
 }

@@ -379,6 +379,8 @@ export interface ItineraryOutput {
 // ─── Input ────────────────────────────────────────────────────────────────────
 
 export interface ItineraryInput {
+  /** Choose a consecutive trip window entirely within this YYYY-MM month. */
+  flexible_month?: string;
   planning?: PlanningCriteria;
   cities: string[];
   prompt_text?: string;

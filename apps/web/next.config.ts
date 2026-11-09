@@ -8,13 +8,16 @@ const apiProxyTarget =
   "http://127.0.0.1:3001";
 
 const nextConfig: NextConfig = {
+  // Keep the development indicator clear of the mobile navigation in previews.
+  devIndicators: false,
   // Preserve the browser origin when auth middleware redirects loopback URLs.
   skipMiddlewareUrlNormalize: true,
   env: {
     // The first-party API owns auth by default. Supabase remains opt-in via
     // AUTH_PROVIDER=supabase (or NEXT_PUBLIC_AUTH_PROVIDER=supabase).
     AUTH_PROVIDER: process.env["AUTH_PROVIDER"] ?? "local",
-    NEXT_PUBLIC_AUTH_PROVIDER: process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ?? "local",
+    NEXT_PUBLIC_AUTH_PROVIDER:
+      process.env["NEXT_PUBLIC_AUTH_PROVIDER"] ?? "local",
     NEXT_PUBLIC_API_URL:
       process.env["E2E_NEXT_PUBLIC_API_URL"] ??
       process.env["NEXT_PUBLIC_API_URL"] ??

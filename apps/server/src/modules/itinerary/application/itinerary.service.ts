@@ -1,3 +1,7 @@
+import {
+  flexibleMonthDates,
+  selectFlexibleWindow,
+} from "../enrichment/flexible-dates.js";
 import { PlannerLearningService } from "../learning/learning.service.js";
 import { WeatherService } from "../enrichment/weather.service.js";
 import {
@@ -26,7 +30,13 @@ import {
   type PreFetchedCityData,
 } from "@travel/ai";
 import * as travelTypes from "@travel/types";
-const { upgradeJourneyPlan, validatePlanning, tripDayCount } =
+const {
+  upgradeJourneyPlan,
+  validatePlanning,
+  tripDayCount,
+  flexibleMonthWindows,
+  plannerToday,
+} =
   (travelTypes as unknown as { default?: typeof travelTypes }).default ??
   travelTypes;
 import { BadRequestException } from "@nestjs/common";
@@ -87,6 +97,7 @@ export class ItineraryService {
   }): Promise<GenerateResponse> {
     const request: ItineraryInput = {
       planning: input.dto.planning,
+      flexible_month: input.dto.flexible_month,
       cities: input.dto.cities,
       prompt_text: input.dto.prompt_text,
       start_date: input.dto.start_date,
@@ -99,9 +110,9 @@ export class ItineraryService {
       num_travelers: input.dto.num_travelers,
     };
 
+    const validation = validatePlanning(request);
+    if (!validation.valid) throw new BadRequestException(validation);
     if (request.planning) {
-      const validation = validatePlanning(request);
-      if (!validation.valid) throw new BadRequestException(validation);
       request.num_days = tripDayCount(request);
       request.num_travelers =
         request.planning.travelers.adults +
@@ -139,6 +150,51 @@ export class ItineraryService {
       });
     }
     request.cities = rememberedCities.map(({ city }) => city.slug);
+    let flexibleDateNote: string | undefined;
+    if (request.flexible_month) {
+      const today = plannerToday();
+      const windows = flexibleMonthWindows(
+        request.flexible_month,
+        request.num_days ?? 1,
+        today,
+      );
+      if (!windows.length)
+        throw new BadRequestException(
+          "No available dates in the selected month",
+        );
+      const dates = flexibleMonthDates(request.flexible_month, today);
+      const weather = this.weather
+        ? await this.weather.forPlan(
+            {
+              city_catalog: Object.fromEntries(
+                rememberedCities.map(({ city }) => [
+                  city.slug,
+                  {
+                    name: city.name,
+                    country: city.country,
+                    timezone: city.timezone,
+                  },
+                ]),
+              ),
+              days: rememberedCities.flatMap(({ city }) =>
+                dates.map((date) => ({ city_slug: city.slug, date })),
+              ),
+            },
+            new Map(rememberedCities.map(({ city }) => [city.slug, city])),
+          )
+        : [];
+      const selected = selectFlexibleWindow(windows, request.cities, weather);
+      request.start_date = selected.start;
+      request.end_date = selected.end;
+      flexibleDateNote =
+        request.locale === "vi"
+          ? selected.basis === "forecast"
+            ? "Ngày linh hoạt được chọn trong các khoảng có dự báo đầy đủ, ưu tiên ít mưa và nhiệt độ thuận lợi cho hoạt động. Dự báo có thể thay đổi."
+            : "Ngày được chọn ngẫu nhiên trong tháng vì chưa đủ dự báo để so sánh các khoảng ngày. Thông tin khí hậu theo mùa không phải dự báo cho ngày cụ thể."
+          : selected.basis === "forecast"
+            ? "Flexible dates were selected among fully forecast periods, prioritizing less rain and comfortable activity temperatures. Forecasts may change."
+            : "Dates were selected at random within the month because complete forecasts were unavailable for comparison. Seasonal climate is not a forecast for specific dates.";
+    }
     const cityData = rememberedCities.map(({ planningData }) => planningData);
     const memory =
       this.learning && requestId
@@ -314,6 +370,11 @@ export class ItineraryService {
       ...itineraryQuality(detail, request),
     ];
     detail = reconcileBudget(detail, request);
+    if (flexibleDateNote && detail.seasonal_notes)
+      detail.seasonal_notes.warnings = [
+        ...(detail.seasonal_notes.warnings ?? []),
+        flexibleDateNote,
+      ];
     if (this.weather)
       detail.weather = await this.weather.forPlan(
         detail,
@@ -440,6 +501,7 @@ function generationCacheKey(
         provider,
         model,
         cities: citySlugs,
+        flexible_month: request.flexible_month ?? null,
         start_date: request.start_date ?? null,
         end_date: request.end_date ?? null,
         num_days: request.num_days ?? null,

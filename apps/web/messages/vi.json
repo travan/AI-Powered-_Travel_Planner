@@ -11,7 +11,8 @@
     "submit": "Gửi",
     "cancel": "Hủy",
     "days": "{count, plural, other {# ngày}}",
-    "language": "Ngôn ngữ"
+    "language": "Ngôn ngữ",
+    "main_navigation": "Điều hướng chính"
   },
   "nav": {
     "home": "Trang chủ",
@@ -1062,7 +1063,12 @@
     "REVISION_INVALID": "Phương án còn lỗi thời gian hoặc ràng buộc; hãy tạo lại trước khi áp dụng.",
     "CHECKLIST_NOT_FOUND": "Không tìm thấy việc cần làm.",
     "PLANNING_INVALID": "Kiểm tra các tiêu chí bắt buộc.",
-    "LODGING_OVER_BUDGET": "Riêng tiền phòng dự kiến đã vượt ngân sách cả nhóm."
+    "LODGING_OVER_BUDGET": "Riêng tiền phòng dự kiến đã vượt ngân sách cả nhóm.",
+    "MONTH_UNAVAILABLE": "Chọn tháng còn đủ số ngày cho chuyến đi.",
+    "MONTH_BOOKING_CONFLICT": "Hãy chọn ngày cụ thể khi đã có vé hoặc phòng đặt trước.",
+    "PLANNER_API_UNAVAILABLE": "Chưa kết nối được dịch vụ tạo lịch trình. Thông tin của bạn vẫn được giữ lại.",
+    "GENERATION_FAILED": "Chưa tạo được lịch trình. Thông tin của bạn vẫn được giữ lại; hãy thử lại.",
+    "CURRENCY_RATE_UNAVAILABLE": "Chưa lấy được tỷ giá. Các khoản tiền đã nhập vẫn được giữ nguyên."
   },
   "translations": {
     "panel": "Bản dịch lịch trình",
@@ -1094,7 +1100,7 @@
     "day_count": "{count} ngày",
     "adult_count": "{count} người lớn",
     "destinations_selected": "Đã chọn {count} điểm đến",
-    "add_destination_optional": "Thêm điểm đến khác (không bắt buộc)",
+    "add_destination_optional": "Thêm điểm đến",
     "unconfirmed_times_suggested": "Giờ di chuyển chưa đặt vé đang mâu thuẫn. Hệ thống sẽ đề xuất giờ phù hợp khi lập lịch; các giờ bạn nhập vẫn được giữ trong nháp để sửa.",
     "fix_required": "Cần sửa trước khi tạo lịch",
     "optional_notices": "Thông tin tham khảo — không cần nhập thêm",
@@ -1102,8 +1108,8 @@
     "preferences_title": "Tùy chỉnh theo bạn",
     "preferences_hint": "Không bắt buộc. Giữ đề xuất hoặc chỉ sửa phần bạn quan tâm.",
     "trip_summary": "Tóm tắt chuyến đi",
-    "origin_placeholder": "Bạn xuất phát từ đâu? Ví dụ: Hà Nội",
-    "destination_placeholder": "Bạn muốn đi đâu? Ví dụ: Đà Nẵng",
+    "origin_placeholder": "Thành phố xuất phát",
+    "destination_placeholder": "Thành phố muốn đến",
     "budget_heading": "Ngân sách cho cả nhóm",
     "budget_placeholder": "Ví dụ: 10.000.000",
     "budget_hint": "Tổng cho cả nhóm, gồm di chuyển, phòng, ăn uống và hoạt động. Để trống để được đề xuất.",
@@ -1139,6 +1145,29 @@
       "result": "Xem kết quả",
       "status": "Xem trạng thái",
       "return_hint": "Sau khi quay lại bộ lập kế hoạch, mở mục Yêu cầu gần đây để kiểm tra yêu cầu này."
-    }
+    },
+    "date_mode": "Thời điểm chuyến đi",
+    "flexible_month": "Bất kỳ ngày nào trong tháng",
+    "travel_month": "Tháng du lịch",
+    "flexible_month_hint": "Hệ thống chọn ngày trong tháng, ưu tiên thời tiết thuận lợi và nhiều hoạt động phù hợp với nhịp độ của bạn. Các khoảng ngày phù hợp tương đương sẽ được chọn ngẫu nhiên. Tháng còn xa chỉ có thông tin thời tiết theo mùa.",
+    "compact_heading": "Lên kế hoạch chuyến đi",
+    "origin_label": "Đi từ đâu?",
+    "destination_label": "Bạn muốn đến đâu?",
+    "compact_customize": "Tùy chỉnh chuyến đi",
+    "route_options": "Tuyến đường & vị trí",
+    "search_help": "Tìm địa danh",
+    "days_label": "Số ngày",
+    "budget_label": "Ngân sách cả nhóm",
+    "time_help": "Cách chọn thời gian",
+    "days_short": "ngày",
+    "travelers_short": "{count} người",
+    "cost_auto_short": "Chi phí tự đề xuất",
+    "departure_short": "Ngày đi",
+    "return_short": "Ngày về",
+    "recent_requests_short": "Yêu cầu gần đây",
+    "currency_converting": "Đang quy đổi tiền…",
+    "currency_failed": "Chưa lấy được tỷ giá. Các khoản tiền vẫn giữ nguyên bằng {currency}.",
+    "currency_retry": "Thử quy đổi lại",
+    "currency_converted": "Đã quy đổi theo tỷ giá tham khảo"
   }
 }

@@ -22,11 +22,21 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@travel/hooks", () => ({
   usePopularCities: () => ({ cities: [] }),
-  useCitySearch: (query: string) => ({ suggestions: [
-    {slug:"da-nang",name:{en:"Da Nang",vi:"Đà Nẵng"},country:"VN"},
-    {slug:"hue",name:{en:"Hue",vi:"Huế"},country:"VN"},
-    {slug:"taipei",name:{en:"Taipei",vi:"Đài Bắc"},country:"TW"},
-  ].filter(c=>Object.values(c.name).some(n=>n.toLowerCase()===query.trim().toLowerCase())) }),
+  useCitySearch: (query: string) => ({
+    suggestions: [
+      {
+        slug: "da-nang",
+        name: { en: "Da Nang", vi: "Đà Nẵng" },
+        country: "VN",
+      },
+      { slug: "hue", name: { en: "Hue", vi: "Huế" }, country: "VN" },
+      { slug: "taipei", name: { en: "Taipei", vi: "Đài Bắc" }, country: "TW" },
+    ].filter((c) =>
+      Object.values(c.name).some(
+        (n) => n.toLowerCase() === query.trim().toLowerCase(),
+      ),
+    ),
+  }),
 }));
 vi.mock("../../../../../../apps/web/components/layout/SiteHeader", () => ({
   SiteHeader: () => null,
@@ -54,10 +64,40 @@ vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   validateJourney: mock.validate,
   resolveJourneyLocation: vi.fn().mockResolvedValue({ candidates: [] }),
 }));
+vi.mock(
+  "../../../../../../apps/web/lib/planner-currency",
+  async (original) => ({
+    ...(await original<
+      typeof import("../../../../../../apps/web/lib/planner-currency")
+    >()),
+    getCurrencyQuote: async (from: string, to: string) => ({
+      from,
+      to,
+      rate: from === "USD" ? 25000 : 1 / 25000,
+      updated_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      source_url: "https://www.exchangerate-api.com",
+    }),
+  }),
+);
 import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";
 import { emptyPlanner } from "../../../../../../apps/web/lib/planner-model";
 import { ApiRequestError } from "../../../../../../apps/web/lib/api";
 import { JourneyWizard } from "../../../../../../apps/web/components/plan/JourneyWizard";
+
+function openOptions() {
+  const details = screen.getByTestId(
+    "planner-optional-settings",
+  ) as HTMLDetailsElement;
+  if (!details.open) fireEvent.click(details.querySelector("summary")!);
+}
+function openGroup(label: string) {
+  openOptions();
+  const details = screen
+    .getByText(label)
+    .closest("details") as HTMLDetailsElement;
+  if (!details.open) fireEvent.click(details.querySelector("summary")!);
+}
 
 beforeEach(() => {
   const storage = () => {
@@ -94,7 +134,7 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    await screen.findByLabelText("Origin");
+    await screen.findByLabelText("Where from?");
     fireEvent.click(screen.getByRole("button", { name: "Generate itinerary" }));
     await waitFor(() =>
       expect(mock.push).toHaveBeenCalledWith(
@@ -105,7 +145,8 @@ describe("unified bilingual planner", () => {
     const intent = JSON.parse(sessionStorage.getItem("horizon.search.intent")!);
     expect(intent.request).toMatchObject({
       cities: ["da-nang"],
-      budget: 8000000,
+      budget: 320,
+      currency: "USD",
       planning: { journey: { origin: { label: "Hà Nội" } } },
     });
     expect(screen.queryByText("Generate failed: 401")).toBeNull();
@@ -150,7 +191,9 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    const origin = (await screen.findByLabelText("Origin")) as HTMLInputElement;
+    const origin = (await screen.findByLabelText(
+      "Where from?",
+    )) as HTMLInputElement;
     const optional = screen.getByTestId(
       "planner-optional-settings",
     ) as HTMLDetailsElement;
@@ -158,10 +201,10 @@ describe("unified bilingual planner", () => {
     expect(screen.getByTestId("planner-primary-time")).toBeTruthy();
     expect(origin.required).toBe(true);
     expect(
-      (screen.getByLabelText("Destinations") as HTMLInputElement).required,
+      (screen.getByLabelText("Where to?") as HTMLInputElement).required,
     ).toBe(true);
     fireEvent.change(origin, { target: { value: "Hà Nội" } });
-    fireEvent.change(screen.getByLabelText("Destinations"), {
+    fireEvent.change(screen.getByLabelText("Where to?"), {
       target: { value: "Đà Nẵng" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Da Nang" }));
@@ -171,7 +214,7 @@ describe("unified bilingual planner", () => {
     expect(request).toMatchObject({
       num_days: 3,
       num_travelers: 2,
-      currency: "VND",
+      currency: "USD",
       trip_style: "mixed",
       planning: {
         journey: { return_to_origin: true },
@@ -183,30 +226,33 @@ describe("unified bilingual planner", () => {
     expect(request.budget).toBeUndefined();
     expect(optional.open).toBe(false);
   });
-  it("keeps group budget prominent and submits currency, style and traveler choices", async () => {
+  it("keeps group budget in trip options and submits currency, style and traveler choices", async () => {
     render(
       <LanguageProvider initialLocale="en">
         <JourneyWizard />
       </LanguageProvider>,
     );
-    fireEvent.change(await screen.findByLabelText("Origin"), {
+    fireEvent.change(await screen.findByLabelText("Where from?"), {
       target: { value: "Hà Nội" },
     });
-    fireEvent.change(screen.getByLabelText("Destinations"), {
+    fireEvent.change(screen.getByLabelText("Where to?"), {
       target: { value: "Đà Nẵng" },
     });
-    fireEvent.keyDown(screen.getByLabelText("Destinations"), { key: "Enter" });
-    fireEvent.change(screen.getByLabelText("Total group budget (VND)"), {
+    fireEvent.keyDown(screen.getByLabelText("Where to?"), { key: "Enter" });
+    openOptions();
+    fireEvent.change(screen.getByLabelText("Currency"), {
+      target: { value: "VND" },
+    });
+    fireEvent.change(screen.getByLabelText("Group budget (VND)"), {
       target: { value: "10000000" },
     });
     fireEvent.change(screen.getByLabelText("Currency"), {
       target: { value: "USD" },
     });
     expect(
-      (screen.getByLabelText("Total group budget (USD)") as HTMLInputElement)
-        .value,
+      (screen.getByLabelText("Group budget (USD)") as HTMLInputElement).value,
     ).toBe("10000000");
-    fireEvent.change(screen.getByLabelText("Total group budget (USD)"), {
+    fireEvent.change(screen.getByLabelText("Group budget (USD)"), {
       target: { value: "2000" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Mid-range/ }));
@@ -227,14 +273,14 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    fireEvent.change(await screen.findByLabelText("Origin"), {
+    fireEvent.change(await screen.findByLabelText("Where from?"), {
       target: { value: "Hà Nội" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate itinerary" }));
     expect(
       await screen.findByText("Choose at least one destination."),
     ).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Destinations"), {
+    fireEvent.change(screen.getByLabelText("Where to?"), {
       target: { value: "Taipei" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Taipei" }));
@@ -243,11 +289,9 @@ describe("unified bilingual planner", () => {
     );
     expect(screen.getByText("1 destination selected")).toBeTruthy();
     expect(
-      (screen.getByLabelText("Destinations") as HTMLInputElement).required,
+      (screen.getByLabelText("Where to?") as HTMLInputElement).required,
     ).toBe(false);
-    expect(
-      screen.getByPlaceholderText("Add another destination (optional)"),
-    ).toBeTruthy();
+    expect(screen.getByPlaceholderText("Add a destination")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Generate itinerary" }));
     await waitFor(() => expect(mock.generate).toHaveBeenCalledTimes(1));
     const request = mock.generate.mock.calls[0]![0];
@@ -261,34 +305,32 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    await screen.findByLabelText("Origin");
+    await screen.findByLabelText("Where from?");
+    openGroup("Route & location");
     fireEvent.click(screen.getByRole("checkbox", { name: "Return to origin" }));
     expect(
       (screen.getByLabelText("Final destination") as HTMLInputElement).required,
     ).toBe(true);
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Choose exact dates" }),
-    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Travel dates" }), {
+      target: { value: "dates" },
+    });
     expect(
       (screen.getByLabelText("Departure date") as HTMLInputElement).required,
     ).toBe(true);
     expect(
       (screen.getByLabelText("Return date") as HTMLInputElement).required,
     ).toBe(true);
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Choose exact dates" }),
-    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Travel dates" }), {
+      target: { value: "days" },
+    });
     fireEvent.click(screen.getByRole("checkbox", { name: "Return to origin" }));
-    fireEvent.change(screen.getByLabelText("Origin"), {
+    fireEvent.change(screen.getByLabelText("Where from?"), {
       target: { value: "Hà Nội" },
     });
-    fireEvent.change(screen.getByLabelText("Destinations"), {
+    fireEvent.change(screen.getByLabelText("Where to?"), {
       target: { value: "Huế" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Hue" }));
-    fireEvent.click(
-      screen.getByText("Customize more (optional)", { exact: true }),
-    );
     const optional = screen.getByTestId(
       "planner-optional-settings",
     ) as HTMLDetailsElement;
@@ -353,16 +395,16 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    fireEvent.change(await screen.findByLabelText("Điểm xuất phát"), {
+    fireEvent.change(await screen.findByLabelText("Đi từ đâu?"), {
       target: { value: "Hà Nội" },
     });
-    fireEvent.change(
-      screen.getByPlaceholderText("Bạn muốn đi đâu? Ví dụ: Đà Nẵng"),
-      { target: { value: "Đà Nẵng" } },
-    );
+    fireEvent.change(screen.getByPlaceholderText("Thành phố muốn đến"), {
+      target: { value: "Đà Nẵng" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Đà Nẵng" }));
+    openOptions();
     expect(await screen.findByLabelText("Số người lớn")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Ngân sách tổng cả nhóm (VND)"), {
+    fireEvent.change(screen.getByLabelText("Ngân sách cả nhóm (VND)"), {
       target: { value: "8000000" },
     });
     fireEvent.change(await screen.findByLabelText("Số phòng/căn"), {
@@ -393,7 +435,7 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    await screen.findByLabelText("Điểm xuất phát");
+    await screen.findByLabelText("Đi từ đâu?");
     fireEvent.click(screen.getByRole("button", { name: "Tạo hành trình" }));
     expect(
       await screen.findByText("Chọn điểm xuất phát để lập chặng đi và về."),
@@ -419,8 +461,10 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
+    await screen.findByLabelText("Đi từ đâu?");
+    openGroup("Tuyến đường & vị trí");
     fireEvent.click(
-      await screen.findByRole("button", { name: "Dùng vị trí hiện tại" }),
+      screen.getByRole("button", { name: "Dùng vị trí hiện tại" }),
     );
     await screen.findByRole("button", { name: "Bỏ tọa độ" });
     const automatic = JSON.parse(
@@ -439,13 +483,13 @@ describe("unified bilingual planner", () => {
         .journey.origin.latitude,
     ).toBeUndefined();
   });
-  it("switches languages without losing inputs or changing currency", async () => {
+  it("switches language and empty-budget currency defaults without losing route inputs", async () => {
     render(
       <LanguageProvider initialLocale="en">
         <JourneyWizard />
       </LanguageProvider>,
     );
-    fireEvent.change(await screen.findByLabelText("Origin"), {
+    fireEvent.change(await screen.findByLabelText("Where from?"), {
       target: { value: "Hà Nội" },
     });
     fireEvent.change(screen.getByLabelText("Currency"), {
@@ -453,10 +497,10 @@ describe("unified bilingual planner", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "VI" }));
     expect(
-      (screen.getByLabelText("Điểm xuất phát") as HTMLInputElement).value,
+      (screen.getByLabelText("Đi từ đâu?") as HTMLInputElement).value,
     ).toBe("Hà Nội");
     expect((screen.getByLabelText("Tiền tệ") as HTMLSelectElement).value).toBe(
-      "USD",
+      "VND",
     );
     expect(document.cookie).toContain("locale=vi");
     expect(document.documentElement.lang).toBe("vi");
@@ -472,7 +516,7 @@ describe("unified bilingual planner", () => {
         <JourneyWizard />
       </LanguageProvider>,
     );
-    expect(await screen.findByLabelText("Điểm xuất phát")).toBeTruthy();
+    expect(await screen.findByLabelText("Đi từ đâu?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Tạo hành trình" })).toBeTruthy();
   });
 });

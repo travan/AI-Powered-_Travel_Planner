@@ -206,7 +206,35 @@ export function validatePlanning(input: Partial<ItineraryInput>): {
     field?: string,
     severity: PlanningIssue["severity"] = "warning",
   ) => issues.push({ code, message, field, severity, params: {} });
-  if (!p) return { valid: true, issues };
+  if (input.flexible_month !== undefined) {
+    if (
+      !flexibleMonthWindows(
+        input.flexible_month,
+        input.num_days ?? 1,
+        plannerToday(),
+      ).length ||
+      (input.start_date &&
+        input.start_date.slice(0, 7) !== input.flexible_month) ||
+      (input.end_date && input.end_date.slice(0, 7) !== input.flexible_month)
+    )
+      issue(
+        "MONTH_UNAVAILABLE",
+        "Chọn tháng còn đủ số ngày cho chuyến đi.",
+        "flexible_month",
+        "error",
+      );
+    if (
+      p?.transport_preferences.confirmed ||
+      p?.stay_preferences.type === "already_booked"
+    )
+      issue(
+        "MONTH_BOOKING_CONFLICT",
+        "Hãy chọn ngày cụ thể khi đã có vé hoặc phòng đặt trước.",
+        "flexible_month",
+        "error",
+      );
+  }
+  if (!p) return { valid: !issues.some((i) => i.severity === "error"), issues };
   if (!p.journey.origin.label.trim())
     issue(
       "ORIGIN_REQUIRED",
@@ -233,7 +261,12 @@ export function validatePlanning(input: Partial<ItineraryInput>): {
     (input.end_date && !validTripDate(input.end_date))
   )
     issue("DATE_INVALID", "Ngày đi/về không hợp lệ.", "end_date", "error");
-  if (input.start_date && input.end_date && input.end_date <= input.start_date)
+  if (
+    input.start_date &&
+    input.end_date &&
+    (input.end_date < input.start_date ||
+      (input.end_date === input.start_date && !input.flexible_month))
+  )
     issue("DATE_ORDER", "Ngày về phải sau ngày đi.", "end_date", "error");
   if (input.start_date && !input.end_date)
     issue(
@@ -557,4 +590,35 @@ export function upgradeJourneyPlan(
     ...new Map(issues.map((i) => [`${i.code}:${i.message}`, i])).values(),
   ];
   return result;
+}
+
+/** All future consecutive trip windows contained in a calendar month. */
+export function flexibleMonthWindows(
+  month: string,
+  days: number,
+  today: string,
+): { start: string; end: string }[] {
+  if (
+    !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+    !Number.isInteger(days) ||
+    days < 1 ||
+    days > 30
+  )
+    return [];
+  const [year, number] = month.split("-").map(Number);
+  if (year! < 1000 || year! > 9998) return [];
+  const count = new Date(Date.UTC(year!, number!, 0)).getUTCDate();
+  return Array.from({ length: Math.max(0, count - days + 1) }, (_, i) => ({
+    start: `${month}-${String(i + 1).padStart(2, "0")}`,
+    end: `${month}-${String(i + days).padStart(2, "0")}`,
+  })).filter((window) => window.start >= today);
+}
+
+export function plannerToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
