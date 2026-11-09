@@ -1,3 +1,5 @@
+import { CurrencyService } from "./enrichment/currency.service.js";
+import { CurrencyController } from "./interfaces/http/currency.controller.js";
 import { PlannerLearningService } from "./learning/learning.service.js";
 import { PlannerLearningController } from "./learning/learning.controller.js";
 import { WeatherService } from "./enrichment/weather.service.js";
@@ -13,9 +15,15 @@ import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
 
 @Module({
   imports: [DatabaseModule, CitiesModule],
-  controllers: [JourneyController, ItineraryController, PlannerLearningController],
+  controllers: [
+    CurrencyController,
+    JourneyController,
+    ItineraryController,
+    PlannerLearningController,
+  ],
   providers: [
     PlannerLearningService,
+    CurrencyService,
     WeatherService,
     ItineraryService,
     JourneyService,

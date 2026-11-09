@@ -3,9 +3,11 @@ import { UiText, useUiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AccountMenu } from "./AccountMenu";
+import { PRIMARY_NAVIGATION, isNavigationActive } from "./navigation";
+import { useTranslations } from "next-intl";
 
 interface UserInfo {
   avatarUrl: string | null;
@@ -84,16 +86,10 @@ function useUserInfo() {
   return userInfo;
 }
 
-const NAV_LINKS = [
-  { href: "/plan", label: "Plan" },
-  { href: "/trips", label: "My trips" },
-  { href: "/explore", label: "Explore" },
-  { href: "/guides", label: "Guides" },
-];
-
 export function SiteHeader() {
   const t = useUiText();
   const pathname = usePathname();
+  const navigationText = useTranslations("common");
   const userInfo = useUserInfo();
 
   return (
@@ -129,14 +125,18 @@ export function SiteHeader() {
           >
             Horizon
           </Link>
-          <nav className="flex gap-6">
-            {NAV_LINKS.map((link) => {
-              const active =
-                pathname === link.href || pathname.startsWith(link.href + "/");
+          <nav
+            className="flex gap-6"
+            aria-label={navigationText("main_navigation")}
+            data-testid="desktop-navigation"
+          >
+            {PRIMARY_NAVIGATION.map((link) => {
+              const active = isNavigationActive(pathname, link.href);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
+                  aria-current={active ? "page" : undefined}
                   className={`font-headline font-bold transition-colors px-3 py-1 rounded-full ${
                     active
                       ? "text-primary"

@@ -67,13 +67,34 @@ export async function generateItinerary(
 
   const res = await fetchWithLocalSession(
     getApiUrl("/api/itinerary/generate"),
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    },
-  );
-  if (!res.ok) throwApiRequestError("Generate failed", res);
+    { method: "POST", headers, body: JSON.stringify(body) },
+  ).catch((error: unknown) => {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw new ApiRequestError(
+      "Planning service unavailable",
+      0,
+      "PLANNER_API_UNAVAILABLE",
+    );
+  });
+  if (!res.ok) {
+    const detail = await Promise.resolve()
+      .then(() => res.json())
+      .catch(() => null);
+    throw new ApiRequestError(
+      typeof detail?.message === "string"
+        ? detail.message
+        : `Generate failed: ${res.status}`,
+      res.status,
+      res.status >= 500
+        ? "PLANNER_API_UNAVAILABLE"
+        : typeof detail?.code === "string"
+          ? detail.code
+          : res.status === 400
+            ? "PLANNING_INVALID"
+            : "GENERATION_FAILED",
+      detail?.params,
+    );
+  }
   return res.json() as Promise<GenerateResponse>;
 }
 

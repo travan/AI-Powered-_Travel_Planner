@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  getCurrencyQuote,
+  convertPlannerCurrency,
+  withPlannerMoney,
+  plannerMoneyKey,
+  hasPlannerMoney,
+} from "../../lib/planner-currency";
+import type { CurrencyQuote } from "@travel/types";
+import { ImeTextInput } from "./ImeTextInput";
 import { ResolveCitySearch } from "./ResolveCitySearch";
 import {
   UiText,
@@ -17,6 +26,9 @@ import {
   buildPlannerRequest,
   restorePlannerRequest,
   migratePlannerDraft,
+  preparePlannerSubmission,
+  mergePlannerCity,
+  applyPlannerCurrencyDefault,
   type PlannerDraft,
 } from "../../lib/planner-model";
 import { useTranslations } from "next-intl";
@@ -24,6 +36,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   TRIP_STYLES,
+  plannerToday,
   createManualCity,
   validatePlanning,
   type GenerateRequest,
@@ -100,13 +113,15 @@ function CsvField({
   );
 }
 const fieldClass =
-  "mt-2 min-h-14 w-full rounded-3xl border border-transparent bg-surface-container-high px-5 py-4 text-base font-normal text-on-surface placeholder:text-on-surface-variant/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "mt-2 min-h-14 w-full rounded-3xl border border-transparent bg-surface-container-high px-5 py-4 text-base font-normal scroll-mt-24 scroll-mb-40 text-on-surface placeholder:text-on-surface-variant/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function UnifiedPlanner() {
   const { locale: formattingLocale } = useAppLanguage();
 
   const t = useUiText();
   const ux = useTranslations("plannerUX");
+  const plannerFormRef = useRef<HTMLFormElement>(null);
+  const explicitlySavedDraft = useRef<PlannerDraft | null>(null);
   const optionalRef = useRef<HTMLDetailsElement>(null);
   const routeRef = useRef<HTMLDetailsElement>(null);
   const datesRef = useRef<HTMLDivElement>(null);
@@ -123,31 +138,106 @@ export function UnifiedPlanner() {
   );
   const router = useRouter(),
     params = useSearchParams();
-  const [form, setForm] = useState<PlannerDraft>(emptyPlanner);
+  const [form, setForm] = useState<PlannerDraft>(() => emptyPlanner(locale));
   const [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [locating, setLocating] = useState(false);
   const [dateNotice, setDateNotice] = useState(false);
-  const [cityQuery, setCityQuery] = useState("");
+  const cityQuery = form.destinationQuery ?? "";
+  const setCityQuery = (value: string) =>
+    setForm((draft) => ({ ...draft, destinationQuery: value }));
+  const [cityComposing, setCityComposing] = useState(false);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
   const [message, setMessage] = useState("");
   const [issues, setIssues] = useState<PlanningIssue[]>([]);
   const [error, setError] = useState("");
   const resumed = useRef(false);
+  const [currencyBusy, setCurrencyBusy] = useState(false);
+  const [currencyFailure, setCurrencyFailure] = useState(false);
+  const [currencyRetry, setCurrencyRetry] = useState(0);
+  const [currencyQuote, setCurrencyQuote] = useState<CurrencyQuote | null>(
+    null,
+  );
+  const currencyBasis = useRef<{
+    original: PlannerDraft;
+    lastKey: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    let active = true;
+    const target = locale === "vi" ? "VND" : "USD";
+    setCurrencyBusy(false);
+    setCurrencyFailure(false);
+    if (form.planning.budget.currency === target) return;
+    if (!hasPlannerMoney(form)) {
+      currencyBasis.current = null;
+      setCurrencyQuote(null);
+      setForm((draft) => applyPlannerCurrencyDefault(draft, locale));
+      return;
+    }
+    const previous = currencyBasis.current;
+    const original =
+      previous?.lastKey === plannerMoneyKey(form) ? previous.original : form;
+    if (original.planning.budget.currency === target) {
+      setForm((current) => {
+        const restored = withPlannerMoney(current, original);
+        currencyBasis.current = {
+          original,
+          lastKey: plannerMoneyKey(restored),
+        };
+        return restored;
+      });
+      return;
+    }
+    setCurrencyBusy(true);
+    void getCurrencyQuote(original.planning.budget.currency, target)
+      .then((quote) => {
+        if (!active) return;
+        const converted = convertPlannerCurrency(original, quote);
+        setForm((current) => {
+          // A restored login intent or another update may already have converted.
+          if (plannerMoneyKey(current) !== plannerMoneyKey(form))
+            return current;
+          const next = withPlannerMoney(current, converted);
+          currencyBasis.current = { original, lastKey: plannerMoneyKey(next) };
+          return next;
+        });
+        setCurrencyQuote(quote);
+      })
+      .catch(() => {
+        if (active) setCurrencyFailure(true);
+      })
+      .finally(() => {
+        if (active) setCurrencyBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [locale, ready, currencyRetry]);
   // Validation describes the current form, never a previous submit attempt.
   useEffect(() => {
     setIssues((previous) =>
       previous.length
-        ? validatePlanning(buildPlannerRequest(form, locale)).issues
+        ? validatePlanning(preparePlannerSubmission(form, locale).request)
+            .issues
         : previous,
     );
   }, [form, locale]);
   useEffect(() => {
     for (const issue of issues.filter((issue) => issue.severity === "error")) {
-      if (issue.field?.startsWith("journey") && routeRef.current)
-        routeRef.current.open = true;
+      if (issue.field?.startsWith("journey.endpoint")) {
+        if (optionalRef.current) optionalRef.current.open = true;
+        if (routeRef.current) routeRef.current.open = true;
+      }
       if (
-        ["end_date", "num_days", "travelers"].some((field) =>
+        issue.field &&
+        !issue.field.startsWith("journey.origin") &&
+        !issue.field.startsWith("journey.destinations") &&
+        optionalRef.current
+      )
+        optionalRef.current.open = true;
+      if (
+        ["end_date", "num_days", "flexible_month", "travelers"].some((field) =>
           issue.field?.startsWith(field),
         ) &&
         datesRef.current
@@ -170,6 +260,7 @@ export function UnifiedPlanner() {
       if (section) {
         if (optionalRef.current) optionalRef.current.open = true;
         section.open = true;
+        section.scrollIntoView?.({ block: "nearest" });
       }
     }
     const firstError = issues.find((issue) => issue.severity === "error");
@@ -183,7 +274,7 @@ export function UnifiedPlanner() {
   }, [issues]);
 
   const { suggestions } = useCitySearch(
-    cityQuery,
+    cityComposing ? "" : cityQuery,
     process.env["NEXT_PUBLIC_API_URL"] ?? "",
   );
   const p = form.planning;
@@ -198,7 +289,36 @@ export function UnifiedPlanner() {
         [key]: { ...(f.planning[key] as object), ...(value as object) },
       },
     }));
-  const requestFor = (f: PlannerDraft) => buildPlannerRequest(f, locale);
+  const requestFor = (f: PlannerDraft) =>
+    preparePlannerSubmission(f, locale, suggestions).request;
+  const prepareCurrent = () => {
+    const origin =
+      plannerFormRef.current?.querySelector<HTMLInputElement>(
+        '[data-planner-field="journey.origin"]',
+      )?.value ?? form.planning.journey.origin.label;
+    const destinationQuery =
+      plannerFormRef.current?.querySelector<HTMLInputElement>(
+        '[data-testid="web-plan-city-input"]',
+      )?.value ?? cityQuery;
+    const draft =
+      origin === form.planning.journey.origin.label
+        ? form
+        : {
+            ...form,
+            planning: {
+              ...form.planning,
+              journey: {
+                ...form.planning.journey,
+                origin: { label: origin, source: "manual" as const },
+              },
+            },
+          };
+    return preparePlannerSubmission(
+      { ...draft, destinationQuery },
+      locale,
+      suggestions,
+    );
+  };
   const redirectToSignIn = async (request: GenerateRequest) => {
     const guestKey =
       localStorage.getItem("horizon.search.guest_key") ??
@@ -279,6 +399,10 @@ export function UnifiedPlanner() {
   }, []);
   useEffect(() => {
     if (!ready) return;
+    // An explicit save may include the location the user chose. Do not let the
+    // state update from preparing that snapshot immediately overwrite it.
+    if (explicitlySavedDraft.current === form) return;
+    explicitlySavedDraft.current = null;
     // Exact browser coordinates are saved only through explicit Save draft/Generate.
     const copy = structuredClone(form);
     if (copy.planning.journey.origin.source === "browser")
@@ -300,6 +424,7 @@ export function UnifiedPlanner() {
     if (!ready || params.get("resumeGenerate") !== "1" || resumed.current)
       return;
     resumed.current = true;
+    setBusy(true);
     void (async () => {
       try {
         const raw = sessionStorage.getItem(INTENT_KEY);
@@ -329,9 +454,22 @@ export function UnifiedPlanner() {
           setError(ux("draft_expired"));
           return;
         }
-        const restored = restorePlannerRequest(request);
+        let restored = restorePlannerRequest(request);
         setForm(restored);
-        request = buildPlannerRequest(restored, locale);
+        const targetCurrency = locale === "vi" ? "VND" : "USD";
+        if (restored.planning.budget.currency !== targetCurrency) {
+          if (hasPlannerMoney(restored)) {
+            const quote = await getCurrencyQuote(
+              restored.planning.budget.currency,
+              targetCurrency,
+            );
+            restored = convertPlannerCurrency(restored, quote);
+            setCurrencyQuote(quote);
+          } else restored = applyPlannerCurrencyDefault(restored, locale);
+        }
+        const prepared = preparePlannerSubmission(restored, locale);
+        setForm(prepared.draft);
+        request = prepared.request;
         const checked = validatePlanning(request);
         if (!checked.valid) {
           setIssues(checked.issues);
@@ -342,6 +480,11 @@ export function UnifiedPlanner() {
         navigateResult(await generateItinerary(request, session.access_token));
         sessionStorage.removeItem(INTENT_KEY);
       } catch (e) {
+        if (
+          e instanceof ApiRequestError &&
+          e.code === "CURRENCY_RATE_UNAVAILABLE"
+        )
+          setCurrencyFailure(true);
         window.history.replaceState(null, "", "/plan");
         if (e instanceof ApiRequestError && e.status === 404)
           setError(ux("draft_expired"));
@@ -361,11 +504,13 @@ export function UnifiedPlanner() {
       [...popularCities, ...suggestions].find((c) => c.slug === slug)?.name;
     setForm((f) => ({
       ...f,
-      cities: f.cities.some((c) => c.slug === slug)
-        ? f.cities
-        : [...f.cities, { slug, name, ...(labels ? { names: labels } : {}) }],
+      cities: mergePlannerCity(f.cities, {
+        slug,
+        name,
+        ...(labels ? { names: labels } : {}),
+      }),
+      destinationQuery: "",
     }));
-    setCityQuery("");
   };
   const locate = () => {
     setError("");
@@ -426,9 +571,11 @@ export function UnifiedPlanner() {
     );
   };
   const generate = async () => {
+    if (currencyBusy || currencyFailure) return;
     setBusy(true);
     setError("");
-    const request = requestFor(form);
+    const { draft, request } = prepareCurrent();
+    setForm(draft);
     try {
       const local = validatePlanning(request);
       if (!local.valid) {
@@ -459,6 +606,27 @@ export function UnifiedPlanner() {
       setBusy(false);
     }
   };
+  const fieldError = (field: string) => {
+    const matching = issues.filter(
+      (issue) => issue.severity === "error" && issue.field?.startsWith(field),
+    );
+    return matching.length ? (
+      <span className="mt-1 block text-sm font-normal text-error" role="alert">
+        {matching.map((issue) => issueText(issue)).join(" ")}
+      </span>
+    ) : null;
+  };
+  const compactSummary = [
+    form.dated
+      ? `${form.start || ux("departure_short")} → ${form.end || ux("return_short")}`
+      : `${form.days} ${ux("days_short")}${form.flexible && form.month ? ` · ${form.month}` : ""}`,
+    ux("travelers_short", {
+      count: p.travelers.adults + p.travelers.child_ages.length,
+    }),
+    p.budget.total == null
+      ? ux("cost_auto_short")
+      : `${p.budget.total.toLocaleString(locale)} ${p.budget.currency}`,
+  ].join(" · ");
   const input = (
     label: string,
     value: string | number,
@@ -467,6 +635,7 @@ export function UnifiedPlanner() {
     hint?: string,
     placeholder?: string,
     required = false,
+    issueField?: string,
   ) => (
     <label className="block text-sm font-semibold">
       <UiText text={label} />{" "}
@@ -475,17 +644,42 @@ export function UnifiedPlanner() {
           *
         </span>
       )}
-      <input
-        aria-label={t(label)}
-        required={required}
-        aria-required={required || undefined}
-        placeholder={placeholder}
-        className={fieldClass}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        maxLength={500}
-      />
+      {type === "text" ? (
+        <ImeTextInput
+          aria-label={t(label)}
+          required={required}
+          aria-required={required || undefined}
+          placeholder={placeholder}
+          className={fieldClass}
+          type={type}
+          value={value}
+          onValueChange={onChange}
+          data-planner-field={issueField}
+          aria-invalid={
+            issueField
+              ? issues.some(
+                  (issue) =>
+                    issue.severity === "error" &&
+                    issue.field?.startsWith(issueField),
+                )
+              : undefined
+          }
+          maxLength={500}
+        />
+      ) : (
+        <input
+          aria-label={t(label)}
+          required={required}
+          aria-required={required || undefined}
+          placeholder={placeholder}
+          className={fieldClass}
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={500}
+        />
+      )}
+      {issueField && fieldError(issueField)}
       {hint && (
         <span className="mt-1 block text-xs font-normal text-on-surface-variant">
           <UiText text={hint} />
@@ -605,7 +799,7 @@ export function UnifiedPlanner() {
       <p>
         {form.dated
           ? `${form.start || t("Ngày đi")} → ${form.end || t("Ngày về")}`
-          : `${form.days} ${t("days")}`}{" "}
+          : `${form.days} ${t("days")}${form.flexible ? ` · ${form.month || ux("travel_month")}` : ""}`}{" "}
         · {p.travelers.adults}{" "}
         <UiText id="tbb92615a46ea" fallback="người lớn" />{" "}
         {p.travelers.child_ages.length
@@ -651,52 +845,512 @@ export function UnifiedPlanner() {
   return (
     <div className="min-h-screen bg-background text-on-surface">
       <SiteHeader />
-      <main className="mx-auto max-w-5xl px-4 pt-8 pb-36 md:pb-8">
-        <h1 className="font-headline text-3xl font-black">
-          {" "}
-          <UiText
-            id="t83fd97cd151b"
-            fallback="Lên kế hoạch từ lúc đi đến lúc về"
-          />{" "}
+      <main className="mx-auto max-w-3xl px-4 pt-6 pb-36 md:pb-12">
+        <h1 className="mb-5 font-headline text-2xl font-bold">
+          {ux("compact_heading")}
         </h1>
-        <p className="mt-2 text-on-surface-variant">{ux("intro")}</p>
-        <RecentPlanningRequests />
-        <p className="mt-3 text-sm text-on-surface-variant">
-          <span aria-hidden="true" className="font-bold text-error">
-            *
-          </span>{" "}
-          {ux("required_legend")}
-        </p>
-        <div className="mt-5">
-          <section>
-            <fieldset disabled={busy} className="space-y-6">
-              <legend className="sr-only">{t("Plan your trip")}</legend>
+        <form
+          ref={plannerFormRef}
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void generate();
+          }}
+        >
+          <fieldset disabled={busy || currencyBusy} className="space-y-5">
+            <legend className="sr-only">{t("Plan your trip")}</legend>
+            <div
+              className="space-y-5 rounded-3xl border border-outline-variant/30 bg-white p-5 sm:p-8"
+              data-testid="planner-essential-panel"
+            >
+              {input(
+                ux("origin_label"),
+                p.journey.origin.label,
+                (v) =>
+                  change("journey", {
+                    origin: { label: v, source: "manual" },
+                  }),
+                "text",
+                undefined,
+                ux("origin_placeholder"),
+                true,
+                "journey.origin",
+              )}
+              <label className="block text-sm font-semibold">
+                {" "}
+                {ux("destination_label")}{" "}
+                {form.cities.length === 0 && (
+                  <span aria-hidden="true" className="text-error">
+                    *
+                  </span>
+                )}
+                {form.cities.length > 0 && (
+                  <span className="ml-2 text-xs font-normal text-primary">
+                    {ux("destinations_selected", {
+                      count: form.cities.length,
+                    })}
+                  </span>
+                )}
+                <ImeTextInput
+                  className={fieldClass}
+                  aria-label={ux("destination_label")}
+                  data-testid="web-plan-city-input"
+                  aria-required={form.cities.length === 0 || undefined}
+                  required={form.cities.length === 0}
+                  value={cityQuery}
+                  placeholder={
+                    form.cities.length
+                      ? ux("add_destination_optional")
+                      : ux("destination_placeholder")
+                  }
+                  onValueChange={setCityQuery}
+                  onCompositionStart={() => setCityComposing(true)}
+                  onCompositionEnd={() => setCityComposing(false)}
+                  aria-invalid={issues.some(
+                    (issue) => issue.code === "DESTINATION_REQUIRED",
+                  )}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && cityQuery.trim()) {
+                      e.preventDefault();
+                      const matches = suggestions.filter((c) =>
+                        [c.slug, ...Object.values(c.name)].some(
+                          (n) =>
+                            n.toLocaleLowerCase() ===
+                            cityQuery.trim().toLocaleLowerCase(),
+                        ),
+                      );
+                      if (matches.length === 1)
+                        addCity(
+                          matches[0]!.slug,
+                          matches[0]!.name[locale] ??
+                            matches[0]!.name.en ??
+                            matches[0]!.slug,
+                        );
+                      else {
+                        const draft = createManualCity(cityQuery);
+                        addCity(draft.slug, draft.name);
+                      }
+                    }
+                  }}
+                />
+              </label>
+              {fieldError("journey.destinations")}
+              {cityQuery.trim() && (
+                <div className="space-y-2">
+                  {suggestions.map((c) => (
+                    <button
+                      type="button"
+                      key={c.slug}
+                      onClick={() =>
+                        addCity(c.slug, c.name[locale] ?? c.name.en ?? c.slug)
+                      }
+                      className="block text-primary"
+                    >
+                      {c.name[locale] ?? c.name.en ?? c.slug}
+                    </button>
+                  ))}
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-primary">
+                      {ux("search_help")}
+                    </summary>
+                    <ResolveCitySearch query={cityQuery} onSelect={addCity} />
+                  </details>
+                </div>
+              )}
+              <ol className="space-y-2">
+                {form.cities.map((c, i) => (
+                  <li
+                    key={c.slug}
+                    data-testid="web-plan-selected-city"
+                    className="flex items-center justify-between rounded-lg bg-surface-container-low p-3"
+                  >
+                    <span>
+                      {i + 1}.{" "}
+                      {c.names?.[locale] ??
+                        [...popularCities, ...suggestions].find(
+                          (city) => city.slug === c.slug,
+                        )?.name[locale] ??
+                        c.name}
+                    </span>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        aria-label={`${t("Move city earlier")}: ${c.name}`}
+                        disabled={i === 0}
+                        onClick={() =>
+                          setForm((f) => {
+                            const cities = [...f.cities];
+                            [cities[i - 1], cities[i]] = [
+                              cities[i]!,
+                              cities[i - 1]!,
+                            ];
+                            return { ...f, cities };
+                          })
+                        }
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`${t("Remove city")}: ${c.name}`}
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            cities: f.cities.filter((x) => x.slug !== c.slug),
+                          }))
+                        }
+                      >
+                        {" "}
+                        <UiText id="t67fba2f357af" fallback="×" />{" "}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {issues.some(
+                (issue) =>
+                  issue.severity === "error" &&
+                  !["ORIGIN_REQUIRED", "DESTINATION_REQUIRED"].includes(
+                    issue.code,
+                  ),
+              ) && (
+                <section
+                  role="alert"
+                  className="rounded-xl bg-error/10 p-4 text-sm text-error"
+                >
+                  <p className="font-semibold">{ux("fix_required")}</p>
+                  <ul>
+                    {issues
+                      .filter(
+                        (issue) =>
+                          issue.severity === "error" &&
+                          !["ORIGIN_REQUIRED", "DESTINATION_REQUIRED"].includes(
+                            issue.code,
+                          ),
+                      )
+                      .map((issue) => (
+                        <li key={issue.code}>{issueText(issue)}</li>
+                      ))}
+                  </ul>
+                </section>
+              )}
+              {error && (
+                <p
+                  role="alert"
+                  data-testid="web-plan-error"
+                  className="rounded-xl bg-error/10 p-3 text-sm text-error"
+                >
+                  <UiText text={error} />
+                </p>
+              )}
+              {currencyBusy && (
+                <p role="status" className="text-sm text-primary">
+                  {ux("currency_converting")}
+                </p>
+              )}
+              {currencyFailure && (
+                <div
+                  role="alert"
+                  className="rounded-xl bg-error/10 p-3 text-sm text-error"
+                >
+                  <p>
+                    {ux("currency_failed", { currency: p.budget.currency })}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 font-semibold underline"
+                    onClick={() => setCurrencyRetry((value) => value + 1)}
+                  >
+                    {ux("currency_retry")}
+                  </button>
+                </div>
+              )}
+              {currencyQuote && !currencyBusy && !currencyFailure && (
+                <p role="status" className="text-xs text-on-surface-variant">
+                  {ux("currency_converted")} ·{" "}
+                  {new Date(currencyQuote.updated_at).toLocaleDateString(
+                    locale,
+                  )}{" "}
+                  ·{" "}
+                  <a
+                    href="https://www.exchangerate-api.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    ExchangeRate-API
+                  </a>
+                </p>
+              )}
+              <div className="flex flex-col-reverse gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={currencyBusy || currencyFailure}
+                  data-testid="web-plan-generate"
+                  className="min-h-16 w-full rounded-full bg-primary px-6 py-4 text-lg font-bold text-on-primary shadow-md transition-colors hover:bg-primary/90"
+                >
+                  {busy ? (
+                    <UiText id="ta85e73bea60e" fallback="Đang gửi yêu cầu…" />
+                  ) : (
+                    <UiText id="ta0352f1292cc" fallback="Tạo hành trình" />
+                  )}
+                </button>
+              </div>
+
+              {message && (
+                <p role="status" className="text-sm text-primary">
+                  <UiText text={message} />
+                </p>
+              )}
+            </div>
+            <details
+              ref={optionalRef}
+              className="rounded-2xl border border-outline-variant/30 bg-surface p-4 sm:p-6"
+              data-testid="planner-optional-settings"
+            >
+              <summary className="cursor-pointer list-none rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                <span className="flex items-center justify-between gap-3 font-semibold">
+                  {ux("compact_customize")}
+                  <span aria-hidden="true">⌄</span>
+                </span>
+                <span
+                  className="mt-1 block text-sm text-on-surface-variant"
+                  data-testid="planner-settings-summary"
+                >
+                  {compactSummary}
+                </span>
+              </summary>
               <div
-                className="min-w-0 space-y-7 rounded-3xl border border-outline-variant/30 bg-white p-5 shadow-sm sm:p-8 lg:p-10"
-                data-testid="planner-essential-panel"
+                className="mt-6 space-y-6"
+                data-testid="planner-preferences-panel"
               >
+                <div
+                  className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2"
+                  data-testid="planner-time-budget"
+                >
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 md:col-start-1 md:row-start-1">
+                    <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
+                      {ux("when_heading")}
+                    </h2>
+                    <select
+                      aria-label={ux("date_mode")}
+                      className="max-w-full rounded-lg bg-surface-container-low px-2 py-1 text-sm font-semibold text-primary focus:ring-2 focus:ring-primary/30"
+                      value={
+                        form.dated ? "dates" : form.flexible ? "month" : "days"
+                      }
+                      onChange={(e) => {
+                        const mode = e.target.value;
+                        setDateNotice(false);
+                        setForm((f) => ({
+                          ...f,
+                          dated: mode === "dates",
+                          flexible: mode === "month",
+                          month: f.month || plannerToday().slice(0, 7),
+                        }));
+                      }}
+                    >
+                      <option value="days">{ux("use_day_count")}</option>
+                      <option value="month">{ux("flexible_month")}</option>
+                      <option value="dates">{ux("pick_dates")}</option>
+                    </select>
+                  </div>
+                  <div
+                    ref={datesRef}
+                    className="min-w-0 md:col-start-1 md:row-start-2"
+                    data-testid="planner-primary-time"
+                  >
+                    {form.dated ? (
+                      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                        <PlannerDatePicker
+                          label={t("Ngày đi")}
+                          value={form.start}
+                          className={fieldClass}
+                          onChange={(start) => {
+                            setForm((f) => setPlannerDeparture(f, start));
+                            if (!form.end || form.end <= start)
+                              setDateNotice(true);
+                          }}
+                        />
+                        <PlannerDatePicker
+                          label={t("Ngày về")}
+                          value={form.end}
+                          className={fieldClass}
+                          min={nextPlannerDate(form.start)}
+                          disabled={!nextPlannerDate(form.start)}
+                          onChange={(end) => {
+                            if (end > form.start) {
+                              setForm((f) => ({ ...f, end }));
+                              setDateNotice(false);
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={
+                          form.flexible
+                            ? "grid min-w-0 items-end gap-3 sm:grid-cols-2"
+                            : ""
+                        }
+                      >
+                        {form.flexible && (
+                          <label className="block text-sm font-semibold">
+                            {ux("travel_month")}
+                            <input
+                              type="month"
+                              required
+                              aria-label={ux("travel_month")}
+                              className={fieldClass}
+                              min={plannerToday().slice(0, 7)}
+                              value={form.month ?? ""}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  month: e.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                        )}
+                        {input(
+                          ux("days_label"),
+                          form.days,
+                          (v) => setForm((f) => ({ ...f, days: Number(v) })),
+                          "number",
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <details className="text-xs leading-relaxed text-on-surface-variant md:col-start-1 md:row-start-3">
+                    <summary className="cursor-pointer">
+                      {ux("time_help")}
+                    </summary>
+                    {dateNotice ? (
+                      <span role="status">{ux("return_adjusted")}</span>
+                    ) : (
+                      ux(
+                        form.flexible && !form.dated
+                          ? "flexible_month_hint"
+                          : "time_hint",
+                      )
+                    )}
+                  </details>
+                  <h2 className="flex items-center text-sm font-bold uppercase tracking-widest text-on-surface-variant md:col-start-2 md:row-start-1">
+                    {ux("budget_heading")}
+                  </h2>
+                  <div
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_100px] items-end gap-3 md:col-start-2 md:row-start-2"
+                    data-testid="planner-primary-budget"
+                  >
+                    {input(
+                      `${ux("budget_label")} (${p.budget.currency})`,
+                      p.budget.total ?? "",
+                      (v) =>
+                        change("budget", { total: v ? Number(v) : undefined }),
+                      "number",
+                      undefined,
+                      ux("budget_placeholder"),
+                    )}
+                    {select(
+                      t("Currency"),
+                      p.budget.currency,
+                      (currency) => change("budget", { currency }),
+                      [
+                        "VND",
+                        "USD",
+                        "EUR",
+                        "GBP",
+                        "JPY",
+                        "AUD",
+                        "CAD",
+                        "SGD",
+                        "THB",
+                      ].map((c) => [c, c]),
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
+                    {t("Travel style")}
+                  </h2>
+                  <div
+                    className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                    role="group"
+                    aria-label={t("Travel style")}
+                  >
+                    {[
+                      { key: "mixed", label: "Mixed", emoji: "🌿" },
+                      ...TRIP_STYLES,
+                    ].map((style) => (
+                      <button
+                        key={style.key}
+                        type="button"
+                        aria-pressed={form.style === style.key}
+                        onClick={() =>
+                          setForm((f) => ({ ...f, style: style.key }))
+                        }
+                        className={`flex min-h-12 items-center justify-center gap-2 rounded-full px-3 py-3 text-sm font-bold transition-colors ${form.style === style.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-primary/10"}`}
+                      >
+                        <span aria-hidden="true">{style.emoji}</span>
+                        {t(style.label)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
+                    {t("Số người lớn")}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <button
+                      type="button"
+                      aria-label={ux("fewer_adults")}
+                      disabled={p.travelers.adults <= 1}
+                      onClick={() =>
+                        change("travelers", { adults: p.travelers.adults - 1 })
+                      }
+                      className="h-11 w-11 rounded-full bg-surface-container-high text-2xl font-bold text-primary disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20 - p.travelers.child_ages.length}
+                      aria-label={t("Số người lớn")}
+                      value={p.travelers.adults}
+                      onChange={(e) =>
+                        change("travelers", { adults: Number(e.target.value) })
+                      }
+                      className="w-16 rounded-lg bg-transparent py-2 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                    <button
+                      type="button"
+                      aria-label={ux("more_adults")}
+                      disabled={
+                        p.travelers.adults + p.travelers.child_ages.length >= 20
+                      }
+                      onClick={() =>
+                        change("travelers", { adults: p.travelers.adults + 1 })
+                      }
+                      className="h-11 w-11 rounded-full bg-surface-container-high text-2xl font-bold text-primary disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                    <span className="text-sm text-on-surface-variant">
+                      {ux("adult_count", { count: p.travelers.adults })}
+                    </span>
+                  </div>
+                </div>
+
                 <details
                   ref={routeRef}
-                  open
-                  className="border-b border-outline-variant/20 pb-5"
+                  className="border-b border-outline-variant/20 pb-4"
                 >
-                  <summary className="mb-4 cursor-pointer text-lg font-bold">
-                    {" "}
-                    <UiText id="t4999528efe0f" fallback="Route" />{" "}
+                  <summary className="cursor-pointer font-semibold">
+                    {ux("route_options")}
                   </summary>
-                  <div className="space-y-4">
-                    {input(
-                      t("Điểm xuất phát"),
-                      p.journey.origin.label,
-                      (v) =>
-                        change("journey", {
-                          origin: { label: v, source: "manual" },
-                        }),
-                      "text",
-                      undefined,
-                      ux("origin_placeholder"),
-                      true,
-                    )}
+                  <div className="mt-4 space-y-4">
                     <div className="flex flex-wrap gap-4">
                       <button
                         type="button"
@@ -808,158 +1462,6 @@ export function UnifiedPlanner() {
                         ))}
                       </ul>
                     )}
-                    <label className="block text-sm font-semibold">
-                      {" "}
-                      <UiText id="t8dc001232fbf" fallback="Điểm đến" />{" "}
-                      {form.cities.length === 0 && (
-                        <span aria-hidden="true" className="text-error">
-                          *
-                        </span>
-                      )}
-                      {form.cities.length > 0 && (
-                        <span className="ml-2 text-xs font-normal text-primary">
-                          {ux("destinations_selected", {
-                            count: form.cities.length,
-                          })}
-                        </span>
-                      )}
-                      <input
-                        className={fieldClass}
-                        aria-label={t("Điểm đến")}
-                        data-testid="web-plan-city-input"
-                        aria-required={form.cities.length === 0 || undefined}
-                        required={form.cities.length === 0}
-                        value={cityQuery}
-                        placeholder={
-                          form.cities.length
-                            ? ux("add_destination_optional")
-                            : ux("destination_placeholder")
-                        }
-                        onChange={(e) => setCityQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && cityQuery.trim()) {
-                            e.preventDefault();
-                            const matches = suggestions.filter((c) =>
-                              [c.slug, ...Object.values(c.name)].some(
-                                (n) =>
-                                  n.toLocaleLowerCase() ===
-                                  cityQuery.trim().toLocaleLowerCase(),
-                              ),
-                            );
-                            if (matches.length === 1)
-                              addCity(
-                                matches[0]!.slug,
-                                matches[0]!.name[locale] ??
-                                  matches[0]!.name.en ??
-                                  matches[0]!.slug,
-                              );
-                            else {
-                              const draft = createManualCity(cityQuery);
-                              addCity(draft.slug, draft.name);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {popularCities.slice(0, 8).map((city) => (
-                        <button
-                          key={city.slug}
-                          type="button"
-                          className="rounded-full border px-3 py-1 text-sm"
-                          onClick={() =>
-                            addCity(
-                              city.slug,
-                              city.name[locale] ?? city.name.en ?? city.slug,
-                            )
-                          }
-                        >
-                          {city.name[locale] ?? city.name.en ?? city.slug}
-                        </button>
-                      ))}
-                    </div>
-                    {cityQuery.trim() && (
-                      <div className="space-y-2">
-                        {suggestions.map((c) => (
-                          <button
-                            type="button"
-                            key={c.slug}
-                            onClick={() =>
-                              addCity(
-                                c.slug,
-                                c.name[locale] ?? c.name.en ?? c.slug,
-                              )
-                            }
-                            className="block text-primary"
-                          >
-                            {c.name[locale] ?? c.name.en ?? c.slug}
-                          </button>
-                        ))}
-                        <ResolveCitySearch
-                          query={cityQuery}
-                          onSelect={addCity}
-                        />
-                        {!suggestions.length && (
-                          <p className="text-sm text-on-surface-variant">
-                            {locale === "vi"
-                              ? "Nhấn Enter để dùng tên tiếng Việt hoặc tiếng Anh. Hệ thống sẽ tự đối chiếu khi tạo lịch trình; tên trùng cần thêm quốc gia/khu vực."
-                              : "Press Enter to use a Vietnamese or English name. It will be resolved when generating; ambiguous names need a country/region."}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <ol className="space-y-2">
-                      {form.cities.map((c, i) => (
-                        <li
-                          key={c.slug}
-                          data-testid="web-plan-selected-city"
-                          className="flex items-center justify-between rounded-lg bg-surface-container-low p-3"
-                        >
-                          <span>
-                            {i + 1}.{" "}
-                            {c.names?.[locale] ??
-                              [...popularCities, ...suggestions].find(
-                                (city) => city.slug === c.slug,
-                              )?.name[locale] ??
-                              c.name}
-                          </span>
-                          <div className="flex gap-3">
-                            <button
-                              type="button"
-                              aria-label={`${t("Move city earlier")}: ${c.name}`}
-                              disabled={i === 0}
-                              onClick={() =>
-                                setForm((f) => {
-                                  const cities = [...f.cities];
-                                  [cities[i - 1], cities[i]] = [
-                                    cities[i]!,
-                                    cities[i - 1]!,
-                                  ];
-                                  return { ...f, cities };
-                                })
-                              }
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`${t("Remove city")}: ${c.name}`}
-                              onClick={() =>
-                                setForm((f) => ({
-                                  ...f,
-                                  cities: f.cities.filter(
-                                    (x) => x.slug !== c.slug,
-                                  ),
-                                }))
-                              }
-                            >
-                              {" "}
-                              <UiText id="t67fba2f357af" fallback="×" />{" "}
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
                     <label className="flex gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -990,713 +1492,408 @@ export function UnifiedPlanner() {
                       )}
                   </div>
                 </details>
-                <div
-                  className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2"
-                  data-testid="planner-time-budget"
-                >
-                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 md:col-start-1 md:row-start-1">
-                    <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
-                      {ux("when_heading")}
-                    </h2>
-                    <label className="cursor-pointer rounded-lg py-1 text-xs font-bold uppercase tracking-wide text-primary focus-within:ring-2 focus-within:ring-primary/30">
-                      <input
-                        className="sr-only"
-                        type="checkbox"
-                        aria-label={t("Chọn ngày cụ thể")}
-                        checked={form.dated}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, dated: e.target.checked }))
-                        }
-                      />
-                      {ux(form.dated ? "use_day_count" : "pick_dates")}
-                    </label>
-                  </div>
-                  <div
-                    ref={datesRef}
-                    className="min-w-0 md:col-start-1 md:row-start-2"
-                    data-testid="planner-primary-time"
+                <div className="mt-5 space-y-5">
+                  <details
+                    ref={groupRef}
+                    className="border-b border-outline-variant/20 pb-5"
                   >
-                    {form.dated ? (
-                      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                        <PlannerDatePicker
-                          label={t("Ngày đi")}
-                          value={form.start}
-                          className={fieldClass}
-                          onChange={(start) => {
-                            setForm((f) => setPlannerDeparture(f, start));
-                            if (!form.end || form.end <= start)
-                              setDateNotice(true);
-                          }}
+                    <summary className="mb-4 cursor-pointer font-bold">
+                      {ux("group_preferences")}
+                    </summary>
+                    <div className="space-y-4">
+                      {
+                        <CsvField
+                          label={t("Tuổi trẻ em (cách nhau bằng dấu phẩy)")}
+                          values={p.travelers.child_ages}
+                          onChange={(v) =>
+                            change("travelers", { child_ages: v.map(Number) })
+                          }
+                          hint={t(
+                            "Để trống nếu không có trẻ em; từ 0–17 tuổi.",
+                          )}
                         />
-                        <PlannerDatePicker
-                          label={t("Ngày về")}
-                          value={form.end}
-                          className={fieldClass}
-                          min={nextPlannerDate(form.start)}
-                          disabled={!nextPlannerDate(form.start)}
-                          onChange={(end) => {
-                            if (end > form.start) {
-                              setForm((f) => ({ ...f, end }));
-                              setDateNotice(false);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      input(
-                        t("Số ngày (gồm chặng đi/về)"),
-                        form.days,
-                        (v) => setForm((f) => ({ ...f, days: Number(v) })),
-                        "number",
-                      )
-                    )}
-                  </div>
-                  <p className="text-xs leading-relaxed text-on-surface-variant md:col-start-1 md:row-start-3">
-                    {dateNotice ? (
-                      <span role="status">{ux("return_adjusted")}</span>
-                    ) : (
-                      ux("time_hint")
-                    )}
-                  </p>
-                  <h2 className="flex items-center text-sm font-bold uppercase tracking-widest text-on-surface-variant md:col-start-2 md:row-start-1">
-                    {ux("budget_heading")}
-                  </h2>
-                  <div
-                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_100px] items-end gap-3 md:col-start-2 md:row-start-2"
-                    data-testid="planner-primary-budget"
-                  >
-                    {input(
-                      `${t("Total group budget")} (${p.budget.currency})`,
-                      p.budget.total ?? "",
-                      (v) =>
-                        change("budget", { total: v ? Number(v) : undefined }),
-                      "number",
-                      undefined,
-                      ux("budget_placeholder"),
-                    )}
-                    {select(
-                      t("Currency"),
-                      p.budget.currency,
-                      (currency) => change("budget", { currency }),
-                      [
-                        "VND",
-                        "USD",
-                        "EUR",
-                        "GBP",
-                        "JPY",
-                        "AUD",
-                        "CAD",
-                        "SGD",
-                        "THB",
-                      ].map((c) => [c, c]),
-                    )}
-                  </div>
-                  <p className="text-xs leading-relaxed text-on-surface-variant md:col-start-2 md:row-start-3">
-                    {ux("budget_hint")}
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
-                    {t("Travel style")}
-                  </h2>
-                  <div
-                    className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                    role="group"
-                    aria-label={t("Travel style")}
-                  >
-                    {[
-                      { key: "mixed", label: "Mixed", emoji: "🌿" },
-                      ...TRIP_STYLES,
-                    ].map((style) => (
-                      <button
-                        key={style.key}
-                        type="button"
-                        aria-pressed={form.style === style.key}
-                        onClick={() =>
-                          setForm((f) => ({ ...f, style: style.key }))
-                        }
-                        className={`flex min-h-12 items-center justify-center gap-2 rounded-full px-3 py-3 text-sm font-bold transition-colors ${form.style === style.key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-primary/10"}`}
-                      >
-                        <span aria-hidden="true">{style.emoji}</span>
-                        {t(style.label)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">
-                    {t("Số người lớn")}
-                  </h2>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <button
-                      type="button"
-                      aria-label={ux("fewer_adults")}
-                      disabled={p.travelers.adults <= 1}
-                      onClick={() =>
-                        change("travelers", { adults: p.travelers.adults - 1 })
                       }
-                      className="h-11 w-11 rounded-full bg-surface-container-high text-2xl font-bold text-primary disabled:opacity-40"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20 - p.travelers.child_ages.length}
-                      aria-label={t("Số người lớn")}
-                      value={p.travelers.adults}
-                      onChange={(e) =>
-                        change("travelers", { adults: Number(e.target.value) })
-                      }
-                      className="w-16 rounded-lg bg-transparent py-2 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                    <button
-                      type="button"
-                      aria-label={ux("more_adults")}
-                      disabled={
-                        p.travelers.adults + p.travelers.child_ages.length >= 20
-                      }
-                      onClick={() =>
-                        change("travelers", { adults: p.travelers.adults + 1 })
-                      }
-                      className="h-11 w-11 rounded-full bg-surface-container-high text-2xl font-bold text-primary disabled:opacity-40"
-                    >
-                      +
-                    </button>
-                    <span className="text-sm text-on-surface-variant">
-                      {ux("adult_count", { count: p.travelers.adults })}
-                    </span>
-                  </div>
-                </div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.forceRefresh}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        forceRefresh: e.target.checked,
-                      }))
-                    }
-                  />{" "}
-                  <UiText
-                    id="te5151f4d1389"
-                    fallback="Generate a fresh AI version (ignore cache)"
-                  />{" "}
-                </label>{" "}
-                {issues.some((issue) => issue.severity === "error") && (
-                  <section
-                    role="alert"
-                    className="rounded-xl bg-error/10 p-4 text-sm text-error"
-                  >
-                    <p className="font-semibold">{ux("fix_required")}</p>
-                    <ul>
-                      {issues
-                        .filter((issue) => issue.severity === "error")
-                        .map((issue) => (
-                          <li key={issue.code}>{issueText(issue)}</li>
-                        ))}
-                    </ul>
-                  </section>
-                )}
-                {error && (
-                  <p
-                    role="alert"
-                    data-testid="web-plan-error"
-                    className="rounded-xl bg-error/10 p-3 text-sm text-error"
-                  >
-                    <UiText text={error} />
-                  </p>
-                )}
-                <div className="flex flex-col-reverse gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
-                        setMessage(t("Đã lưu nháp, gồm vị trí bạn đang chọn."));
-                      } catch {
-                        setError(t("Không lưu được nháp trong trình duyệt."));
-                      }
-                    }}
-                    className="text-sm font-semibold text-primary"
-                  >
-                    {" "}
-                    <UiText id="tac4bb1d6b418" fallback="Lưu nháp" />{" "}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={generate}
-                    data-testid="web-plan-generate"
-                    className="min-h-16 w-full rounded-full bg-primary px-6 py-4 text-lg font-bold text-on-primary shadow-md transition-colors hover:bg-primary/90"
-                  >
-                    {busy ? (
-                      <UiText id="ta85e73bea60e" fallback="Đang gửi yêu cầu…" />
-                    ) : (
-                      <UiText id="ta0352f1292cc" fallback="Tạo hành trình" />
-                    )}
-                  </button>
-                </div>
-              </div>
-              <div
-                className="min-w-0 space-y-5 rounded-3xl border border-outline-variant/30 bg-surface p-5 sm:p-6"
-                data-testid="planner-preferences-panel"
-              >
-                <div>
-                  <h2 className="text-lg font-bold">
-                    {ux("preferences_title")}
-                  </h2>
-                  <p className="mt-1 text-sm text-on-surface-variant">
-                    {ux("preferences_hint")}
-                  </p>
-                </div>
-                <p className="text-sm text-on-surface-variant">
-                  {ux("recommendation_hint")}
-                </p>
-                <details className="rounded-xl bg-surface-container-low p-4 text-sm">
-                  <summary className="cursor-pointer font-semibold">
-                    {ux("settings_title")}
-                  </summary>
-                  <p className="mt-1 text-on-surface-variant">
-                    {ux("settings_hint")}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-surface px-3 py-1">
-                      {p.journey.return_to_origin
-                        ? ux("round_trip")
-                        : ux("custom_endpoint")}
-                    </span>
-                    <span className="rounded-full bg-surface px-3 py-1">
-                      {ux("rooms_if_overnight", {
-                        count: p.stay_preferences.rooms,
-                      })}
-                    </span>
-                    <span className="rounded-full bg-surface px-3 py-1">
-                      {t(
-                        p.experience_preferences.pace === "relaxed"
-                          ? "Thư thả"
-                          : p.experience_preferences.pace === "packed"
-                            ? "Nhiều hoạt động"
-                            : "Cân bằng",
+                      {select(
+                        t("Nhịp độ"),
+                        p.experience_preferences.pace,
+                        (v) =>
+                          change("experience_preferences", {
+                            pace: v as PlanningCriteria["experience_preferences"]["pace"],
+                          }),
+                        [
+                          ["relaxed", t("Thư thả")],
+                          ["balanced", t("Cân bằng")],
+                          ["packed", t("Nhiều hoạt động")],
+                        ],
                       )}
-                    </span>
-                    <span className="rounded-full bg-surface px-3 py-1">
-                      {p.budget.total == null
-                        ? ux("budget_auto")
-                        : p.budget.total.toLocaleString(locale)}{" "}
-                      · {p.budget.currency}
-                    </span>
-                  </div>
-                </details>
-                <button
-                  type="button"
-                  className="text-left text-sm font-semibold text-primary"
-                  onClick={() => {
-                    if (optionalRef.current) optionalRef.current.open = true;
-                    if (diningRef.current) {
-                      diningRef.current.open = true;
-                      diningRef.current.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }
-                  }}
-                >
-                  {ux("diet_shortcut")}
-                </button>
-                <details
-                  ref={optionalRef}
-                  className="rounded-xl border border-outline-variant/30 p-4"
-                  data-testid="planner-optional-settings"
-                >
-                  <summary className="cursor-pointer text-lg font-bold text-primary">
-                    {ux("customize")}
-                  </summary>
-                  <p className="mt-2 text-sm text-on-surface-variant">
-                    {ux("customize_hint")}
-                  </p>
-                  <div className="mt-5 space-y-5">
-                    <details
-                      ref={groupRef}
-                      className="border-b border-outline-variant/20 pb-5"
-                    >
-                      <summary className="mb-4 cursor-pointer font-bold">
-                        {ux("group_preferences")}
-                      </summary>
-                      <div className="space-y-4">
-                        {
-                          <CsvField
-                            label={t("Tuổi trẻ em (cách nhau bằng dấu phẩy)")}
-                            values={p.travelers.child_ages}
-                            onChange={(v) =>
-                              change("travelers", { child_ages: v.map(Number) })
-                            }
-                            hint={t(
-                              "Để trống nếu không có trẻ em; từ 0–17 tuổi.",
-                            )}
-                          />
-                        }
-                        {select(
-                          t("Nhịp độ"),
-                          p.experience_preferences.pace,
-                          (v) =>
-                            change("experience_preferences", {
-                              pace: v as PlanningCriteria["experience_preferences"]["pace"],
-                            }),
-                          [
-                            ["relaxed", t("Thư thả")],
-                            ["balanced", t("Cân bằng")],
-                            ["packed", t("Nhiều hoạt động")],
-                          ],
-                        )}
-                        <details>
-                          <summary className="cursor-pointer font-semibold text-primary">
-                            {" "}
-                            <UiText
-                              id="tc841de1f086c"
-                              fallback="Khả năng vận động & nhu cầu riêng"
-                            />{" "}
-                          </summary>
-                          <div className="mt-4">
-                            {requirements(
-                              t("Yêu cầu trải nghiệm"),
-                              p.experience_preferences.requirements,
-                              (v) =>
-                                change("experience_preferences", {
-                                  requirements: v,
-                                }),
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    </details>
-                    <details
-                      ref={transportRef}
-                      className="border-b border-outline-variant/20 pb-5"
-                    >
-                      <summary className="mb-4 cursor-pointer text-lg font-bold">
-                        {" "}
-                        <UiText text="Transport" />{" "}
-                      </summary>
-                      <div className="space-y-4">
-                        {select(
-                          t("Phương tiện chính"),
-                          p.transport_preferences.mode,
-                          (v) => change("transport_preferences", { mode: v }),
-                          [
-                            ["suggest", "Để hệ thống đề xuất"],
-                            ["flight", "Máy bay"],
-                            ["train", "Tàu hỏa"],
-                            ["bus", "Xe khách"],
-                            ["car", "Ô tô"],
-                            ["motorbike", "Xe máy"],
-                            ["ferry", "Tàu/phà"],
-                          ],
-                        )}
-                        <label className="flex gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={p.transport_preferences.confirmed}
-                            onChange={(e) =>
-                              change("transport_preferences", {
-                                confirmed: e.target.checked,
-                              })
-                            }
-                          />{" "}
-                          <UiText
-                            id="tfab997445c6a"
-                            fallback="Tôi đã đặt vé"
-                          />{" "}
-                        </label>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          {input(
-                            t("Giờ đến điểm du lịch"),
-                            p.transport_preferences.arrival_at ?? "",
-                            (v) =>
-                              change("transport_preferences", {
-                                arrival_at: v || undefined,
-                              }),
-                            "datetime-local",
-                            undefined,
-                            undefined,
-                            p.transport_preferences.confirmed,
-                          )}
-                          {input(
-                            t("Giờ khởi hành chặng về"),
-                            p.transport_preferences.departure_at ?? "",
-                            (v) =>
-                              change("transport_preferences", {
-                                departure_at: v || undefined,
-                              }),
-                            "datetime-local",
-                            undefined,
-                            undefined,
-                            p.transport_preferences.confirmed,
-                          )}
-                        </div>
-                        <p className="text-xs">
+                      <details>
+                        <summary className="cursor-pointer font-semibold text-primary">
                           {" "}
                           <UiText
-                            id="t1fc9d7076638"
-                            fallback="Giờ địa phương Việt Nam. Chưa biết có thể để trống."
+                            id="tc841de1f086c"
+                            fallback="Khả năng vận động & nhu cầu riêng"
                           />{" "}
-                        </p>
-                        {needsSuggestedTravelTimes(form) && (
-                          <p className="text-sm text-on-surface-variant">
-                            {ux("unconfirmed_times_suggested")}
-                          </p>
+                        </summary>
+                        <div className="mt-4">
+                          {requirements(
+                            t("Yêu cầu trải nghiệm"),
+                            p.experience_preferences.requirements,
+                            (v) =>
+                              change("experience_preferences", {
+                                requirements: v,
+                              }),
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  </details>
+                  <details
+                    ref={transportRef}
+                    className="border-b border-outline-variant/20 pb-5"
+                  >
+                    <summary className="mb-4 cursor-pointer text-lg font-bold">
+                      {" "}
+                      <UiText text="Transport" />{" "}
+                    </summary>
+                    <div className="space-y-4">
+                      {select(
+                        t("Phương tiện chính"),
+                        p.transport_preferences.mode,
+                        (v) => change("transport_preferences", { mode: v }),
+                        [
+                          ["suggest", "Để hệ thống đề xuất"],
+                          ["flight", "Máy bay"],
+                          ["train", "Tàu hỏa"],
+                          ["bus", "Xe khách"],
+                          ["car", "Ô tô"],
+                          ["motorbike", "Xe máy"],
+                          ["ferry", "Tàu/phà"],
+                        ],
+                      )}
+                      <label className="flex gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={p.transport_preferences.confirmed}
+                          onChange={(e) =>
+                            change("transport_preferences", {
+                              confirmed: e.target.checked,
+                            })
+                          }
+                        />{" "}
+                        <UiText
+                          id="tfab997445c6a"
+                          fallback="Tôi đã đặt vé"
+                        />{" "}
+                      </label>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {input(
+                          t("Giờ đến điểm du lịch"),
+                          p.transport_preferences.arrival_at ?? "",
+                          (v) =>
+                            change("transport_preferences", {
+                              arrival_at: v || undefined,
+                            }),
+                          "datetime-local",
+                          undefined,
+                          undefined,
+                          p.transport_preferences.confirmed,
                         )}
-                        {p.transport_preferences.confirmed && (
-                          <>
-                            {input(
-                              t("Nhà cung cấp vé"),
-                              p.transport_preferences.provider ?? "",
-                              (v) =>
-                                change("transport_preferences", {
-                                  provider: v,
-                                }),
-                              "text",
-                              undefined,
-                              undefined,
-                              true,
-                            )}
-                            {input(
-                              t("Mã đặt vé"),
-                              p.transport_preferences.booking_reference ?? "",
-                              (v) =>
-                                change("transport_preferences", {
-                                  booking_reference: v,
-                                }),
-                            )}
-                            {input(
-                              t("Tổng tiền vé cả nhóm"),
-                              p.transport_preferences.total_price ?? "",
-                              (v) =>
-                                change("transport_preferences", {
-                                  total_price: v ? Number(v) : undefined,
-                                }),
-                              "number",
-                            )}
-                          </>
+                        {input(
+                          t("Giờ khởi hành chặng về"),
+                          p.transport_preferences.departure_at ?? "",
+                          (v) =>
+                            change("transport_preferences", {
+                              departure_at: v || undefined,
+                            }),
+                          "datetime-local",
+                          undefined,
+                          undefined,
+                          p.transport_preferences.confirmed,
                         )}
                       </div>
-                    </details>
-                    <details
-                      ref={stayRef}
-                      className="border-b border-outline-variant/20 pb-5"
-                    >
-                      <summary className="mb-4 cursor-pointer text-lg font-bold">
-                        <UiText text="Accommodation" />
-                      </summary>
-                      <div className="space-y-4">
-                        {select(
-                          t("Loại chỗ ở"),
-                          p.stay_preferences.type,
-                          (v) => change("stay_preferences", { type: v }),
-                          [
-                            ["suggest", "Để hệ thống đề xuất"],
-                            ["hotel", "Khách sạn"],
-                            ["homestay", "Homestay"],
-                            ["apartment", "Căn hộ"],
-                            ["resort", "Resort"],
-                            ["hostel", "Hostel"],
-                            ["already_booked", "Đã đặt phòng"],
-                            ["none", "Không nghỉ đêm"],
-                          ],
-                        )}
-                        {p.stay_preferences.type !== "none" && (
-                          <>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                              {input(
-                                t("Số phòng/căn"),
-                                p.stay_preferences.rooms,
-                                (v) =>
-                                  change("stay_preferences", {
-                                    rooms: Number(v),
-                                  }),
-                                "number",
-                              )}
-                              {input(
-                                `${t("Budget/room/night")} (${p.budget.currency})`,
-                                p.stay_preferences.nightly_budget ?? "",
-                                (v) =>
-                                  change("stay_preferences", {
-                                    nightly_budget: v ? Number(v) : undefined,
-                                  }),
-                                "number",
-                              )}
-                            </div>
-                            {p.stay_preferences.type === "already_booked" && (
-                              <>
-                                {input(
-                                  t("Tên chỗ ở đã đặt"),
-                                  p.stay_preferences.booked_name ?? "",
-                                  (v) =>
-                                    change("stay_preferences", {
-                                      booked_name: v,
-                                    }),
-                                  "text",
-                                  undefined,
-                                  undefined,
-                                  true,
-                                )}
-                                {input(
-                                  t("Mã đặt phòng"),
-                                  p.stay_preferences.booking_reference ?? "",
-                                  (v) =>
-                                    change("stay_preferences", {
-                                      booking_reference: v,
-                                    }),
-                                )}
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                  {input(
-                                    t("Ngày nhận phòng"),
-                                    p.stay_preferences.check_in ?? "",
-                                    (v) =>
-                                      change("stay_preferences", {
-                                        check_in: v || undefined,
-                                      }),
-                                    "date",
-                                  )}
-                                  {input(
-                                    t("Ngày trả phòng"),
-                                    p.stay_preferences.check_out ?? "",
-                                    (v) =>
-                                      change("stay_preferences", {
-                                        check_out: v || undefined,
-                                      }),
-                                    "date",
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </>
-                        )}
-                        <details>
-                          <summary className="cursor-pointer font-semibold text-primary">
-                            {" "}
-                            <UiText
-                              id="t1efa24aa6cf8"
-                              fallback="Tiêu chí phòng & thời gian dự phòng"
-                            />{" "}
-                          </summary>
-                          <div className="mt-4 space-y-4">
-                            {requirements(
-                              t("Giường, khu vực, ăn sáng, đỗ xe, hủy phòng"),
-                              p.stay_preferences.requirements,
-                              (v) =>
-                                change("stay_preferences", { requirements: v }),
-                            )}
-                            {input(
-                              t("Dự phòng làm thủ tục sân bay (phút)"),
-                              p.transport_preferences.airport_buffer_minutes,
-                              (v) =>
-                                change("transport_preferences", {
-                                  airport_buffer_minutes: Number(v),
-                                }),
-                              "number",
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    </details>
-                    <details
-                      ref={diningRef}
-                      className="border-b border-outline-variant/20 pb-5"
-                    >
-                      <summary className="mb-4 cursor-pointer text-lg font-bold">
+                      <p className="text-xs">
                         {" "}
                         <UiText
-                          id="t1fbe19e98e83"
-                          fallback="Dining and experiences"
+                          id="t1fc9d7076638"
+                          fallback="Giờ địa phương Việt Nam. Chưa biết có thể để trống."
                         />{" "}
-                      </summary>
-                      <div className="space-y-4">
-                        {
-                          <CsvField
-                            label={t("Sở thích tham quan")}
-                            values={p.experience_preferences.interests}
-                            onChange={(v) =>
-                              change("experience_preferences", { interests: v })
-                            }
-                            hint={t(
-                              "Ví dụ: di sản, thiên nhiên, trải nghiệm địa phương",
-                            )}
-                          />
-                        }
-                        {input(
-                          `${t("Budget/meal/person")} (${p.budget.currency})`,
-                          p.dining_preferences.per_person_budget ?? "",
-                          (v) =>
-                            change("dining_preferences", {
-                              per_person_budget: v ? Number(v) : undefined,
-                            }),
-                          "number",
-                        )}
-                        {
-                          <CsvField
-                            label={t("Dị ứng thực phẩm — bắt buộc")}
-                            values={p.dining_preferences.allergies}
-                            onChange={(v) =>
-                              change("dining_preferences", { allergies: v })
-                            }
-                            hint={t(
-                              "Luôn xác nhận trực tiếp với quán về thành phần và nhiễm chéo.",
-                            )}
-                          />
-                        }
-                        {input(
-                          t("Café bạn thích"),
-                          p.dining_preferences.cafe,
-                          (v) => change("dining_preferences", { cafe: v }),
-                          "text",
-                          undefined,
-                          t("Để hệ thống đề xuất"),
-                        )}
-                        <label className="flex gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={p.dining_preferences.independent_only}
-                            onChange={(e) =>
-                              change("dining_preferences", {
-                                independent_only: e.target.checked,
-                              })
-                            }
-                          />{" "}
-                          <UiText
-                            id="t878c87e59aeb"
-                            fallback="Ưu tiên quán địa phương độc lập, tránh chuỗi"
-                          />{" "}
-                        </label>
-                        <details>
-                          <summary className="cursor-pointer font-semibold text-primary">
-                            {" "}
-                            <UiText
-                              id="t55255af0a140"
-                              fallback="Khẩu vị, ăn kiêng & tiêu chí nâng cao"
-                            />{" "}
-                          </summary>
-                          <div className="mt-4">
-                            {requirements(
-                              t("Yêu cầu ăn uống"),
-                              p.dining_preferences.requirements,
+                      </p>
+                      {needsSuggestedTravelTimes(form) && (
+                        <p className="text-sm text-on-surface-variant">
+                          {ux("unconfirmed_times_suggested")}
+                        </p>
+                      )}
+                      {p.transport_preferences.confirmed && (
+                        <>
+                          {input(
+                            t("Nhà cung cấp vé"),
+                            p.transport_preferences.provider ?? "",
+                            (v) =>
+                              change("transport_preferences", {
+                                provider: v,
+                              }),
+                            "text",
+                            undefined,
+                            undefined,
+                            true,
+                          )}
+                          {input(
+                            t("Mã đặt vé"),
+                            p.transport_preferences.booking_reference ?? "",
+                            (v) =>
+                              change("transport_preferences", {
+                                booking_reference: v,
+                              }),
+                          )}
+                          {input(
+                            t("Tổng tiền vé cả nhóm"),
+                            p.transport_preferences.total_price ?? "",
+                            (v) =>
+                              change("transport_preferences", {
+                                total_price: v ? Number(v) : undefined,
+                              }),
+                            "number",
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </details>
+                  <details
+                    ref={stayRef}
+                    className="border-b border-outline-variant/20 pb-5"
+                  >
+                    <summary className="mb-4 cursor-pointer text-lg font-bold">
+                      <UiText text="Accommodation" />
+                    </summary>
+                    <div className="space-y-4">
+                      {select(
+                        t("Loại chỗ ở"),
+                        p.stay_preferences.type,
+                        (v) => change("stay_preferences", { type: v }),
+                        [
+                          ["suggest", "Để hệ thống đề xuất"],
+                          ["hotel", "Khách sạn"],
+                          ["homestay", "Homestay"],
+                          ["apartment", "Căn hộ"],
+                          ["resort", "Resort"],
+                          ["hostel", "Hostel"],
+                          ["already_booked", "Đã đặt phòng"],
+                          ["none", "Không nghỉ đêm"],
+                        ],
+                      )}
+                      {p.stay_preferences.type !== "none" && (
+                        <>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            {input(
+                              t("Số phòng/căn"),
+                              p.stay_preferences.rooms,
                               (v) =>
-                                change("dining_preferences", {
-                                  requirements: v,
+                                change("stay_preferences", {
+                                  rooms: Number(v),
                                 }),
+                              "number",
+                            )}
+                            {input(
+                              `${t("Budget/room/night")} (${p.budget.currency})`,
+                              p.stay_preferences.nightly_budget ?? "",
+                              (v) =>
+                                change("stay_preferences", {
+                                  nightly_budget: v ? Number(v) : undefined,
+                                }),
+                              "number",
                             )}
                           </div>
-                        </details>
-                        {input(t("Yêu cầu thêm"), form.prompt, (v) =>
-                          setForm((f) => ({ ...f, prompt: v })),
-                        )}
-                      </div>
-                    </details>
-                  </div>
-                </details>
+                          {p.stay_preferences.type === "already_booked" && (
+                            <>
+                              {input(
+                                t("Tên chỗ ở đã đặt"),
+                                p.stay_preferences.booked_name ?? "",
+                                (v) =>
+                                  change("stay_preferences", {
+                                    booked_name: v,
+                                  }),
+                                "text",
+                                undefined,
+                                undefined,
+                                true,
+                              )}
+                              {input(
+                                t("Mã đặt phòng"),
+                                p.stay_preferences.booking_reference ?? "",
+                                (v) =>
+                                  change("stay_preferences", {
+                                    booking_reference: v,
+                                  }),
+                              )}
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                {input(
+                                  t("Ngày nhận phòng"),
+                                  p.stay_preferences.check_in ?? "",
+                                  (v) =>
+                                    change("stay_preferences", {
+                                      check_in: v || undefined,
+                                    }),
+                                  "date",
+                                )}
+                                {input(
+                                  t("Ngày trả phòng"),
+                                  p.stay_preferences.check_out ?? "",
+                                  (v) =>
+                                    change("stay_preferences", {
+                                      check_out: v || undefined,
+                                    }),
+                                  "date",
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+                      <details>
+                        <summary className="cursor-pointer font-semibold text-primary">
+                          {" "}
+                          <UiText
+                            id="t1efa24aa6cf8"
+                            fallback="Tiêu chí phòng & thời gian dự phòng"
+                          />{" "}
+                        </summary>
+                        <div className="mt-4 space-y-4">
+                          {requirements(
+                            t("Giường, khu vực, ăn sáng, đỗ xe, hủy phòng"),
+                            p.stay_preferences.requirements,
+                            (v) =>
+                              change("stay_preferences", { requirements: v }),
+                          )}
+                          {input(
+                            t("Dự phòng làm thủ tục sân bay (phút)"),
+                            p.transport_preferences.airport_buffer_minutes,
+                            (v) =>
+                              change("transport_preferences", {
+                                airport_buffer_minutes: Number(v),
+                              }),
+                            "number",
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  </details>
+                  <details
+                    ref={diningRef}
+                    className="border-b border-outline-variant/20 pb-5"
+                  >
+                    <summary className="mb-4 cursor-pointer text-lg font-bold">
+                      {" "}
+                      <UiText
+                        id="t1fbe19e98e83"
+                        fallback="Dining and experiences"
+                      />{" "}
+                    </summary>
+                    <div className="space-y-4">
+                      {
+                        <CsvField
+                          label={t("Sở thích tham quan")}
+                          values={p.experience_preferences.interests}
+                          onChange={(v) =>
+                            change("experience_preferences", { interests: v })
+                          }
+                          hint={t(
+                            "Ví dụ: di sản, thiên nhiên, trải nghiệm địa phương",
+                          )}
+                        />
+                      }
+                      {input(
+                        `${t("Budget/meal/person")} (${p.budget.currency})`,
+                        p.dining_preferences.per_person_budget ?? "",
+                        (v) =>
+                          change("dining_preferences", {
+                            per_person_budget: v ? Number(v) : undefined,
+                          }),
+                        "number",
+                      )}
+                      {
+                        <CsvField
+                          label={t("Dị ứng thực phẩm — bắt buộc")}
+                          values={p.dining_preferences.allergies}
+                          onChange={(v) =>
+                            change("dining_preferences", { allergies: v })
+                          }
+                          hint={t(
+                            "Luôn xác nhận trực tiếp với quán về thành phần và nhiễm chéo.",
+                          )}
+                        />
+                      }
+                      {input(
+                        t("Café bạn thích"),
+                        p.dining_preferences.cafe,
+                        (v) => change("dining_preferences", { cafe: v }),
+                        "text",
+                        undefined,
+                        t("Để hệ thống đề xuất"),
+                      )}
+                      <label className="flex gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={p.dining_preferences.independent_only}
+                          onChange={(e) =>
+                            change("dining_preferences", {
+                              independent_only: e.target.checked,
+                            })
+                          }
+                        />{" "}
+                        <UiText
+                          id="t878c87e59aeb"
+                          fallback="Ưu tiên quán địa phương độc lập, tránh chuỗi"
+                        />{" "}
+                      </label>
+                      <details>
+                        <summary className="cursor-pointer font-semibold text-primary">
+                          {" "}
+                          <UiText
+                            id="t55255af0a140"
+                            fallback="Khẩu vị, ăn kiêng & tiêu chí nâng cao"
+                          />{" "}
+                        </summary>
+                        <div className="mt-4">
+                          {requirements(
+                            t("Yêu cầu ăn uống"),
+                            p.dining_preferences.requirements,
+                            (v) =>
+                              change("dining_preferences", {
+                                requirements: v,
+                              }),
+                          )}
+                        </div>
+                      </details>
+                      {input(t("Yêu cầu thêm"), form.prompt, (v) =>
+                        setForm((f) => ({ ...f, prompt: v })),
+                      )}
+                    </div>
+                  </details>
+                </div>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const prepared = prepareCurrent();
+                      explicitlySavedDraft.current = prepared.draft;
+                      setForm(prepared.draft);
+                      localStorage.setItem(
+                        DRAFT_KEY,
+                        JSON.stringify(prepared.draft),
+                      );
+                      setMessage(t("Đã lưu nháp, gồm vị trí bạn đang chọn."));
+                    } catch {
+                      setError(t("Không lưu được nháp trong trình duyệt."));
+                    }
+                  }}
+                  className="text-sm font-semibold text-primary"
+                >
+                  {" "}
+                  <UiText id="tac4bb1d6b418" fallback="Lưu nháp" />{" "}
+                </button>
                 {issues.some((issue) => issue.severity === "warning") && (
-                  <details className="text-sm text-on-surface-variant">
+                  <details className="text-sm">
                     <summary className="cursor-pointer">
                       {ux("optional_notices")}
                     </summary>
@@ -1709,11 +1906,6 @@ export function UnifiedPlanner() {
                     </ul>
                   </details>
                 )}
-                {message && (
-                  <p role="status" className="text-sm text-primary">
-                    <UiText text={message} />
-                  </p>
-                )}
                 <details className="text-sm">
                   <summary className="cursor-pointer font-semibold">
                     {ux("trip_summary")}
@@ -1721,9 +1913,19 @@ export function UnifiedPlanner() {
                   <div className="mt-3">{summary}</div>
                 </details>
               </div>
-            </fieldset>
-          </section>
-        </div>
+            </details>
+          </fieldset>
+        </form>
+        <details
+          open
+          className="mt-5 text-sm"
+          data-testid="planner-recent-requests"
+        >
+          <summary className="cursor-pointer text-on-surface-variant">
+            {ux("recent_requests_short")}
+          </summary>
+          <RecentPlanningRequests />
+        </details>
       </main>
     </div>
   );

@@ -2,7 +2,7 @@
 import { UiText, useUiText } from "../i18n/UiText";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
@@ -153,6 +153,20 @@ export function AccountMenu({
                   flight_takeoff
                 </span>{" "}
                 <UiText id="tbdb1c97b12c9" fallback="My trips" />{" "}
+              </Link>
+              <Link
+                role="menuitem"
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm hover:bg-surface-container-low"
+              >
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[18px]"
+                >
+                  person
+                </span>
+                <UiText text="Profile" />
               </Link>
               {LOCAL_AUTH_ENABLED &&
                 methods?.hasPassword &&

@@ -8,16 +8,25 @@ test("structured planner preserves calendar, budget and locale through polling t
   await page.goto("/plan");
   await injectWebMockAuthSession(page, "planner-calendar-user");
   await page
-    .getByRole("textbox", { name: "Origin", exact: true })
+    .getByRole("textbox", { name: "Where from?", exact: true })
     .fill("Hà Nội");
   await page.getByTestId("web-plan-city-input").fill(cachedScenario.city);
-  await page.getByTestId("web-plan-city-input").press("Enter");
   await page
-    .getByRole("spinbutton", { name: "Total group budget (VND)", exact: true })
+    .getByTestId("planner-optional-settings")
+    .locator("summary")
+    .first()
+    .click();
+  await page
+    .getByRole("combobox", { name: "Currency", exact: true })
+    .selectOption("VND");
+  await page
+    .getByRole("spinbutton", { name: "Group budget (VND)", exact: true })
     .fill("8000000");
   await page.getByRole("button", { name: "Mid-range", exact: true }).click();
   await page.getByRole("button", { name: "More adults", exact: true }).click();
-  await page.getByText("Pick dates instead", { exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Travel dates", exact: true })
+    .selectOption("dates");
   await page
     .getByRole("button", { name: "Choose Departure date", exact: true })
     .click();
@@ -44,7 +53,7 @@ test("structured planner preserves calendar, budget and locale through polling t
   await page.getByRole("button", { name: "VI", exact: true }).click();
   await expect(
     page.getByRole("spinbutton", {
-      name: "Ngân sách tổng cả nhóm (VND)",
+      name: "Ngân sách cả nhóm (VND)",
       exact: true,
     }),
   ).toHaveValue("8000000");

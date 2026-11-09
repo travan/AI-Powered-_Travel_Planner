@@ -13,6 +13,7 @@ import {
   Max,
   Min,
   MinLength,
+  Matches,
   ValidateNested,
 } from "class-validator";
 
@@ -28,6 +29,10 @@ export class ItineraryIdParamsDto {
 }
 
 export class GenerateItineraryDto {
+  @IsOptional()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
+  flexible_month?: string;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => PlanningCriteriaDto)

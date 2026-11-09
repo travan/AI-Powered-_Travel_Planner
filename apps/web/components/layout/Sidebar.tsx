@@ -1,15 +1,10 @@
 "use client";
+import React from "react";
+import { PRIMARY_NAVIGATION, isNavigationActive } from "./navigation";
 import { UiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const NAV = [
-  { icon: "home", href: "/plan", label: "Home" },
-  { icon: "map", href: "/trips", label: "Trips" },
-  { icon: "payments", href: "/budget", label: "Budget" },
-  { icon: "person", href: "/profile", label: "Profile" },
-];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -26,14 +21,14 @@ export function Sidebar() {
       </div>
 
       {/* Nav items */}
-      {NAV.map((item) => {
-        const active =
-          pathname === item.href || pathname.startsWith(item.href + "/");
+      {PRIMARY_NAVIGATION.map((item) => {
+        const active = isNavigationActive(pathname, item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
             title={item.label}
+            aria-current={active ? "page" : undefined}
             className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 ${
               active
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"

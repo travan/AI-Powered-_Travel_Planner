@@ -1,3 +1,4 @@
+import { flexibleMonthWindows, plannerToday } from "./flexible-dates";
 import type { Itinerary, ItineraryInput, Activity } from "./itinerary";
 
 export type Requirement = { value: string; priority: "required" | "preferred" };
@@ -206,7 +207,35 @@ export function validatePlanning(input: Partial<ItineraryInput>): {
     field?: string,
     severity: PlanningIssue["severity"] = "warning",
   ) => issues.push({ code, message, field, severity, params: {} });
-  if (!p) return { valid: true, issues };
+  if (input.flexible_month !== undefined) {
+    if (
+      !flexibleMonthWindows(
+        input.flexible_month,
+        input.num_days ?? 1,
+        plannerToday(),
+      ).length ||
+      (input.start_date &&
+        input.start_date.slice(0, 7) !== input.flexible_month) ||
+      (input.end_date && input.end_date.slice(0, 7) !== input.flexible_month)
+    )
+      issue(
+        "MONTH_UNAVAILABLE",
+        "Chọn tháng còn đủ số ngày cho chuyến đi.",
+        "flexible_month",
+        "error",
+      );
+    if (
+      p?.transport_preferences.confirmed ||
+      p?.stay_preferences.type === "already_booked"
+    )
+      issue(
+        "MONTH_BOOKING_CONFLICT",
+        "Hãy chọn ngày cụ thể khi đã có vé hoặc phòng đặt trước.",
+        "flexible_month",
+        "error",
+      );
+  }
+  if (!p) return { valid: !issues.some((i) => i.severity === "error"), issues };
   if (!p.journey.origin.label.trim())
     issue(
       "ORIGIN_REQUIRED",
@@ -233,7 +262,12 @@ export function validatePlanning(input: Partial<ItineraryInput>): {
     (input.end_date && !validTripDate(input.end_date))
   )
     issue("DATE_INVALID", "Ngày đi/về không hợp lệ.", "end_date", "error");
-  if (input.start_date && input.end_date && input.end_date <= input.start_date)
+  if (
+    input.start_date &&
+    input.end_date &&
+    (input.end_date < input.start_date ||
+      (input.end_date === input.start_date && !input.flexible_month))
+  )
     issue("DATE_ORDER", "Ngày về phải sau ngày đi.", "end_date", "error");
   if (input.start_date && !input.end_date)
     issue(

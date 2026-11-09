@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPlannerRequest,
+  preparePlannerSubmission,
+  mergePlannerCity,
+  applyPlannerCurrencyDefault,
   setPlannerDeparture,
   nextPlannerDate,
   emptyPlanner,
@@ -12,6 +15,92 @@ import {
 } from "../../../../../apps/web/lib/planning-preferences";
 import { validatePlanning } from "@travel/types";
 describe("shared planner model", () => {
+  it("defaults currency from language without reinterpreting existing monetary preferences", () => {
+    expect(emptyPlanner("en").planning.budget.currency).toBe("USD");
+    expect(emptyPlanner("vi").planning.budget.currency).toBe("VND");
+    const form = emptyPlanner("en");
+    expect(
+      applyPlannerCurrencyDefault(form, "vi").planning.budget.currency,
+    ).toBe("VND");
+    form.planning.stay_preferences.nightly_budget = 100;
+    expect(applyPlannerCurrencyDefault(form, "vi")).toBe(form);
+  });
+
+  it("upgrades a typed name after a city choice without duplicating it or merging different identified cities", () => {
+    const identified = {
+      slug: "xi-an-cn",
+      name: "Tây An",
+      names: { en: "Xi'an", vi: "Tây An" },
+    };
+    expect(
+      mergePlannerCity([{ slug: "tây-an", name: "Tây An" }], identified),
+    ).toEqual([identified]);
+    expect(
+      mergePlannerCity([identified], { slug: "tây-an", name: "Tây An" }),
+    ).toEqual([identified]);
+    expect(
+      mergePlannerCity(
+        [{ slug: "paris-fr", name: "Paris", names: { en: "Paris" } }],
+        { slug: "paris-us", name: "Paris", names: { en: "Paris" } },
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("prepares pending destination text once, without mutating the original draft", () => {
+    const form = { ...emptyPlanner(), destinationQuery: " Tây An " };
+    form.planning.journey.origin.label = " Hà Nội ";
+    const result = preparePlannerSubmission(form, "vi");
+    expect(result.request).toMatchObject({
+      cities: ["tây-an"],
+      city_names: ["Tây An"],
+      planning: { journey: { origin: { label: "Hà Nội" } } },
+    });
+    expect(result.draft.destinationQuery).toBe("");
+    expect(form.cities).toEqual([]);
+    expect(form.destinationQuery).toBe(" Tây An ");
+    const repeat = preparePlannerSubmission(
+      { ...result.draft, destinationQuery: "TÂY AN" },
+      "vi",
+    );
+    expect(repeat.draft.cities).toHaveLength(1);
+    expect(
+      preparePlannerSubmission(restorePlannerRequest(result.request), "vi")
+        .request,
+    ).toEqual(result.request);
+  });
+
+  it("preserves flexible month and duration through saved requests and login", () => {
+    const form = {
+      ...emptyPlanner(),
+      flexible: true,
+      month: "2028-02",
+      days: 5,
+      start: "2028-01-01",
+      end: "2028-01-03",
+    };
+    const request = buildPlannerRequest(form, "vi");
+    expect(request).toMatchObject({ flexible_month: "2028-02", num_days: 5 });
+    expect(request.start_date).toBeUndefined();
+    expect(request.end_date).toBeUndefined();
+    const restored = restorePlannerRequest({
+      ...request,
+      start_date: "2028-02-10",
+      end_date: "2028-02-14",
+    });
+    expect(restored).toMatchObject({
+      flexible: true,
+      dated: false,
+      month: "2028-02",
+      days: 5,
+    });
+    expect(buildPlannerRequest(restored, "vi")).toEqual(request);
+    expect(
+      buildPlannerRequest({ ...form, dated: true }, "en").flexible_month,
+    ).toBeUndefined();
+    expect(
+      buildPlannerRequest({ ...form, flexible: false }, "en").flexible_month,
+    ).toBeUndefined();
+  });
   it("keeps the return strictly after departure across month/year boundaries", () => {
     const form = emptyPlanner();
     expect(nextPlannerDate("2026-12-31")).toBe("2027-01-01");

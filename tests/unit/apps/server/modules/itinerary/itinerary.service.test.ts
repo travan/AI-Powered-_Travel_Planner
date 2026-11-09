@@ -141,6 +141,65 @@ describe("ItineraryService.getForTrip", () => {
 });
 
 describe("ItineraryService.generate", () => {
+  it("resolves flexible dates before generation and saves dates plus the selection explanation", async () => {
+    vi.stubEnv("AI_PROVIDER", "mock");
+    const repository = createRepository(vi.fn());
+    repository.createComplete = vi.fn().mockResolvedValue("flexible-1");
+    const weather = {
+      forPlan: vi.fn().mockImplementation(async (plan) =>
+        plan.days.map((day: { date: string; city_slug: string }) => ({
+          ...day,
+          status: "forecast",
+          precipitation_mm:
+            day.date >= "2090-02-10" && day.date <= "2090-02-12" ? 0 : 20,
+          temperature_min: 20,
+          temperature_max: 27,
+        })),
+      ),
+    };
+    try {
+      await new ItineraryService(
+        repository,
+        createCitiesService(),
+        weather as never,
+      ).generate({
+        userId: "user-1",
+        dto: {
+          cities: ["hanoi"],
+          city_names: ["Hanoi"],
+          flexible_month: "2090-02",
+          num_days: 3,
+          currency: "USD",
+          trip_style: "mixed",
+          num_travelers: 2,
+        },
+      });
+      expect(repository.createComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            flexible_month: "2090-02",
+            start_date: "2090-02-10",
+            end_date: "2090-02-12",
+            num_days: 3,
+          }),
+          result: expect.objectContaining({
+            days: expect.arrayContaining([
+              expect.objectContaining({ date: "2090-02-10" }),
+              expect.objectContaining({ date: "2090-02-12" }),
+            ]),
+            seasonal_notes: expect.objectContaining({
+              warnings: expect.arrayContaining([
+                expect.stringContaining("Forecasts may change"),
+              ]),
+            }),
+          }),
+        }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("reuses an exact saved result without constructing an AI provider", async () => {
     vi.stubEnv("AI_PROVIDER", "invalid-provider");
     const repository = createRepository(vi.fn());

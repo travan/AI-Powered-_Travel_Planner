@@ -65,7 +65,10 @@ export class WeatherService {
   }
 
   async forPlan(
-    plan: Itinerary,
+    plan: {
+      days: { city_slug?: string; date: string }[];
+      city_catalog?: Itinerary["city_catalog"];
+    },
     coordinates: Map<string, { lat: number | null; lon: number | null }>,
   ): Promise<TripWeather[]> {
     const rows: TripWeather[] = [];
@@ -79,7 +82,8 @@ export class WeatherService {
         ),
       ];
       const referenceOnly = dates.length === 0;
-      if (referenceOnly) dates.push(dayAt(new Date().toISOString(), city.timezone || "UTC"));
+      if (referenceOnly)
+        dates.push(dayAt(new Date().toISOString(), city.timezone || "UTC"));
       const location = coordinates.get(slug);
       let forecast: any;
       if (location?.lat != null && location.lon != null && dates.length) {
@@ -94,6 +98,7 @@ export class WeatherService {
           /* An unavailable provider must never break a plan. */
         }
       }
+      let climateRequest: Promise<any> | undefined;
       for (const date of dates) {
         const base = {
           reference_only: referenceOnly,
@@ -173,11 +178,11 @@ export class WeatherService {
           try {
             const lat = location.lat.toFixed(2),
               lon = location.lon.toFixed(2);
-            const climate = await this.cached(
+            const climate = await (climateRequest ??= this.cached(
               `nasa:2001-2020:${lat}:${lon}`,
               `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M_MIN,T2M_MAX,PRECTOTCORR&community=RE&latitude=${lat}&longitude=${lon}&start=2001&end=2020&format=JSON`,
               true,
-            );
+            ));
             const month = new Date(`${date}T00:00:00Z`)
               .toLocaleString("en-US", { month: "short", timeZone: "UTC" })
               .toUpperCase();
