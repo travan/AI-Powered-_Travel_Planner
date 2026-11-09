@@ -240,11 +240,11 @@ export async function clickDetailFromTripsOverviewMobile(page: Page) {
 
 export async function searchCity(page: Page, city: string) {
   await page
-    .getByRole("textbox", { name: "Origin", exact: true })
+    .getByRole("textbox", { name: "Where from?", exact: true })
     .fill("Hà Nội");
   const input = page.getByTestId(WEB_PLAN_CITY_INPUT);
+  // Submit the visible pending destination, as a user clicking Create would.
   await input.fill(city);
-  await input.press("Enter");
 }
 
 export async function clickGenerate(page: Page) {
