@@ -333,7 +333,9 @@ test("missing server draft falls back to browser intent and does not repeat clai
   await page.goto("/plan?resumeGenerate=1&draftId=missing-draft");
   await expect(
     page.locator('[data-testid="web-plan-error"]:visible'),
-  ).toHaveText("Generate failed: 503");
+  ).toHaveText(
+    "The planning service is unavailable. Your details have been kept.",
+  );
   await expect(page).toHaveURL(/\/plan$/);
   await expect(page.getByTestId("web-plan-selected-city")).toContainText(
     "Tokyo",
