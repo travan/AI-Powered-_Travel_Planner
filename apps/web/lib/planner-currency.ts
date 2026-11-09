@@ -4,6 +4,33 @@ import { ApiRequestError } from "./api";
 import type { PlannerDraft } from "./planner-model";
 
 const quotes = new Map<string, Promise<CurrencyQuote>>();
+
+async function requestCurrencyQuote(
+  from: string,
+  to: string,
+): Promise<CurrencyQuote> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await journeyRequest<CurrencyQuote>(
+        `currency/quote?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        undefined,
+        undefined,
+        "GET",
+        AbortSignal.timeout(9000),
+      );
+    } catch (error) {
+      const transient =
+        error instanceof ApiRequestError
+          ? error.status === 0 || error.status === 429 || error.status >= 500
+          : error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.name === "TimeoutError" || error.name === "AbortError"));
+      if (attempt >= 1 || !transient) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
 export async function getCurrencyQuote(
   from: string,
   to: string,
@@ -12,13 +39,7 @@ export async function getCurrencyQuote(
   let quote = quotes.get(key);
   const wasCached = !!quote;
   if (!quote) {
-    quote = journeyRequest<CurrencyQuote>(
-      `currency/quote?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      undefined,
-      undefined,
-      "GET",
-      AbortSignal.timeout(9000),
-    );
+    quote = requestCurrencyQuote(from, to);
     quotes.set(key, quote);
   }
   try {

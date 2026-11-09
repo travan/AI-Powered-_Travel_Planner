@@ -38,9 +38,10 @@ export function RecentPlanningRequests() {
           abort.signal,
         );
         if (abort.signal.aborted) return;
-        setRequests(rows);
+        const available = rows.filter((row) => row.status !== "failed");
+        setRequests(available);
         setPage((value) =>
-          Math.min(value, Math.max(1, Math.ceil(rows.length / PAGE_SIZE))),
+          Math.min(value, Math.max(1, Math.ceil(available.length / PAGE_SIZE))),
         );
         setError(false);
         if (

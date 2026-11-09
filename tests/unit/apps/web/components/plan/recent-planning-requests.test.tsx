@@ -64,13 +64,49 @@ describe("reopening planning requests", () => {
       screen
         .getAllByRole("link", { name: "Xem trạng thái" })
         .map((a) => a.getAttribute("href")),
-    ).toEqual(["/plan/jobs/job-old", "/plan/jobs/failed"]);
+    ).toEqual(["/plan/jobs/job-old"]);
+    expect(screen.queryByText("Thất bại")).toBeNull();
     expect(
       screen.getByRole("link", { name: "Xem kết quả" }).getAttribute("href"),
     ).toBe("/itinerary/saved-result");
     view.unmount();
     show();
     await screen.findByText("Yêu cầu gần đây");
+    expect(mock.list).toHaveBeenCalledTimes(2);
+  });
+  it("hides the section when every request failed", async () => {
+    mock.list.mockResolvedValue([{ ...request, status: "failed" }]);
+    show();
+    await act(async () => {});
+    expect(mock.list).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("region")).toBeNull();
+  });
+  it("removes requests that fail during polling and recalculates pagination", async () => {
+    vi.useFakeTimers();
+    const rows = Array.from({ length: 4 }, (_, index) => ({
+      ...request,
+      id: `job-${index}`,
+      city_names: [`City ${index}`],
+    }));
+    mock.list.mockResolvedValueOnce(rows).mockResolvedValue(
+      rows.map((row, index) => ({
+        ...row,
+        status: index === 0 ? "complete" : "failed",
+      })),
+    );
+    show();
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("City 0")).toBeTruthy();
+    expect(screen.queryByText("City 3")).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20000);
+    });
     expect(mock.list).toHaveBeenCalledTimes(2);
   });
   it("shows at most three requests per page and supports moving both ways", async () => {
