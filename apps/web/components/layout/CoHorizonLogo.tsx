@@ -1,4 +1,5 @@
 import Image from "next/image";
+import React from "react";
 import coHorizonMark from "./co-horizon-mark.svg";
 
 export function CoHorizonLogo({ className = "" }: { className?: string }) {
@@ -9,6 +10,8 @@ export function CoHorizonLogo({ className = "" }: { className?: string }) {
       <Image
         src={coHorizonMark}
         alt=""
+        width={64}
+        height={64}
         unoptimized
         className="size-[1.35em] shrink-0"
       />
