@@ -11,6 +11,7 @@ import { LOCAL_AUTH_ENABLED } from "@/lib/supabase/local-auth";
 import { createClient } from "@/lib/supabase/client";
 import { checkAccountExists } from "@/lib/api";
 import { normalizeSupabaseAuthError } from "@travel/types";
+import { CoHorizonLogo } from "../layout/CoHorizonLogo";
 
 type AuthMode = "login" | "signup";
 
@@ -245,9 +246,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
           </div>
 
           <div className="relative z-10 max-w-sm space-y-6">
-            <p className="font-headline text-4xl font-extrabold tracking-tight">
-              {t("brand")}
-            </p>
+            <CoHorizonLogo className="text-4xl [&_img]:brightness-0 [&_img]:invert" />
             <h1 className="font-headline text-5xl font-bold leading-[1.05]">
               {t("hero_title")}
             </h1>
@@ -277,9 +276,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
 
         <div className="w-full bg-surface-container-lowest px-8 py-10 md:w-1/2 md:px-12 md:py-14">
           <div className="mx-auto flex h-full w-full max-w-md flex-col">
-            <p className="mb-10 font-headline text-3xl font-extrabold tracking-tight text-primary md:hidden">
-              {t("brand")}
-            </p>
+            <CoHorizonLogo className="mb-10 text-3xl text-primary md:hidden" />
 
             <div
               className="mb-10 flex w-fit rounded-full bg-surface-container-low p-1.5"

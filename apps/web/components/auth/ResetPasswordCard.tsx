@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { MOCK_AUTH_ENABLED } from "@/lib/supabase/mock-auth";
 import { completePasswordRecovery } from "@/lib/password-recovery";
+import { CoHorizonLogo } from "../layout/CoHorizonLogo";
 
 export function ResetPasswordCard() {
   const t = useTranslations("auth");
@@ -101,9 +102,7 @@ export function ResetPasswordCard() {
 
       <section className="relative z-10 w-full max-w-xl rounded-2xl bg-surface-container-lowest p-8 shadow-[0_32px_64px_-12px_rgba(0,93,144,0.18)] md:p-10">
         <div className="mb-8 space-y-2">
-          <p className="font-headline text-3xl font-extrabold tracking-tight text-primary">
-            {t("brand")}
-          </p>
+          <CoHorizonLogo className="text-3xl text-primary" />
           <h1 className="font-headline text-3xl font-bold text-on-surface">
             {t("reset_password_title")}
           </h1>

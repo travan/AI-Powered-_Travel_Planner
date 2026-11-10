@@ -42,7 +42,7 @@ export default function ExplorePage() {
         <section className="max-w-3xl space-y-5">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-primary">
             {" "}
-            <UiText id="t0c70a7783569" fallback="Explore with Horizon" />{" "}
+            <UiText id="t0c70a7783569" fallback="Explore with CoHorizon" />{" "}
           </p>
           <h1 className="font-headline text-4xl font-extrabold tracking-tight md:text-6xl">
             {" "}
