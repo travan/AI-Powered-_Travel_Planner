@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { LanguageProvider } from "../components/i18n/LanguageProvider";
+import coHorizonMark from "../components/layout/co-horizon-mark.svg";
 import { getLocale } from "next-intl/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Horizon — AI Travel Planner", template: "%s | Horizon" },
+  title: { default: "CoHorizon", template: "%s | CoHorizon" },
   description:
-    "Generate AI-powered travel itineraries for any destination in seconds.",
+    "Plan your itinerary, share it with friends, and manage your trip together.",
+  icons: { icon: { url: coHorizonMark.src, type: "image/svg+xml" } },
 };
 
 export default async function RootLayout({

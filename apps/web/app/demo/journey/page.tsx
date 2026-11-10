@@ -14,6 +14,7 @@ import { DayTimeline } from "../../../components/itinerary/DayTimeline";
 import { TransportSection } from "../../../components/itinerary/TransportSection";
 import { StayDiningRecommendations } from "../../../components/itinerary/StayDiningRecommendations";
 import { BudgetBreakdown } from "../../../components/itinerary/BudgetBreakdown";
+import { CoHorizonLogo } from "../../../components/layout/CoHorizonLogo";
 
 const criteria = createPlanningCriteria();
 criteria.journey.origin = { label: "Hà Nội", source: "manual" };
@@ -415,8 +416,8 @@ export default function JourneyDemoPage() {
     <div className="min-h-screen bg-background text-on-surface">
       <header className="border-b border-outline-variant/20 bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5">
-          <Link href="/plan" className="text-xl font-black text-primary">
-            Horizon
+          <Link href="/plan" className="inline-flex">
+            <CoHorizonLogo className="text-xl text-primary" />
           </Link>
           <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">
             {" "}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { VerifyEmailCard } from "@/components/auth/VerifyEmailCard";
 
-export const metadata: Metadata = { title: "Verify Email - Horizon" };
+export const metadata: Metadata = { title: "Verify Email" };
 
 export default async function VerifyEmailPage({
   searchParams,

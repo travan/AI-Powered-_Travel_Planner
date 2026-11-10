@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { AuthExperience } from "@/components/auth/AuthExperience";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Login - Horizon" };
+export const metadata: Metadata = { title: "Login" };
 
 export default async function LoginPage({
   searchParams,

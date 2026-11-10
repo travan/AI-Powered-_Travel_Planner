@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AccountMenu } from "./AccountMenu";
+import { CoHorizonLogo } from "./CoHorizonLogo";
 import { PRIMARY_NAVIGATION, isNavigationActive } from "./navigation";
 import { useTranslations } from "next-intl";
 
@@ -94,22 +95,19 @@ export function SiteHeader() {
 
   return (
     <header className="bg-surface/80 backdrop-blur-md sticky top-0 z-50 shadow-[0_8px_32px_rgba(0,93,144,0.04)] w-full">
-      {/* ── Mobile header: avatar left, Horizon center, bell right ── */}
-      <div className="md:hidden flex justify-between items-center px-6 py-4">
+      {/* ── Mobile header ── */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center justify-items-start px-6 py-4 md:hidden">
         <AccountMenu
           avatarUrl={userInfo.avatarUrl}
           displayName={userInfo.displayName}
           email={userInfo.email}
         />
-        <Link
-          href="/plan"
-          className="text-2xl font-black text-primary tracking-tight font-headline"
-        >
-          Horizon
+        <Link href="/plan" className="inline-flex">
+          <CoHorizonLogo className="text-xl text-primary" />
         </Link>
         <button
           aria-label={t("Notifications")}
-          className="material-symbols-outlined text-outline/80 text-[22px] p-1"
+          className="material-symbols-outlined size-10 justify-self-end overflow-hidden text-outline/80 text-[22px]"
         >
           notifications
         </button>
@@ -119,11 +117,8 @@ export function SiteHeader() {
       <div className="hidden md:flex justify-between items-center w-full px-6 py-4">
         {/* Logo + nav */}
         <div className="flex items-center gap-8">
-          <Link
-            href="/plan"
-            className="text-2xl font-black text-primary tracking-tight font-headline"
-          >
-            Horizon
+          <Link href="/plan" className="inline-flex">
+            <CoHorizonLogo className="text-2xl text-primary" />
           </Link>
           <nav
             className="flex gap-6"
@@ -153,7 +148,7 @@ export function SiteHeader() {
         <div className="flex items-center gap-4">
           <button
             aria-label={t("Notifications")}
-            className="material-symbols-outlined text-outline p-2 hover:bg-surface-container-low rounded-full transition-colors text-[22px]"
+            className="material-symbols-outlined size-10 shrink-0 overflow-hidden rounded-full text-[22px] text-outline transition-colors hover:bg-surface-container-low"
           >
             notifications
           </button>
