@@ -1,4 +1,5 @@
 "use client";
+import { NotificationBell } from "./NotificationBell";
 import { UiText, useUiText } from "../i18n/UiText";
 interface TopbarProps {
   title?: string;
@@ -26,16 +27,7 @@ export function Topbar({ title = "Horizon", icon, actions }: TopbarProps) {
       <div className="flex items-center gap-3">
         {actions}
 
-        {/* Notification bell */}
-        <button
-          className="relative flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-          aria-label={t("Notifications")}
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            notifications
-          </span>
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-        </button>
+        <NotificationBell className="relative" />
 
         {/* Avatar */}
         <div className="h-8 w-8 overflow-hidden rounded-full bg-indigo-100 ring-2 ring-white shadow">

@@ -7,13 +7,16 @@ type RecordFields = {
   jobId?: string;
   code?: string;
   durationMs?: number;
+  route?: string;
+  status?: number;
+  dbQueries?: number;
 };
-type LogScope = { records: string[]; fields: RecordFields };
+type LogScope = { records: string[]; fields: RecordFields; queryCount?: number };
 export const logContext = new AsyncLocalStorage<LogScope>();
 const encoder = new TextEncoder();
 export function logEvent(
   event: string,
-  severity: "warn" | "error",
+  severity: "info" | "warn" | "error",
   fields: RecordFields = {},
 ) {
   const sink = process.env.LOG_SINK ?? "cloudflare";
@@ -35,6 +38,13 @@ export function logEvent(
     Number.isFinite(merged.durationMs)
   )
     record.durationMs = Math.max(0, Math.round(merged.durationMs));
+  if (merged.route && /^[a-zA-Z0-9_/:.-]{1,100}$/.test(merged.route))
+    record.route = merged.route;
+  for (const key of ["status", "dbQueries"] as const) {
+    const value = merged[key];
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
+      record[key] = value;
+  }
   const line = JSON.stringify(record);
   if (encoder.encode(line).length > 4096) return;
   if (sink === "grafana") {

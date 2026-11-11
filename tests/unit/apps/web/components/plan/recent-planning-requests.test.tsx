@@ -9,12 +9,14 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const mock = vi.hoisted(() => ({ list: vi.fn(), session: vi.fn() }));
+const mock = vi.hoisted(() => ({ list: vi.fn(), statuses: vi.fn(), session: vi.fn() }));
 vi.mock("../../../../../../apps/web/lib/supabase/client", () => ({
   createClient: () => ({ auth: { getSession: mock.session } }),
 }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   getPlanningRequests: mock.list,
+  getPlanningStatuses: mock.statuses,
+  notifyJobStatusChanged: vi.fn(),
 }));
 import { RecentPlanningRequests } from "../../../../../../apps/web/components/plan/RecentPlanningRequests";
 import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";
@@ -36,6 +38,7 @@ const show = () =>
   );
 beforeEach(() => {
   mock.list.mockReset().mockResolvedValue([]);
+  mock.statuses.mockReset().mockResolvedValue([]);
   mock.session.mockReset().mockResolvedValue({
     data: { session: { access_token: "account-token" } },
   });
@@ -64,8 +67,8 @@ describe("reopening planning requests", () => {
       screen
         .getAllByRole("link", { name: "Xem trạng thái" })
         .map((a) => a.getAttribute("href")),
-    ).toEqual(["/plan/jobs/job-old"]);
-    expect(screen.queryByText("Thất bại")).toBeNull();
+    ).toEqual(["/plan/jobs/job-old", "/plan/jobs/failed"]);
+    expect(screen.getByText("Thất bại")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Xem kết quả" }).getAttribute("href"),
     ).toBe("/itinerary/saved-result");
@@ -74,21 +77,22 @@ describe("reopening planning requests", () => {
     await screen.findByText("Yêu cầu gần đây");
     expect(mock.list).toHaveBeenCalledTimes(2);
   });
-  it("hides the section when every request failed", async () => {
+  it("shows the section when every request failed", async () => {
     mock.list.mockResolvedValue([{ ...request, status: "failed" }]);
     show();
     await act(async () => {});
     expect(mock.list).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("region")).toBeNull();
+    expect(screen.getByRole("region")).toBeTruthy();
   });
-  it("removes requests that fail during polling and recalculates pagination", async () => {
+  it("updates failed statuses without removing requests or reloading history", async () => {
     vi.useFakeTimers();
     const rows = Array.from({ length: 4 }, (_, index) => ({
       ...request,
       id: `job-${index}`,
       city_names: [`City ${index}`],
     }));
-    mock.list.mockResolvedValueOnce(rows).mockResolvedValue(
+    mock.list.mockResolvedValueOnce(rows);
+    mock.statuses.mockResolvedValue(
       rows.map((row, index) => ({
         ...row,
         status: index === 0 ? "complete" : "failed",
@@ -101,13 +105,14 @@ describe("reopening planning requests", () => {
       await vi.advanceTimersByTimeAsync(10000);
     });
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
-    expect(screen.getByText("City 0")).toBeTruthy();
-    expect(screen.queryByText("City 3")).toBeNull();
-    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByText("Thất bại")).toBeTruthy();
+    expect(screen.getByText("City 3")).toBeTruthy();
+    expect(screen.getByRole("navigation")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(mock.list).toHaveBeenCalledTimes(2);
+    expect(mock.list).toHaveBeenCalledTimes(1);
+    expect(mock.statuses).toHaveBeenCalledTimes(1);
   });
   it("shows at most three requests per page and supports moving both ways", async () => {
     mock.list.mockResolvedValue(
@@ -145,36 +150,10 @@ describe("reopening planning requests", () => {
     expect(screen.getByText("City 3")).toBeTruthy();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
-  it("keeps the selected page during refresh and adjusts it if requests disappear", async () => {
-    vi.useFakeTimers();
-    const rows = Array.from({ length: 4 }, (_, index) => ({
-      ...request,
-      id: `job-${index}`,
-      city_names: [`City ${index}`],
-    }));
-    mock.list
-      .mockResolvedValueOnce(rows)
-      .mockResolvedValueOnce(rows)
-      .mockResolvedValue([request]);
-    show();
-    await act(async () => {});
-    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-    expect(screen.getByText("Trang 2/2")).toBeTruthy();
-    expect(screen.getByText("City 3")).toBeTruthy();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-    expect(screen.getByText("Đà Nẵng")).toBeTruthy();
-    expect(screen.queryByRole("navigation")).toBeNull();
-  });
   it("refreshes queued requests until the result becomes available", async () => {
     vi.useFakeTimers();
-    mock.list
-      .mockResolvedValueOnce([request])
-      .mockResolvedValue([
+    mock.list.mockResolvedValueOnce([request]);
+    mock.statuses.mockResolvedValue([
         { ...request, status: "complete", itinerary_id: "ready" },
       ]);
     show();
@@ -189,7 +168,8 @@ describe("reopening planning requests", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(mock.list).toHaveBeenCalledTimes(2);
+    expect(mock.list).toHaveBeenCalledTimes(1);
+    expect(mock.statuses).toHaveBeenCalledTimes(1);
   });
   it("allows retrying a history load failure", async () => {
     mock.list

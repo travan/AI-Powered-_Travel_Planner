@@ -1,3 +1,4 @@
+import { fetchWithLocalSession } from "./session-fetch";
 import type { TripRole } from "@travel/types";
 
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "";
@@ -334,7 +335,8 @@ async function requestJson<T>(
 
   if (options.body) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(getApiUrl(path), {
+  const res = await fetchWithLocalSession(getApiUrl(path), {
+    cache: "no-store",
     method: options.method ?? "GET",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -351,7 +353,15 @@ async function requestJson<T>(
     throw new WorkspaceApiError(message, res.status);
   }
 
+  if (options.method && options.method !== "GET")
+    window.dispatchEvent(new Event("cohorizon:job-status"));
   return res.json() as Promise<T>;
+}
+
+export function getTripWorkspace(tripId: string, authToken: string) {
+  return requestJson<{ membership: TripMember; members: TripMember[]; primaryCitySlug: string | null }>(
+    `/api/trips/${tripId}/workspace`, { authToken },
+  );
 }
 
 export function listTripMembers(tripId: string, authToken: string) {

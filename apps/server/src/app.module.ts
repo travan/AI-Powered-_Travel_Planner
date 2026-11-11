@@ -8,6 +8,7 @@ import { BillsModule } from "./modules/bills/bills.module.js";
 import { CitiesModule } from "./modules/cities/cities.module.js";
 import { ExpensesModule } from "./modules/expenses/expenses.module.js";
 import { ItineraryModule } from "./modules/itinerary/itinerary.module.js";
+import { NotificationsController } from "./modules/notifications/notifications.controller.js";
 import { RecommendationsModule } from "./modules/recommendations/recommendations.module.js";
 import { ReviewModule } from "./modules/review/review.module.js";
 import { SearchDraftsModule } from "./modules/search-drafts/search-drafts.module.js";
@@ -34,6 +35,6 @@ import { SharedAuthModule } from "./shared/nest/shared-auth.module.js";
     TripsModule,
     UsersModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, NotificationsController],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Inject,
   Param,
   Post,
@@ -31,6 +32,7 @@ export class CitiesController {
     return this.cities.search(query.q);
   }
 
+  @Header("Cache-Control", "public, max-age=300, s-maxage=300")
   @Get("country-suggestions")
   async countrySuggestions(@Query() query: CitySearchQueryDto) {
     return { suggestion: await this.cities.countrySuggestions(query.q) };

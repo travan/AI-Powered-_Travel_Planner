@@ -4,6 +4,7 @@ export type Trip = {
   status: string;
   visibility: string;
   ownerUserId: string;
+  primaryCitySlug?: string | null;
   createdAt: string;
 };
 

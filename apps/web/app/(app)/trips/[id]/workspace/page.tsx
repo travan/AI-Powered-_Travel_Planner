@@ -3,13 +3,15 @@ import { TripWorkspace } from "../../../../../components/trips/TripWorkspace";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
 export const metadata: Metadata = {
   title: "Trip Workspace",
 };
 
-export default async function TripWorkspacePage({ params }: PageProps) {
+export default async function TripWorkspacePage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  return <TripWorkspace tripId={id} />;
+  const { tab } = await searchParams;
+  return <TripWorkspace key={`${id}:${tab ?? ""}`} tripId={id} initialTab={tab} />;
 }

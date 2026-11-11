@@ -59,6 +59,18 @@ export class TripsService {
       : notFound("Trip not found");
   }
 
+  async workspace(input: { tripId: string; actorUserId: string }) {
+    const membership = await this.getMembership(input);
+    if (!membership.ok) return membership;
+    const trip = await this.trips.findForUser({ tripId: input.tripId, userId: input.actorUserId });
+    if (!trip) return notFound("Trip not found");
+    const permissions = getTripRolePermissions(membership.value.role);
+    const members = permissions.viewMembers
+      ? await this.trips.listMembers(input.tripId)
+      : [membership.value];
+    return ok({ membership: membership.value, permissions, members, primaryCitySlug: trip.primaryCitySlug ?? null });
+  }
+
   async listMembers(input: {
     tripId: string;
     actorUserId: string;

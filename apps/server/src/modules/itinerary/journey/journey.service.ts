@@ -98,7 +98,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     )
       return;
     this.timer = setInterval(() => {
-      void this.processNextJob();
+      void this.processNextJob().catch(() => logEvent("journey.worker_failed", "error"));
     }, 1500);
     this.timer.unref?.();
   }
@@ -106,7 +106,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  async enqueue(userId: string, dto: GenerateItineraryDto) {
+  async enqueue(userId: string, dto: GenerateItineraryDto, key?: string) {
     if (process.env.JOURNEY_MVP_ENABLED === "false")
       throw new BadRequestException({
         code: "JOURNEY_DISABLED",
@@ -123,24 +123,95 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         params: {},
         message: "Planning criteria are invalid.",
       });
-    // Bound outstanding work per account; claim/retry state is durable in PostgreSQL.
-    const job = await this.sql.query<{ id: string }>(
-      `insert into itinerary_jobs(user_id,payload)
-      select $1,$2 where (select count(*) from itinerary_jobs where user_id=$1 and status in ('queued','processing')) < 5 returning id::text`,
-      [userId, { dto }],
-    );
-    if (!job.rows[0])
-      throw new BadRequestException({
-        code: "TOO_MANY_JOBS",
-        params: {},
-        message: "Bạn đang có quá nhiều yêu cầu đang xử lý.",
-      });
+    if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
+      throw new BadRequestException("Invalid idempotency key");
+    const id = await this.admitJob(userId, "generate", { dto }, key);
     return {
       status: "queued" as const,
-      job_id: job.rows[0].id,
-      stream_url: `/api/itinerary/jobs/${job.rows[0].id}`,
+      job_id: id,
+      stream_url: `/api/itinerary/jobs/${id}`,
     };
   }
+
+  private async admitJob(userId: string, kind: string, payload: object, key?: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(58317291)");
+      if (key) {
+        const existing = await client.query<{ id: string; matches: boolean }>(
+          "select id::text, payload=$3::jsonb and kind=$4 as matches from itinerary_jobs where user_id=$1 and idempotency_key=$2",
+          [userId, key, payload, kind],
+        );
+        if (existing.rows[0]) {
+          if (!existing.rows[0].matches)
+            throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "This key belongs to another request." });
+          await client.query("commit");
+          return existing.rows[0].id;
+        }
+      }
+      if (kind === "translate") {
+        const existing = await client.query<{ id: string }>(
+          "select id::text from itinerary_jobs where user_id=$1 and kind='translate' and status in ('queued','processing') and payload=$2::jsonb limit 1",
+          [userId, payload],
+        );
+        if (existing.rows[0]) {
+          await client.query("commit");
+          return existing.rows[0].id;
+        }
+      }
+      const result = await client.query<{ id: string }>(
+        `insert into itinerary_jobs(user_id,kind,payload,idempotency_key)
+         select $1,$2,$3,$4 where
+           (select count(*) from itinerary_jobs where user_id=$1 and status in ('queued','processing')) < 5
+           and (select count(*) from itinerary_jobs where status in ('queued','processing')) < 1500
+           and (select count(*) from itinerary_jobs where user_id=$1 and created_at>now()-interval '1 minute') < 20
+         returning id::text`,
+        [userId, kind, payload, key ?? null],
+      );
+      if (!result.rows[0])
+        throw new HttpException({ code: "TOO_MANY_JOBS", params: {}, message: "Hàng đợi đang bận. Vui lòng thử lại sau." }, 429);
+      await client.query("commit");
+      return result.rows[0].id;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async reserveDispatch(limit: number) {
+    return (await this.sql.query<{ job_id: string }>(
+      `with due as (
+        select job_id from journey_job_dispatch where available_at<=now()
+        order by available_at,job_id for update skip locked limit $1
+      ) update journey_job_dispatch d set available_at=now()+interval '2 minutes'
+        from due where d.job_id=due.job_id returning d.job_id::text`,
+      [limit],
+    )).rows;
+  }
+
+  async expireJobs() {
+    await this.sql.query(
+      `update itinerary_jobs set status='failed',stage='failed',
+       error_code='PLANNING_FAILED',error_params=null,error=null,locked_until=null,claim_token=null
+       where status='processing' and locked_until<now() and attempts>=3`,
+    );
+  }
+
+  async retryJob(userId: string, id: string, key?: string) {
+    const result = await this.sql.query<{ payload: { dto: GenerateItineraryDto }; error_code: string }>(
+      "select payload,error_code from itinerary_jobs where id=$1 and user_id=$2 and kind='generate' and status='failed'",
+      [id, userId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Failed planning job not found.");
+    if (row.error_code === "PLANNING_INVALID")
+      throw new ConflictException({ code: "PLANNING_INVALID", message: "Please update the planning form." });
+    return this.enqueue(userId, row.payload.dto, key);
+  }
+
   async listJobs(userId: string): Promise<PlanningJobSummary[]> {
     // Uses itinerary_jobs_user_idx; exclude translation and revision jobs.
     const result = await this.sql.query<
@@ -194,9 +265,26 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  async listStatuses(userId: string, ids: string[]) {
+    return (await this.sql.query<PlanningJob>(
+      `select id::text,status,stage,attempts,itinerary_id::text
+       from itinerary_jobs where user_id=$1 and id=any($2::uuid[]) and kind='generate'`,
+      [userId, ids],
+    )).rows;
+  }
+
   async getJob(userId: string, id: string) {
-    const result = await this.sql.query<PlanningJob>(
-      `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,error,error_code,error_params,kind,payload from itinerary_jobs where id=$1 and user_id=$2`,
+    const result = await this.sql.query<PlanningJob & {
+      source_kind?: TranslationPayload["sourceKind"];
+      source_id?: string;
+      trip_id?: string;
+    }>(
+      `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,
+        error_code,kind,
+        case when kind='translate' then payload->>'sourceKind' end as source_kind,
+        case when kind='translate' then payload->>'sourceId' end as source_id,
+        case when kind='revision' then payload->>'tripId' end as trip_id
+        from itinerary_jobs where id=$1 and user_id=$2`,
       [id, userId],
     );
     if (!result.rows[0])
@@ -205,33 +293,41 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         params: {},
         message: "Không tìm thấy yêu cầu.",
       });
-    const row = result.rows[0] as PlanningJob & {
-      kind?: string;
-      payload?: TranslationPayload;
+    const row = result.rows[0];
+    if (row.kind === "translate" && row.source_kind && row.source_id)
+      await this.translationSource(userId, row.source_kind, row.source_id);
+    if (row.kind === "revision" && row.trip_id)
+      await this.member(row.trip_id, userId);
+    return {
+      id: row.id,
+      kind: row.kind,
+      status: row.status,
+      stage: row.stage,
+      attempts: row.attempts,
+      itinerary_id: row.itinerary_id,
+      revision_id: row.revision_id,
+      translation_id: row.translation_id,
+      error_code: row.error_code === "PLANNING_INVALID" ? "PLANNING_INVALID"
+        : row.status === "failed" ? "PLANNING_FAILED" : null,
     };
-    if (row.kind === "translate" && row.payload)
-      await this.translationSource(
-        userId,
-        row.payload.sourceKind,
-        row.payload.sourceId,
-      );
-    const { payload: _payload, ...visible } = row;
-    return visible;
   }
-  async processNextJob() {
-    if (this.processing || process.env.JOURNEY_MVP_ENABLED === "false") return;
-    this.processing = true;
+  async processNextJob(id?: string) {
+    if ((!id && this.processing) || process.env.JOURNEY_MVP_ENABLED === "false") return;
+    if (!id) this.processing = true;
     let job: JobRow | undefined;
     try {
       const claimed = await this.sql.query<JobRow>(`with candidate as (
-        select id from itinerary_jobs where attempts < 3 and ((status='queued' and available_at<=now()) or (status='processing' and locked_until<now()))
+        select id from itinerary_jobs where ($1::uuid is null or id=$1) and attempts < 3 and ((status='queued' and available_at<=now()) or (status='processing' and locked_until<now()))
         order by created_at for update skip locked limit 1)
         update itinerary_jobs j set status='processing',stage='catalog',attempts=j.attempts+1,
           locked_until=now()+interval '20 minutes',claim_token=gen_random_uuid()
-        from candidate c where j.id=c.id returning j.*`);
+        from candidate c where j.id=c.id returning j.*`, [id ?? null]);
       job = claimed.rows[0];
       if (!job) return;
       const current = job;
+      const mockDelay = Number(process.env.JOURNEY_STAGING_DELAY_MS);
+      if (process.env.AI_PROVIDER === "mock" && mockDelay === 30_000)
+        await new Promise<void>((resolve) => setTimeout(resolve, mockDelay));
       let itineraryId: string | undefined,
         revisionId: string | undefined,
         translationId: string | undefined;
@@ -291,16 +387,13 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     } catch (error) {
-      if (process.env.NODE_ENV === "production")
-        logEvent("journey.job_failed", "error", {
-          jobId: job?.id,
-          code: "JOURNEY_JOB_FAILED",
-        });
-      else
-        this.logger.error(
-          `Journey job ${job?.id ?? "claim"} failed`,
-          error instanceof Error ? error.message : String(error),
-        );
+      logEvent("journey.job_failed", "error", { jobId: job?.id, code: "JOURNEY_JOB_FAILED" });
+      const provider = error as { status?: number; statusCode?: number; headers?: Headers | Record<string, string> } | null;
+      const retryAfter = provider?.headers instanceof Headers
+        ? provider.headers.get("retry-after") : provider?.headers?.["retry-after"];
+      const delay = retryAfter == null ? 0 : /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) : (Date.parse(retryAfter) - Date.now()) / 1000;
+      const retrySeconds = Number.isFinite(delay) ? Math.min(3600, Math.max(15, Math.ceil(delay))) : 15;
       const terminal =
         error instanceof HttpException &&
         [400, 403, 404, 409].includes(error.getStatus());
@@ -308,35 +401,25 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         await this.sql
           .query(
             `update itinerary_jobs set status=case when attempts>=3 or $3 then 'failed' else 'queued' end,
-        stage=case when attempts>=3 or $3 then 'failed' else 'retry' end,available_at=now()+interval '15 seconds',locked_until=null,
+        stage=case when attempts>=3 or $3 then 'failed' else 'retry' end,available_at=now()+make_interval(secs=>$7),locked_until=null,claim_token=null,
         error=$4,error_code=$5,error_params=$6 where id=$1 and claim_token=$2`,
             [
               job.id,
               job.claim_token,
               terminal,
-              terminal
-                ? (error as Error).message.slice(0, 500)
-                : "Không thể hoàn tất yêu cầu. Hệ thống sẽ thử lại nếu còn lượt.",
-              error instanceof HttpException &&
-              typeof error.getResponse() === "object"
-                ? ((error.getResponse() as { code?: string }).code ??
-                  "PLANNING_FAILED")
-                : "PLANNING_FAILED",
-              error instanceof HttpException &&
-              typeof error.getResponse() === "object"
-                ? ((error.getResponse() as { params?: object }).params ?? {})
-                : {},
+              null,
+              error instanceof HttpException && error.getStatus() === 400
+                ? "PLANNING_INVALID" : "PLANNING_FAILED",
+              {},
+              retrySeconds,
             ],
-          )
-          .catch(() => {});
+          );
+      else throw error;
     } finally {
-      // Exhausted crashed leases must become terminal, never stay processing forever.
-      await this.sql
-        .query(
-          `update itinerary_jobs set status='failed',stage='failed',error='Yêu cầu hết thời gian xử lý.',locked_until=null where status='processing' and locked_until<now() and attempts>=3`,
-        )
-        .catch(() => {});
-      this.processing = false;
+      if (!id) {
+        this.processing = false;
+        await this.expireJobs().catch(() => logEvent("journey.expire_failed", "error"));
+      }
     }
   }
 
@@ -422,19 +505,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       sourceVersion,
       target: dto.target_locale,
     };
-    const jobs = await this.sql.query<{ id: string }>(
-      `insert into itinerary_jobs(user_id,kind,payload) select $1,'translate',$2 where (select count(*) from itinerary_jobs where user_id=$1 and status in ('queued','processing'))<5 on conflict do nothing returning id::text`,
-      [userId, payload],
-    );
-    let id = jobs.rows[0]?.id;
-    if (!id)
-      id = (
-        await this.sql.query<{ id: string }>(
-          `select id::text from itinerary_jobs where user_id=$1 and kind='translate' and status in ('queued','processing') and payload=$2 order by created_at limit 1`,
-          [userId, payload],
-        )
-      ).rows[0]?.id;
-    if (!id) return this.translationError("TOO_MANY_JOBS", 429);
+    const id = await this.admitJob(userId, "translate", payload);
     return {
       status: "queued",
       job_id: id,
@@ -883,11 +954,8 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         params: {},
         message: "Chọn mục cần tạo lại.",
       });
-    const result = await this.sql.query<{ id: string }>(
-      `insert into itinerary_jobs(user_id,kind,payload) values($1,'revision',$2) returning id::text`,
-      [userId, { tripId, revision: dto }],
-    );
-    return { job_id: result.rows[0]!.id, status: "queued" };
+    const id = await this.admitJob(userId, "revision", { tripId, revision: dto });
+    return { job_id: id, status: "queued" };
   }
   private async buildRevision(
     userId: string,

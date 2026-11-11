@@ -116,6 +116,7 @@ export interface AccommodationBooking {
   version: number;
 }
 export interface PlanningJob {
+  kind?: "generate" | "translate" | "revision";
   translation_id?: string;
   error_code?: string;
   error_params?: Record<string, string | number>;

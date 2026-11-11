@@ -13,6 +13,8 @@ import type { Itinerary } from "@travel/types";
 const api = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   journeyRequest: api.request,
+  getJourneyJob: (id: string, token: string) => api.request(`itinerary/jobs/${id}`, token),
+  notifyJobStatusChanged: vi.fn(),
 }));
 import { TranslationControls } from "../../../../../../apps/web/components/itinerary/TranslationControls";
 import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";

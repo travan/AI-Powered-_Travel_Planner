@@ -5,11 +5,13 @@ import {
   useIssueText,
 } from "../../../../../components/i18n/UiText";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "../../../../../lib/supabase/client";
-import { getJourneyJob } from "../../../../../lib/journey-api";
+import { getJourneyJob, notifyJobStatusChanged, retryJourneyJob } from "../../../../../lib/journey-api";
+import { pollWhileVisible } from "@/lib/visible-poll";
+import { ApiRequestError } from "@/lib/api";
 import type { PlanningJob } from "@travel/types";
 import { useTranslations } from "next-intl";
 const LABELS: Record<string, string> = {
@@ -30,49 +32,57 @@ export default function JourneyJobPage() {
     router = useRouter();
   const [job, setJob] = useState<PlanningJob | null>(null),
     [error, setError] = useState("");
+  const [retrying, setRetrying] = useState(false);
+  const retryKey = useRef<{ jobId: string; key: string } | undefined>(undefined);
   useEffect(() => {
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
+    return pollWhileVisible(async (signal) => {
       try {
-        const {
-          data: { session },
-        } = await createClient().auth.getSession();
+        const { data: { session } } = await createClient().auth.getSession();
+        if (signal.aborted) return false;
         if (!session) {
-          router.replace(
-            `/login?redirectTo=${encodeURIComponent(`/plan/jobs/${jobId}`)}`,
-          );
-          return;
+          router.replace(`/login?redirectTo=${encodeURIComponent(`/plan/jobs/${jobId}`)}`);
+          return false;
         }
-        const next = await getJourneyJob(
-          jobId,
-          session.access_token,
-          abort.signal,
-        );
-        if (abort.signal.aborted) return;
+        const next = await getJourneyJob(jobId, session.access_token, signal);
+        if (signal.aborted) return false;
         setJob(next);
         setError("");
-        if (next.status === "complete" && next.itinerary_id) {
-          router.replace(`/itinerary/${next.itinerary_id}`);
-          return;
+        if (next.status === "complete" || next.status === "failed") {
+          notifyJobStatusChanged();
+          if (next.itinerary_id) router.replace(`/itinerary/${next.itinerary_id}`);
+          return false;
         }
-        if (next.status === "failed") return;
+        return true;
       } catch (e) {
-        if (abort.signal.aborted) return;
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Không tải được trạng thái; đang kết nối lại.",
-        );
+        if (signal.aborted) return false;
+        setError(e instanceof Error ? e.message : "Không tải được trạng thái; đang kết nối lại.");
+        if (e instanceof ApiRequestError) {
+          if ([401, 403, 404].includes(e.status)) return false;
+          return e.retryAfterMs ?? true;
+        }
+        return true;
       }
-      timer = setTimeout(poll, 3000);
-    };
-    void poll();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
+    });
   }, [jobId, router]);
+
+  const retry = async () => {
+    if (retrying || !window.confirm(t("Thử lập lại lịch trình này?"))) return;
+    setRetrying(true);
+    try {
+      const { data: { session } } = await createClient().auth.getSession();
+      if (!session) return;
+      if (retryKey.current?.jobId !== jobId)
+        retryKey.current = { jobId, key: crypto.randomUUID() };
+      const result = await retryJourneyJob(jobId, session.access_token, retryKey.current.key);
+      notifyJobStatusChanged();
+      setJob(null);
+      router.replace(`/plan/jobs/${result.job_id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể thử lại.");
+    } finally {
+      setRetrying(false);
+    }
+  };
   return (
     <main className="mx-auto max-w-xl space-y-6 px-5 py-20">
       <p className="text-sm font-bold text-primary">
@@ -100,7 +110,12 @@ export default function JourneyJobPage() {
           />
         )}
       </p>
-      {job?.status !== "failed" && (
+      {job?.status === "failed" && job.kind === "generate" && job.error_code !== "PLANNING_INVALID" && (
+        <button type="button" disabled={retrying} onClick={() => void retry()} className="rounded-full bg-primary px-5 py-3 text-white">
+          {t("Thử lại")}
+        </button>
+      )}
+      {job?.status !== "failed" && job?.status !== "complete" && (
         <div className="h-2 animate-pulse rounded-full bg-primary/30" />
       )}
       {error && (

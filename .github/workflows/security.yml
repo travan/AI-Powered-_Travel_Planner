@@ -1,0 +1,116 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      sandbox:
+        type: boolean
+        default: false
+        description: Run provider smoke checks from main
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: Security Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - name: Scan tracked content
+        run: |
+          scan_dir="$(mktemp -d)"
+          trap 'rm -rf "$scan_dir"' EXIT
+          chmod 755 "$scan_dir"
+          git archive HEAD | tar -x -C "$scan_dir"
+          docker run --rm -v "$scan_dir:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:b5918eb91b8d2473cec722f066abb4352e4ffdc4ec9f4283ec143aba9ec9ebc4 dir /repo --config /repo/.gitleaks.toml --redact --no-banner
+      - name: Check for new high or critical dependency advisories
+        env:
+          BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          audit_dir="$(mktemp -d)"
+          trap 'rm -rf "$audit_dir"' EXIT
+          baseline="$BASE_COMMIT"
+          if [ -z "$baseline" ] || ! git cat-file -e "$baseline^{commit}"; then
+            baseline="$(git rev-parse HEAD^)"
+          fi
+          pnpm audit --prod --json > "$audit_dir/current.json" || test "$?" -eq 1
+          if git diff --quiet "$baseline" HEAD -- pnpm-lock.yaml pnpm-workspace.yaml ':(glob)**/package.json'; then
+            node scripts/check-dependency-audit.mjs "$audit_dir/current.json"
+          else
+            mkdir "$audit_dir/baseline"
+            git archive "$baseline" | tar -x -C "$audit_dir/baseline"
+            pnpm --dir "$audit_dir/baseline" audit --prod --json > "$audit_dir/baseline.json" || test "$?" -eq 1
+            node scripts/check-dependency-audit.mjs "$audit_dir/current.json" "$audit_dir/baseline.json"
+          fi
+      - run: pnpm test:security
+      - name: Check provider contracts with fixtures
+        run: >-
+          pnpm exec vitest run --pool forks
+          tests/unit/apps/server/modules/cities/place-lookup.service.test.ts
+          tests/unit/apps/server/modules/itinerary/currency.service.test.ts
+          tests/unit/apps/server/modules/itinerary/weather.service.test.ts
+          tests/unit/packages/ai/src/ollama-provider.test.ts
+      - name: Initialize isolated database and verify role boundaries
+        env:
+          DATABASE_PROVIDER: postgres
+          POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          POSTGRES_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/cohorizon_security_test
+        run: |
+          node apps/server/scripts/init-local-postgres.mjs
+          node scripts/check-notification-db-access.mjs
+      - name: Build web and check browser assets
+        env:
+          API_PROXY_TARGET: http://127.0.0.1:3348
+          JWT_SECRET: security-ci-server-only-sentinel-0123456789
+        run: |
+          pnpm --filter @travel/web build
+          node scripts/check-security-web-assets.mjs
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify real web, API, database and mocked providers
+        env:
+          E2E_POSTGRES_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/cohorizon_security_test
+          E2E_SECURITY_WEB: "true"
+          DOCUMENT_STORE: postgres
+        run: |
+          pnpm test:security:e2e
+          pnpm exec playwright test --config playwright.server.config.ts product-notifications.spec.ts
+
+  provider-smoke:
+    name: Provider sandbox smoke
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.sandbox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: security-sandbox
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - run: node scripts/security-provider-smoke.mjs
+        env:
+          SANDBOX_GOOGLE_PLACES_KEY: ${{ secrets.SANDBOX_GOOGLE_PLACES_KEY }}
+          SANDBOX_CLOUDFLARE_AI_TOKEN: ${{ secrets.SANDBOX_CLOUDFLARE_AI_TOKEN }}
+          SANDBOX_CLOUDFLARE_ACCOUNT: ${{ vars.SANDBOX_CLOUDFLARE_ACCOUNT }}

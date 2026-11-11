@@ -64,3 +64,5 @@ ui-captures
 
 # Private model-training exports
 .training-data/
+
+/apps/server/wrangler.generated.json

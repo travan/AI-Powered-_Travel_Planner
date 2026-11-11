@@ -64,8 +64,8 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({
       apiKey,
       ...(options.baseURL ? { baseURL: options.baseURL } : {}),
-      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
-      ...(options.baseURL ? { maxRetries: 0 } : {}),
+      timeout: options.timeoutMs ?? 60_000,
+      maxRetries: 0,
     });
     this.model = model;
     this.naturalInputModel = options.naturalInputModel ?? "gpt-4o-mini";

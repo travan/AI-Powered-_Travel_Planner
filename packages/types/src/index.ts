@@ -22,3 +22,5 @@ export * from "./timeline";
 export * from "./reference-places";
 
 export * from "./journey-route";
+
+export * from "./country-reference";

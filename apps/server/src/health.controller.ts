@@ -17,6 +17,8 @@ export class HealthController {
 
     return {
       status: "ok",
+      ...(process.env.AI_PROVIDER === "mock" && process.env.JOURNEY_STAGING_DELAY_MS === "30000"
+        ? { journey_load_test: true } : {}),
       ...(process.env.DEPLOY_COMMIT
         ? { deploy_commit: process.env.DEPLOY_COMMIT }
         : {}),

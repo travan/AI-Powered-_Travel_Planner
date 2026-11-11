@@ -4,7 +4,7 @@ import { useAppLanguage } from "../i18n/LanguageProvider";
 import { UiText, useUiText } from "../i18n/UiText";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getTripRolePermissions,
   type TripRolePermissions,
@@ -12,7 +12,7 @@ import {
 import { SiteHeader } from "../layout/SiteHeader";
 import type { Itinerary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
-import { getMyTrips, getSavedTripItinerary } from "../../lib/api";
+import { getSavedTripItinerary } from "../../lib/api";
 import { localDateKey } from "../../lib/schedule-preview";
 import { JourneyWorkspacePanel } from "./JourneyWorkspacePanel";
 import { SavedAiPlanPanel } from "./SavedAiPlanPanel";
@@ -23,7 +23,7 @@ import {
   createTransportBooking,
   createTripActivity,
   createTripInvite,
-  getTripMembership,
+  getTripWorkspace,
   listDataQualitySignals,
   listTransportBookings,
   listExpenses,
@@ -32,7 +32,6 @@ import {
   listTransportPriceRecommendations,
   listTripActivities,
   listTripAuditLogs,
-  listTripMembers,
   reviewSubmission,
   searchActivityCatalog,
   type ActivityCatalogItem,
@@ -225,12 +224,12 @@ function canAccessWorkspaceTab(
   return true;
 }
 
-export function TripWorkspace({ tripId }: { tripId: string }) {
+export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialTab?: string }) {
   const { locale: formattingLocale } = useAppLanguage();
 
   const t = useUiText();
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => TABS.find((tab) => tab.id === initialTab)?.id ?? "overview");
   const [state, setState] = useState<LoadState>("loading");
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
@@ -368,86 +367,13 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         } satisfies WorkspaceSession;
         setSession(authSession);
 
-        const currentMember = await getTripMembership(
-          tripId,
-          authSession.accessToken,
-        );
-        if (!currentMember || currentMember.status !== "active") {
-          throw new Error("You are not an active member of this trip.");
-        }
-        const currentPermissions = getTripRolePermissions(currentMember.role);
-        const nextMembers = currentPermissions.viewMembers
-          ? await listTripMembers(tripId, authSession.accessToken)
-          : [currentMember];
-        const nextTrips = await getMyTrips(authSession.accessToken).catch(
-          () => [],
-        );
-        const nextTripCitySlug =
-          nextTrips.find((trip) => trip.id === tripId)?.primary_city_slug ??
-          null;
-
-        const [
-          nextAuditLogs,
-          nextActivities,
-          nextCatalog,
-          nextTransportBookings,
-          nextExpenses,
-          nextReviewQueue,
-          nextPlaceRecommendations,
-          nextTransportPriceRecommendations,
-          nextDataQualitySignals,
-          nextSavedPlan,
-        ] = await Promise.all([
-          currentPermissions.viewAudit
-            ? listTripAuditLogs(tripId, authSession.accessToken, 10).catch(
-                () => [],
-              )
-            : Promise.resolve([] as TripAuditLog[]),
-          listTripActivities(tripId, authSession.accessToken).catch(() => []),
-          searchActivityCatalog({
-            citySlug: nextTripCitySlug ?? undefined,
-            limit: 8,
-          }).catch(() => []),
-          listTransportBookings(tripId, authSession.accessToken).catch(
-            () => [],
-          ),
-          currentPermissions.viewFinance
-            ? listExpenses(tripId, authSession.accessToken)
-            : Promise.resolve([] as Expense[]),
-          currentPermissions.reviewSubmissions
-            ? listReviewQueue(tripId, authSession.accessToken).catch(() => [])
-            : Promise.resolve([] as ReviewQueueItem[]),
-          listPlaceRecommendations({
-            citySlug: nextTripCitySlug ?? undefined,
-            limit: 6,
-          }).catch(() => []),
-          listTransportPriceRecommendations({ limit: 6 }).catch(() => []),
-          listDataQualitySignals(tripId, authSession.accessToken).catch(
-            () => [],
-          ),
-          getSavedTripItinerary(tripId, authSession.accessToken).catch(
-            () => null,
-          ),
-        ]);
-
+        const { membership, members: nextMembers, primaryCitySlug } =
+          await getTripWorkspace(tripId, authSession.accessToken);
         if (cancelled) return;
+        if (membership.status !== "active")
+          throw new Error("You are not an active member of this trip.");
         setMembers(nextMembers);
-        setTripCitySlug(nextTripCitySlug);
-        setAuditLogs(nextAuditLogs);
-        setActivities(nextActivities);
-        setActivityDrafts(buildActivityDrafts(nextActivities));
-        setActivityCatalog(nextCatalog);
-        setTransportBookings(nextTransportBookings);
-        setTransportPriceDrafts(
-          buildTransportPriceDrafts(nextTransportBookings),
-        );
-        setExpenses(nextExpenses);
-        setReviewQueue(nextReviewQueue);
-        setPlaceRecommendations(nextPlaceRecommendations);
-        setTransportPriceRecommendations(nextTransportPriceRecommendations);
-        setDataQualitySignals(nextDataQualitySignals);
-        setSavedPlan(nextSavedPlan);
-        setSavedPlanLoading(false);
+        setTripCitySlug(primaryCitySlug);
         setExpenseForm((current) => ({
           ...current,
           paidByUserId: current.paidByUserId || authSession.userId,
@@ -483,6 +409,37 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
       cancelled = true;
     };
   }, [tripId]);
+
+  const loadedSections = useRef(new Map<string, Promise<unknown>>());
+  useEffect(() => {
+    if (!session || state !== "ready") return;
+    const token = session.accessToken;
+    const loadOnce = (key: string, load: () => Promise<unknown>) => {
+      if (loadedSections.current.has(key)) return;
+      const pending = load().catch(() => {
+        loadedSections.current.delete(key);
+        setMessage(t("Unable to load workspace section."));
+      });
+      loadedSections.current.set(key, pending);
+    };
+    if (["plan", "schedule", "transport", "bills"].includes(activeTab))
+      loadOnce("activities", () => refreshActivities(token));
+    if (activeTab === "plan" || activeTab === "schedule") {
+      loadOnce("saved", async () => {
+        try { setSavedPlan(await getSavedTripItinerary(tripId, token)); }
+        finally { setSavedPlanLoading(false); }
+      });
+    }
+    if (activeTab === "schedule") loadOnce("catalog", () => refreshActivityCatalog());
+    if (activeTab === "transport") loadOnce("transport", () => refreshTransportBookings(token));
+    if (activeTab === "bills" && permissions?.viewFinance)
+      loadOnce("expenses", () => refreshExpenses(token));
+    if (activeTab === "audit" && permissions?.viewAudit)
+      loadOnce("audit", () => refreshAuditLogs(token));
+    if (activeTab === "review" && permissions?.reviewSubmissions)
+      loadOnce("review", () => refreshReviewQueue(token));
+    if (activeTab === "insights") loadOnce("insights", () => refreshInsights(token));
+  }, [activeTab, session, state, permissions?.viewFinance, permissions?.viewAudit, permissions?.reviewSubmissions, tripId]);
 
   async function refreshAuditLogs(authToken = session?.accessToken) {
     if (!authToken) return;
