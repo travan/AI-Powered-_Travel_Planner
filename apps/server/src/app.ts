@@ -7,6 +7,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { AppModule } from "./app.module.js";
 import { AppConfigService } from "./config/app-config.service.js";
+import { workerRequestContext } from "./cloudflare/request-context.js";
 import { isAllowedCorsOrigin } from "./cors-origin.js";
 
 export async function buildApp(): Promise<NestExpressApplication> {
@@ -67,6 +68,7 @@ export async function buildApp(): Promise<NestExpressApplication> {
     rateLimit({
       max: config.rateLimit.max,
       windowMs: config.rateLimit.windowMs,
+      skip: () => workerRequestContext.getStore()?.rateLimitedAtEdge === true,
     })
   );
 

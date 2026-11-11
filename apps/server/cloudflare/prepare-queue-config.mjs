@@ -64,13 +64,16 @@ config.queues = {
     },
   ],
 };
+// Nest's fallback is shared by proxy IP. The distributed bindings below apply
+// route-specific ceilings before opening a database connection.
 config.ratelimits = [
-  {
-    name: "PUBLIC_API_LIMIT",
-    namespace_id: target === "staging" ? "5002" : "5001",
-    simple: { limit: target === "staging" ? 120000 : 3000, period: 60 },
-  },
-];
+  { name: "PUBLIC_API_LIMIT", simple: { limit: 3000, period: 60 } },
+  { name: "JOURNEY_ADMISSION_LIMIT", simple: { limit: 3000, period: 60 } },
+  { name: "JOURNEY_READ_LIMIT", simple: { limit: 12000, period: 60 } },
+].map((binding, index) => ({
+  ...binding,
+  namespace_id: String((target === "staging" ? 5100 : 5200) + index),
+}));
 
 const output = path.resolve("apps/server/wrangler.generated.json");
 await fs.writeFile(output, JSON.stringify(config, null, 2) + "\n");

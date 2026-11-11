@@ -5,7 +5,7 @@ export type WorkersAI = {
   run(model: string, input: Record<string, unknown>): Promise<unknown>;
 };
 
-export const workerRequestContext = new AsyncLocalStorage<{ pool: Pool; ai: WorkersAI }>();
+export const workerRequestContext = new AsyncLocalStorage<{ pool: Pool; ai: WorkersAI; rateLimitedAtEdge?: boolean }>();
 
 // Connections belong to the current Worker invocation, never to a warm isolate.
 export const workerPool = {

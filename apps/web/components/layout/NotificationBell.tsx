@@ -308,7 +308,10 @@ export function NotificationBell({ className }: { className?: string }) {
         className="relative grid size-10 place-items-center rounded-full text-outline hover:bg-surface-container-low"
         onClick={() => setOpen(!open)}
       >
-        <span className="material-symbols-outlined text-[22px]">
+        <span
+          aria-hidden="true"
+          className="material-symbols-outlined block size-6 overflow-hidden text-[22px] leading-6"
+        >
           notifications
         </span>
         {count > 0 && (
