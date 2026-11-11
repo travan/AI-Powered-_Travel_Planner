@@ -35,6 +35,15 @@ const nextConfig: NextConfig = {
     proxyTimeout: 960_000,
     serverActions: { allowedOrigins: ["localhost:3000"] },
   },
+  async headers() {
+    return [{
+      source: "/((?!api/|_next/).*)",
+      headers: [{
+        key: "Content-Security-Policy-Report-Only",
+        value: "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https:",
+      }],
+    }];
+  },
   async rewrites() {
     return [
       {

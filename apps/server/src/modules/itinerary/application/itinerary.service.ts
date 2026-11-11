@@ -1,3 +1,4 @@
+import { logEvent } from "../../../observability/logger.js";
 import {
   flexibleMonthDates,
   selectFlexibleWindow,
@@ -414,17 +415,12 @@ export class ItineraryService {
       if (usage.length) {
         detail.ai_usage = usage;
         this.logger.log(
-          `AI usage for ${input.userId}: ${JSON.stringify(usage)}`,
+          `AI usage: ${JSON.stringify(usage)}`,
         );
       }
     } catch (error) {
       const usage = provider?.getUsage?.() ?? [];
-      const details =
-        error instanceof Error ? (error.stack ?? error.message) : String(error);
-      this.logger.error(
-        `AI itinerary generation failed for provider "${providerName}"`,
-        details,
-      );
+      logEvent("journey.provider_failed", "error", { code: "AI_UNAVAILABLE" });
       await this.recordFailure(
         input.userId,
         request,
@@ -433,6 +429,9 @@ export class ItineraryService {
         error,
         usage,
       );
+      if (input.onStage && error && typeof error === "object" &&
+          ((error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429))
+        throw error;
       return {
         status: "unsupported",
         code: "AI_UNAVAILABLE",

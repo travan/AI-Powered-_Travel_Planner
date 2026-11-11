@@ -273,7 +273,8 @@ describe("compact planner submission", () => {
         journey: { origin: { label: "Hà Nội" }, destinations: ["tây-an"] },
       },
     });
-    expect(mock.validate).toHaveBeenCalledWith(sent);
+    expect(mock.validate).not.toHaveBeenCalled();
+    expect(mock.generate.mock.calls[0]![2]).toMatch(/^[a-f0-9-]{36}$/);
     expect(mock.push).toHaveBeenCalledWith("/plan/jobs/job-1");
     expect(screen.getAllByTestId("web-plan-selected-city")).toHaveLength(1);
   });
@@ -366,20 +367,24 @@ describe("compact planner submission", () => {
     await waitFor(() => expect(mock.push).toHaveBeenCalledOnce());
     expect(mock.generate).not.toHaveBeenCalled();
     const intent = JSON.parse(sessionStorage.getItem("horizon.search.intent")!);
-    expect(intent.request).toEqual(mock.validate.mock.calls[0]![0]);
+    expect(mock.validate).not.toHaveBeenCalled();
     expect(intent.request.city_names).toEqual(["Tây An"]);
     expect(mock.createDraft.mock.calls[0]![0].search_payload).toEqual(
       intent.request,
     );
     expect(mock.push.mock.calls[0]![0]).toContain("resumeGenerate");
   });
-  it("keeps the prepared route and options when validation service fails", async () => {
-    mock.validate.mockRejectedValue(new Error("Service unavailable"));
+  it("keeps the prepared route and idempotency key when generation service fails", async () => {
+    mock.generate.mockRejectedValueOnce(new Error("Service unavailable"));
     show();
     fillRoute();
     fireEvent.click(screen.getByTestId("web-plan-generate"));
     await screen.findByTestId("web-plan-error");
-    expect(mock.generate).not.toHaveBeenCalled();
+    expect(mock.generate).toHaveBeenCalledOnce();
+    const firstKey = mock.generate.mock.calls[0]![2];
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledTimes(2));
+    expect(mock.generate.mock.calls[1]![2]).toBe(firstKey);
     expect(
       (screen.getByLabelText("Đi từ đâu?") as HTMLInputElement).value,
     ).toBe("Hà Nội");

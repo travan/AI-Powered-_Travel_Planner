@@ -3,13 +3,16 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
+  HttpException,
   Inject,
   Param,
   Post,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { normalizeOllamaItinerary } from "@travel/ai";
 import {
   CurrentUser,
@@ -37,13 +40,21 @@ export class ItineraryController {
 
   @Post("generate")
   @UseGuards(JwtAuthGuard)
-  generate(
+  async generate(
     @Body() dto: GenerateItineraryDto,
     @CurrentUser() user: CurrentUserValue,
+    @Headers("idempotency-key") key: string | undefined,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return dto.planning
-      ? this.journey.enqueue(user.sub, dto)
-      : this.itineraries.generate({ userId: user.sub, dto });
+    try {
+      return dto.planning
+        ? await this.journey.enqueue(user.sub, dto, key)
+        : await this.itineraries.generate({ userId: user.sub, dto });
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === 429)
+        response.setHeader("Retry-After", "30");
+      throw error;
+    }
   }
 
   @Get("trips/:tripId")

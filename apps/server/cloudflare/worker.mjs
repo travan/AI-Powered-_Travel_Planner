@@ -40,6 +40,13 @@ async function inRequest(env, ctx, work) {
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const clientIp = request.headers.get("CF-Connecting-IP");
+    if (clientIp && env.PUBLIC_API_LIMIT && /^\/api\/(cities|locations)\//.test(url.pathname)) {
+      const { success } = await env.PUBLIC_API_LIMIT.limit({ key: clientIp });
+      if (!success)
+        return Response.json({ code: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "60" } });
+    }
     return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
       const { handler } = await application();
       const response = await handler.fetch(request, env, ctx);
@@ -47,12 +54,33 @@ export default {
       return response;
     }));
   },
+  async queue(batch, env, ctx) {
+    return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
+      const { app } = await application();
+      const journey = app.get(JourneyService);
+      for (const message of batch.messages) {
+        const id = message.body?.jobId;
+        if (typeof id === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
+          await journey.processNextJob(id);
+        message.ack();
+      }
+    }));
+  },
   async scheduled(_event, env, ctx) {
     return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
       const { app } = await application();
-      await app.get(FeedbackMailWorker).processNext();
-      await app.get(JourneyService).processNextJob();
-      await app.get(CityCatalogWorker).processNextJob();
+      const journey = app.get(JourneyService);
+      if (env.JOURNEY_QUEUE) {
+        await journey.expireJobs();
+        for (let batch = 0; batch < 15; batch++) {
+          const due = await journey.reserveDispatch(100);
+          if (!due.length) break;
+          await env.JOURNEY_QUEUE.sendBatch(due.map(({ job_id }) => ({ body: { jobId: job_id } })));
+        }
+      } else {
+        await journey.processNextJob();
+      }
+      await Promise.all([app.get(FeedbackMailWorker).processNext(), app.get(CityCatalogWorker).processNextJob()]);
     }), true);
   },
 };

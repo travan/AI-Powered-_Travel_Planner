@@ -45,6 +45,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  security-gate:
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+
   build:
     name: Build packages and apps
     runs-on: ubuntu-latest
@@ -233,7 +238,7 @@ jobs:
   deploy-cloudflare:
     name: Deploy Cloudflare API
     runs-on: ubuntu-24.04
-    needs: [unit-tests, e2e-tests, database-parity]
+    needs: [unit-tests, e2e-tests, database-parity, security-gate]
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -266,12 +271,23 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Select measured queue configuration
+        env:
+          JOURNEY_QUEUE_CONCURRENCY: ${{ vars.JOURNEY_QUEUE_CONCURRENCY }}
+        run: |
+          if [ -n "$JOURNEY_QUEUE_CONCURRENCY" ]; then
+            node apps/server/cloudflare/prepare-queue-config.mjs production
+            echo 'WRANGLER_CONFIG=apps/server/wrangler.generated.json' >> "$GITHUB_ENV"
+          else
+            echo 'WRANGLER_CONFIG=apps/server/wrangler.jsonc' >> "$GITHUB_ENV"
+          fi
+
       # Bundle before touching the database; Wrangler also validates the bindings.
       - name: Validate Worker bundle
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         # dlx avoids wrangler-action attempting `pnpm add` at the workspace root.
-        run: pnpm dlx wrangler@4.155.0 deploy --dry-run --config apps/server/wrangler.jsonc
+        run: pnpm dlx wrangler@4.155.0 deploy --dry-run --config "$WRANGLER_CONFIG"
 
       - name: Validate and apply pending database migrations
         env:
@@ -283,7 +299,7 @@ jobs:
       - name: Deploy Worker and scheduled jobs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: pnpm dlx wrangler@4.155.0 deploy --config apps/server/wrangler.jsonc --var DEPLOY_COMMIT:${{ github.sha }}
+        run: pnpm dlx wrangler@4.155.0 deploy --config "$WRANGLER_CONFIG" --var DEPLOY_COMMIT:${{ github.sha }}
 
       - name: Verify deployed revision and planner API
         env:
@@ -294,7 +310,7 @@ jobs:
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
-    needs: [unit-tests, e2e-tests, database-parity]
+    needs: [unit-tests, e2e-tests, database-parity, security-gate]
     if: >-
       github.ref == 'refs/heads/main' &&
       vars.ENABLE_LEGACY_VERCEL_DEPLOY == 'true'

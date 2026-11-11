@@ -1,11 +1,18 @@
+import type { Response } from "express";
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Header,
+  Headers,
+  HttpException,
+  Res,
   Inject,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -92,15 +99,46 @@ export class JourneyController {
   @Post("planning/validate") validate(@Body() dto: GenerateItineraryDto) {
     return validatePlanning(dto as Parameters<typeof validatePlanning>[0]);
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("planning/requests")
   @UseGuards(JwtAuthGuard)
   requests(@CurrentUser() u: CurrentUserValue) {
     return this.journey.listJobs(u.sub);
   }
+  @Get("planning/statuses")
+  @Header("Cache-Control", "private, no-store")
+  @UseGuards(JwtAuthGuard)
+  statuses(@Query("ids") ids: unknown, @CurrentUser() u: CurrentUserValue) {
+    const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+    if (typeof ids !== "string" || ids.length > 739)
+      throw new BadRequestException("Provide up to 20 job IDs.");
+    const values = ids.split(",");
+    if (!values.every((id) => uuid.test(id)))
+      throw new BadRequestException("Invalid job ID.");
+    return this.journey.listStatuses(u.sub, values);
+  }
+  @Header("Cache-Control", "private, no-store")
   @Get("itinerary/jobs/:jobId")
   @UseGuards(JwtAuthGuard)
   job(@Param() p: JobParamsDto, @CurrentUser() u: CurrentUserValue) {
     return this.journey.getJob(u.sub, p.jobId);
+  }
+  @Post("itinerary/jobs/:jobId/retry")
+  @Header("Cache-Control", "private, no-store")
+  @UseGuards(JwtAuthGuard)
+  async retryJob(
+    @Param() p: JobParamsDto,
+    @CurrentUser() u: CurrentUserValue,
+    @Headers("idempotency-key") key: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    try {
+      return await this.journey.retryJob(u.sub, p.jobId, key);
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === 429)
+        response.setHeader("Retry-After", "30");
+      throw error;
+    }
   }
   @Get("trips/:tripId/accommodations")
   @UseGuards(JwtAuthGuard)

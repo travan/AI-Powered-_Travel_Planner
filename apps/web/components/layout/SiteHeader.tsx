@@ -1,10 +1,11 @@
 "use client";
-import { UiText, useUiText } from "../i18n/UiText";
+import { UiText } from "../i18n/UiText";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { NotificationBell } from "./NotificationBell";
 import { AccountMenu } from "./AccountMenu";
 import { CoHorizonLogo } from "./CoHorizonLogo";
 import { PRIMARY_NAVIGATION, isNavigationActive } from "./navigation";
@@ -88,7 +89,6 @@ function useUserInfo() {
 }
 
 export function SiteHeader() {
-  const t = useUiText();
   const pathname = usePathname();
   const navigationText = useTranslations("common");
   const userInfo = useUserInfo();
@@ -105,12 +105,7 @@ export function SiteHeader() {
         <Link href="/plan" className="inline-flex">
           <CoHorizonLogo className="text-xl text-primary" />
         </Link>
-        <button
-          aria-label={t("Notifications")}
-          className="material-symbols-outlined size-10 justify-self-end overflow-hidden text-outline/80 text-[22px]"
-        >
-          notifications
-        </button>
+
       </div>
 
       {/* ── Desktop header ── */}
@@ -144,14 +139,8 @@ export function SiteHeader() {
             })}
           </nav>
         </div>
-        {/* Right: bell + avatar */}
         <div className="flex items-center gap-4">
-          <button
-            aria-label={t("Notifications")}
-            className="material-symbols-outlined size-10 shrink-0 overflow-hidden rounded-full text-[22px] text-outline transition-colors hover:bg-surface-container-low"
-          >
-            notifications
-          </button>
+
           <AccountMenu
             avatarUrl={userInfo.avatarUrl}
             displayName={userInfo.displayName}
@@ -159,6 +148,7 @@ export function SiteHeader() {
           />
         </div>
       </div>
+      <NotificationBell className="absolute right-6 top-1/2 -translate-y-1/2 md:right-20" />
     </header>
   );
 }

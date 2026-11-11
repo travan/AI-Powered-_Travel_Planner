@@ -192,6 +192,16 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, tripBusiness.listTripsForUser(userId));
   }
 
+  if (req.method === "GET" && pathname === "/api/notifications/unread") {
+    if (!getUserIdFromAuth(req.headers.authorization)) return unauthorized(res);
+    return sendJson(res, 200, { count: 0 });
+  }
+
+  if (req.method === "GET" && pathname === "/api/notifications") {
+    if (!getUserIdFromAuth(req.headers.authorization)) return unauthorized(res);
+    return sendJson(res, 200, { items: [], next: null });
+  }
+
   if (pathname.startsWith("/api/trips/")) {
     const routed = await routeTripBusiness(req, pathname);
     if (routed) return sendJson(res, routed.status, routed.body);
@@ -362,7 +372,7 @@ function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "http://127.0.0.1:3202");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client, Idempotency-Key");
 }
 
 function sendJson(res, statusCode, body) {
@@ -472,6 +482,19 @@ async function routeTripBusiness(req, pathname) {
 
   const parts = pathname.split("/").filter(Boolean);
   const tripId = parts[2];
+
+  if (req.method === "GET" && parts.length === 4 && parts[3] === "workspace") {
+    const membership = tripBusiness.getMembership({ tripId, actorUserId: userId });
+    if (membership.status !== 200) return membership;
+    return {
+      status: 200,
+      body: {
+        membership: membership.body,
+        members: membership.body.role === "viewer" ? [membership.body] : tripBusiness.listMembers(tripId),
+        primaryCitySlug: tripBusiness.listTripsForUser(userId).find((trip) => trip.id === tripId)?.primary_city_slug ?? null,
+      },
+    };
+  }
 
   if (req.method === "GET" && parts.length === 4 && parts[3] === "membership") {
     return tripBusiness.getMembership({ tripId, actorUserId: userId });

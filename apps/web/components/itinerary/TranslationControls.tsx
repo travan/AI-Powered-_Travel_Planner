@@ -1,16 +1,16 @@
 "use client";
+import { pollWhileVisible } from "@/lib/visible-poll";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   applyItineraryTranslation,
   type Itinerary,
   type ItineraryTranslation,
-  type PlanningJob,
 } from "@travel/types";
 import { useAppLanguage } from "../i18n/LanguageProvider";
 import { useIssueText } from "../i18n/UiText";
 import { ApiRequestError } from "../../lib/api";
-import { journeyRequest } from "../../lib/journey-api";
+import { getJourneyJob, journeyRequest, notifyJobStatusChanged } from "../../lib/journey-api";
 
 type TranslationList = {
   source_version: string;
@@ -73,54 +73,46 @@ export function TranslationControls({
   useEffect(() => {
     if (!jobId) return;
     const current = epoch.current;
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
+    return pollWhileVisible(async (signal) => {
       try {
-        const job = await journeyRequest<PlanningJob>(
-          `itinerary/jobs/${jobId}`,
-          token,
-          undefined,
-          "GET",
-          abort.signal,
-        );
-        if (abort.signal.aborted || current !== epoch.current) return;
-        if (job.status === "failed")
+        const job = await getJourneyJob(jobId, token, signal);
+        if (signal.aborted || current !== epoch.current) return false;
+        if (job.status === "failed") {
+          notifyJobStatusChanged();
           throw new ApiRequestError(
             "Translation failed",
             500,
             job.error_code ?? "TRANSLATION_FAILED",
             job.error_params,
           );
+        }
         if (job.status === "complete") {
+          notifyJobStatusChanged();
           const result = await journeyRequest<TranslationList>(
             path,
             token,
             undefined,
             "GET",
-            abort.signal,
+            signal,
           );
-          if (abort.signal.aborted || current !== epoch.current) return;
+          if (signal.aborted || current !== epoch.current) return false;
           setData(result);
           setStatus("idle");
           setJobId(undefined);
-          return;
+          return false;
         }
         setStatus(job.status === "processing" ? "processing" : "queued");
-        timer = setTimeout(poll, 2500);
+        return true;
       } catch (e) {
-        if (!abort.signal.aborted && current === epoch.current) {
+        if (e instanceof ApiRequestError && e.status === 429) return e.retryAfterMs ?? true;
+        if (!signal.aborted && current === epoch.current) {
           setError(translationError(e));
           setStatus("idle");
           setJobId(undefined);
         }
+        return false;
       }
-    };
-    void poll();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
+    });
   }, [jobId, path, token]);
   const translate = async (target: "en" | "vi") => {
     if (!data) return;

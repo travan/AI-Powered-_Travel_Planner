@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { routeLabels, type PlanningJobSummary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
-import { getPlanningRequests } from "../../lib/journey-api";
+import { getPlanningRequests, getPlanningStatuses, notifyJobStatusChanged } from "../../lib/journey-api";
+import { pollWhileVisible } from "@/lib/visible-poll";
+import { ApiRequestError } from "@/lib/api";
 import { useAppLanguage } from "../i18n/LanguageProvider";
 
 const PAGE_SIZE = 3;
@@ -25,40 +27,34 @@ export function RecentPlanningRequests() {
   );
 
   useEffect(() => {
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const load = async () => {
+    let activeIds: string[] | undefined;
+    return pollWhileVisible(async (signal) => {
       try {
-        const {
-          data: { session },
-        } = await createClient().auth.getSession();
-        if (abort.signal.aborted || !session) return;
-        const rows = await getPlanningRequests(
-          session.access_token,
-          abort.signal,
-        );
-        if (abort.signal.aborted) return;
-        const available = rows.filter((row) => row.status !== "failed");
-        setRequests(available);
-        setPage((value) =>
-          Math.min(value, Math.max(1, Math.ceil(available.length / PAGE_SIZE))),
-        );
+        const { data: { session } } = await createClient().auth.getSession();
+        if (signal.aborted || !session) return false;
+        if (!activeIds) {
+          const rows = await getPlanningRequests(session.access_token, signal);
+          if (signal.aborted) return false;
+          setRequests(rows);
+          setPage((value) => Math.min(value, Math.max(1, Math.ceil(rows.length / PAGE_SIZE))));
+          activeIds = rows.filter((row) => row.status === "queued" || row.status === "processing").map(({ id }) => id);
+        } else {
+          const statuses = await getPlanningStatuses(activeIds, session.access_token, signal);
+          if (signal.aborted) return false;
+          if (statuses.some(({ status }) => status === "complete" || status === "failed"))
+            notifyJobStatusChanged();
+          const byId = new Map(statuses.map((job) => [job.id, job]));
+          setRequests((rows) => rows.map((row) => ({ ...row, ...byId.get(row.id) })));
+          activeIds = statuses.filter(({ status }) => status === "queued" || status === "processing").map(({ id }) => id);
+        }
         setError(false);
-        if (
-          rows.some(
-            (row) => row.status === "queued" || row.status === "processing",
-          )
-        )
-          timer = setTimeout(load, 10000);
-      } catch {
-        if (!abort.signal.aborted) setError(true);
+        return activeIds.length > 0;
+      } catch (e) {
+        if (!signal.aborted) setError(true);
+        if (e instanceof ApiRequestError && e.status === 429) return e.retryAfterMs ?? true;
+        return false;
       }
-    };
-    void load();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
+    });
   }, [attempt]);
 
   if (!requests.length && !error) return null;
@@ -153,6 +149,7 @@ export function RecentPlanningRequests() {
               </div>
             </div>
             <Link
+              prefetch={false}
               className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-on-primary shadow-sm transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
               href={
                 request.status === "complete" && request.itinerary_id

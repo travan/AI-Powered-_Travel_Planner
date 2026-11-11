@@ -33,6 +33,7 @@ export class WeatherService {
       process.env.WEATHER_CONTACT_URL || process.env.NEXT_PUBLIC_APP_URL;
     if (!nasa && !contact) throw new Error("WEATHER_CONTACT_MISSING");
     const response = await fetch(url, {
+      redirect: "error",
       headers: {
         "User-Agent": `TravelPlanner/1.0 (${contact ?? "NASA POWER client"})`,
         ...(previous?.modified
@@ -71,6 +72,8 @@ export class WeatherService {
     },
     coordinates: Map<string, { lat: number | null; lon: number | null }>,
   ): Promise<TripWeather[]> {
+    if (process.env.AI_PROVIDER === "mock" && process.env.JOURNEY_STAGING_DELAY_MS === "30000")
+      return [];
     const rows: TripWeather[] = [];
     for (const [slug, city] of Object.entries(plan.city_catalog ?? {})) {
       const dates = [

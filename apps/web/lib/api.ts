@@ -46,6 +46,7 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly params?: Record<string, string | number>,
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -59,11 +60,13 @@ function throwApiRequestError(action: string, response: Response): never {
 export async function generateItinerary(
   body: GenerateRequest,
   authToken?: string,
+  idempotencyKey?: string,
 ): Promise<GenerateResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   const res = await fetchWithLocalSession(
     getApiUrl("/api/itinerary/generate"),

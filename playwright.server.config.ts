@@ -16,6 +16,13 @@ export default defineConfig({
   fullyParallel: false,
   use: { baseURL: "http://127.0.0.1:3348" },
   webServer: [
+    ...(process.env.E2E_SECURITY_WEB === "true" ? [{
+      command: "./node_modules/.bin/next start -H 127.0.0.1 -p 3352",
+      cwd: "./apps/web",
+      url: "http://127.0.0.1:3352/login",
+      timeout: 60000,
+      env: { API_PROXY_TARGET: "http://127.0.0.1:3348", AUTH_PROVIDER: "local" },
+    }] : []),
     { command: "node e2e/recovery-mail-server.mjs", url: "http://127.0.0.1:3350/health" },
     {
       command: "node e2e/ollama-test-server.mjs",
@@ -30,7 +37,7 @@ export default defineConfig({
       env: {
         NODE_ENV: "test",
         AUTH_PROVIDER: "local",
-        CORS_ORIGINS: "http://127.0.0.1:3348",
+        CORS_ORIGINS: "http://127.0.0.1:3348,http://127.0.0.1:3352",
         SMTP_HOST: "127.0.0.1",
         SMTP_PORT: "3351",
         SMTP_SECURE: "false",

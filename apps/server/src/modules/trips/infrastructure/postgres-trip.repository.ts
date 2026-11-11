@@ -16,6 +16,7 @@ import type { TripRepository } from "../domain/trip.repository.js";
 import type { TripSummary } from "@travel/types";
 
 type TripRow = {
+  primary_city_slug?: string | null;
   id: string;
   title: string;
   status: string;
@@ -132,10 +133,10 @@ export class PostgresTripRepository implements TripRepository {
     userId: string;
   }): Promise<Trip | null> {
     const result = await this.sql.query<TripRow>(
-      `select t.id::text, t.title, t.status, t.visibility, t.owner_user_id::text, t.created_at::text
+      `select t.id::text, t.title, t.status, t.visibility, t.owner_user_id::text, t.created_at::text, t.primary_city_slug
        from trips t
        join trip_members tm on tm.trip_id = t.id
-       where t.id = $1 and tm.user_id = $2
+       where t.id = $1 and tm.user_id = $2 and tm.status = 'active'
        limit 1`,
       [input.tripId, input.userId],
     );
@@ -390,6 +391,7 @@ function mapTrip(row: TripRow): Trip {
     status: row.status,
     visibility: row.visibility,
     ownerUserId: row.owner_user_id,
+    primaryCitySlug: row.primary_city_slug ?? null,
     createdAt: row.created_at,
   };
 }

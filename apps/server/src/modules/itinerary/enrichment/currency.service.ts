@@ -17,6 +17,7 @@ export class CurrencyService {
     this.pending = (async () => {
       try {
         const response = await fetch("https://open.er-api.com/v6/latest/USD", {
+          redirect: "error",
           signal: AbortSignal.timeout(6000),
         });
         if (!response.ok) throw new Error("Exchange rate provider unavailable");

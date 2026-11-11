@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Inject,
   Param,
   Patch,
@@ -46,6 +47,14 @@ export class TripsController {
       tripId: params.id,
       userId: user.sub,
     });
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Get(":id/workspace")
+  @Header("Cache-Control", "private, no-store")
+  async workspace(@Param() params: TripIdParamsDto, @CurrentUser() user: CurrentUserValue) {
+    const result = await this.trips.workspace({ tripId: params.id, actorUserId: user.sub });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }

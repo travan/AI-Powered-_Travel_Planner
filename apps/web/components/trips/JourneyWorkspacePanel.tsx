@@ -1,4 +1,6 @@
 "use client";
+import { ApiRequestError } from "@/lib/api";
+import { pollWhileVisible } from "@/lib/visible-poll";
 
 import {
   UiText,
@@ -12,6 +14,7 @@ import React, { useEffect, useState } from "react";
 import {
   getAccommodations,
   getJourneyJob,
+  notifyJobStatusChanged,
   getJourneyPlan,
   getPlanRevisions,
   journeyRequest,
@@ -123,14 +126,13 @@ export function JourneyWorkspacePanel({
   }, [tripId, token]);
   useEffect(() => {
     if (!jobId) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
+    return pollWhileVisible(async (signal) => {
       try {
-        const job = await getJourneyJob(jobId, token);
-        if (cancelled) return;
+        const job = await getJourneyJob(jobId, token, signal);
+        if (signal.aborted) return false;
         setStage(job.stage);
         if (job.status === "complete") {
+          notifyJobStatusChanged();
           setJobId(null);
           await load();
           setMessage(
@@ -138,9 +140,10 @@ export function JourneyWorkspacePanel({
               "Phương án đã sẵn sàng. Xem thay đổi bên dưới trước khi áp dụng.",
             ),
           );
-          return;
+          return false;
         }
         if (job.status === "failed") {
+          notifyJobStatusChanged();
           setJobId(null);
           setError(
             job.error_code
@@ -151,18 +154,17 @@ export function JourneyWorkspacePanel({
                 })
               : (job.error ?? "Không tạo được phương án."),
           );
-          return;
+          return false;
         }
       } catch (e) {
-        if (!cancelled) setError(apiErrorText(e, "Mất kết nối; đang thử lại."));
+        if (!signal.aborted) setError(apiErrorText(e, "Mất kết nối; đang thử lại."));
+        if (e instanceof ApiRequestError) {
+          if ([401, 403, 404].includes(e.status)) return false;
+          if (e.retryAfterMs) return e.retryAfterMs;
+        }
       }
-      if (!cancelled) timer = setTimeout(poll, 3000);
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+      return true;
+    });
   }, [jobId, token]);
   const run = async (work: () => Promise<void>) => {
     setBusy(true);

@@ -39,6 +39,7 @@ import {
   journeyRoute,
   routeLabels,
   placeKey,
+  countryReference,
   createManualCity,
   validatePlanning,
   type GenerateRequest,
@@ -58,7 +59,6 @@ import {
 import {
   resolveJourneyLocation,
   journeyRequest,
-  validateJourney,
   type LocationCandidate,
 } from "../../lib/journey-api";
 
@@ -73,16 +73,23 @@ type CountrySuggestion = {
   cities: { slug: string; name: Record<string, string> }[];
 };
 
-async function countrySuggestion(query: string, signal?: AbortSignal) {
-  return (
-    await journeyRequest<{ suggestion: CountrySuggestion | null }>(
-      `cities/country-suggestions?q=${encodeURIComponent(query)}`,
-      undefined,
-      undefined,
-      "GET",
-      signal,
-    )
-  ).suggestion;
+const countrySuggestions = new Map<string, { expires: number; result: Promise<CountrySuggestion | null> }>();
+
+function countrySuggestion(query: string) {
+  const country = countryReference(query);
+  if (!country) return Promise.resolve(null);
+  const key = country.country;
+  const cached = countrySuggestions.get(key);
+  if (cached && cached.expires > Date.now()) return cached.result;
+  const result = journeyRequest<{ suggestion: CountrySuggestion | null }>(
+    `cities/country-suggestions?q=${encodeURIComponent(country.names.en)}`,
+    undefined, undefined, "GET", undefined, "default",
+  ).then(({ suggestion }) => suggestion).catch((error) => {
+    if (countrySuggestions.get(key)?.result === result) countrySuggestions.delete(key);
+    throw error;
+  });
+  countrySuggestions.set(key, { expires: Date.now() + 300_000, result });
+  return result;
 }
 
 function CsvField({
@@ -308,6 +315,16 @@ export function UnifiedPlanner() {
     Record<string, CountrySuggestion>
   >({});
   const replacement = useRef<string | undefined>(undefined);
+  const submissionKey = useRef<{ payload: string; key: string } | null>(null);
+  const submitGeneration = async (request: GenerateRequest, token: string) => {
+    const payload = JSON.stringify(request);
+    if (submissionKey.current?.payload !== payload)
+      submissionKey.current = { payload, key: crypto.randomUUID() };
+    const result = await generateItinerary(request, token, submissionKey.current.key);
+    submissionKey.current = null;
+    window.dispatchEvent(new Event("cohorizon:job-status"));
+    return result;
+  };
   const [countryMatch, setCountryMatch] = useState<{
     key: string;
     suggestion: CountrySuggestion | null;
@@ -319,7 +336,7 @@ export function UnifiedPlanner() {
     if (cityComposing || query.length < 2) return;
     const abort = new AbortController();
     const timer = setTimeout(() => {
-      void countrySuggestion(query, abort.signal)
+      void countrySuggestion(query)
         .then((suggestion) => {
           if (!abort.signal.aborted)
             setCountryMatch({ key: placeKey(query), suggestion });
@@ -580,7 +597,7 @@ export function UnifiedPlanner() {
         }
         window.history.replaceState(null, "", "/plan");
         setBusy(true);
-        navigateResult(await generateItinerary(request, session.access_token));
+        navigateResult(await submitGeneration(request, session.access_token));
         sessionStorage.removeItem(INTENT_KEY);
       } catch (e) {
         if (
@@ -735,7 +752,7 @@ export function UnifiedPlanner() {
         return;
       }
       setForm(draft);
-      const checked = await validateJourney(request);
+      const checked = validatePlanning(request);
       setIssues(checked.issues);
       if (!checked.valid) return;
       const {
@@ -745,7 +762,7 @@ export function UnifiedPlanner() {
         await redirectToSignIn(request);
         return;
       }
-      navigateResult(await generateItinerary(request, session.access_token));
+      navigateResult(await submitGeneration(request, session.access_token));
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 401) {
         await createClient().auth.signOut();
