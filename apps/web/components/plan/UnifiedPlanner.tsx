@@ -171,6 +171,10 @@ export function UnifiedPlanner() {
   const [cityComposing, setCityComposing] = useState(false);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
   const [message, setMessage] = useState("");
+  const [proposalNotice, setProposalNotice] = useState<{
+    city: CountrySuggestion["cities"][number];
+    country: CountrySuggestion["names"];
+  }>();
   const [issues, setIssues] = useState<PlanningIssue[]>([]);
   const [error, setError] = useState("");
   const resumed = useRef(false);
@@ -641,11 +645,7 @@ export function UnifiedPlanner() {
           proposal.name[locale] ?? proposal.name.en ?? proposal.slug,
           proposal.name,
         );
-        setMessage(
-          locale === "vi"
-            ? `Đã đề xuất ${proposal.name.vi ?? proposal.name.en} (${match.names.vi}). Bạn có thể đổi điểm trước khi tạo.`
-            : `Suggested ${proposal.name.en} (${match.names.en}). You can change the stop before generating.`,
-        );
+        setProposalNotice({ city: proposal, country: match.names });
       }
       return true;
     }
@@ -1318,6 +1318,16 @@ export function UnifiedPlanner() {
                 </button>
               </div>
 
+              {proposalNotice &&
+                form.cities.some(
+                  (city) => city.slug === proposalNotice.city.slug,
+                ) && (
+                  <p role="status" className="text-sm text-primary">
+                    {locale === "vi"
+                      ? `Đã đề xuất ${proposalNotice.city.name.vi ?? proposalNotice.city.name.en} (${proposalNotice.country.vi}). Bạn có thể đổi điểm trước khi tạo.`
+                      : `Suggested ${proposalNotice.city.name.en} (${proposalNotice.country.en}). You can change the stop before generating.`}
+                  </p>
+                )}
               {message && (
                 <p role="status" className="text-sm text-primary">
                   <UiText text={message} />
