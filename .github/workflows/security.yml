@@ -27,7 +27,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -43,7 +43,7 @@ jobs:
           trap 'rm -rf "$scan_dir"' EXIT
           chmod 755 "$scan_dir"
           git archive HEAD | tar -x -C "$scan_dir"
-          docker run --rm -v "$scan_dir:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:b5918eb91b8d2473cec722f066abb4352e4ffdc4ec9f4283ec143aba9ec9ebc4 dir /repo --redact --no-banner
+          docker run --rm -v "$scan_dir:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:b5918eb91b8d2473cec722f066abb4352e4ffdc4ec9f4283ec143aba9ec9ebc4 dir /repo --config /repo/.gitleaks.toml --redact --no-banner
       - name: Check for new high or critical dependency advisories
         env:
           BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}

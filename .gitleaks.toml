@@ -1,0 +1,21 @@
+title = "CoHorizon secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact synthetic guest identifiers in search-draft fixtures"
+condition = "AND"
+paths = ['''(?:^|/)search-draft(?:s\.controller|\.dto|\.service)\.test\.(?:ts|js)$''']
+regexTarget = "secret"
+regexes = ['''^guest-key-(?:1234567890|123456)$''']
+
+[[rules.allowlists]]
+description = "Generated next-intl message identifier for an existing role description"
+condition = "AND"
+paths = ['''(?:^|/)apps/web/messages/ui-sources\.json$''']
+regexTarget = "secret"
+regexes = ['''^t20469f34b8d5$''']
