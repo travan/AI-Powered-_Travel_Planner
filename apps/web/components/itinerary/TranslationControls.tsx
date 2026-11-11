@@ -7,6 +7,7 @@ import {
   type ItineraryTranslation,
   type PlanningJob,
 } from "@travel/types";
+import { useAppLanguage } from "../i18n/LanguageProvider";
 import { useIssueText } from "../i18n/UiText";
 import { ApiRequestError } from "../../lib/api";
 import { journeyRequest } from "../../lib/journey-api";
@@ -38,6 +39,7 @@ export function TranslationControls({
 }) {
   const t = useTranslations("translations");
   const issueText = useIssueText();
+  const { locale, setLocale } = useAppLanguage();
   const [data, setData] = useState<TranslationList | null>(null);
   const [status, setStatus] = useState<"idle" | "queued" | "processing">(
     "idle",
@@ -168,18 +170,35 @@ export function TranslationControls({
     : (data?.translations.filter(
         (entry) => !entry.stale && entry.source_version === data.source_version,
       ) ?? []);
-  const choose = (value: string) => {
-    const entry = available.find((entry) => entry.target_locale === value);
+  useEffect(() => {
+    const entry =
+      plan.locale === locale || sourceChanged
+        ? undefined
+        : data?.translations.find(
+            (translation) =>
+              !translation.stale &&
+              translation.source_version === data.source_version &&
+              translation.target_locale === locale,
+          );
     try {
       onChange(
         entry && data
           ? applyItineraryTranslation(data.source, entry.texts)
           : null,
       );
-      setSelected(value);
-      setError(null);
+      setSelected(entry?.target_locale ?? "original");
     } catch {
       setError({ code: "TRANSLATION_INVALID_TEXT" });
+    }
+  }, [data, locale, onChange, plan.locale, sourceChanged]);
+
+  const choose = (value: string) => {
+    const language = value === "original" ? plan.locale : value;
+    setError(null);
+    if (language === "vi" || language === "en") setLocale(language);
+    else {
+      onChange(null);
+      setSelected("original");
     }
   };
   return (

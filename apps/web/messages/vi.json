@@ -993,6 +993,8 @@
     "discard_unsaved_changes": "Bỏ thay đổi chưa lưu"
   },
   "issues": {
+    "JOURNEY_DAY_ORDER": "Lịch từng ngày chưa đi qua đủ điểm đến theo đúng thứ tự. Vui lòng tạo lại.",
+    "JOURNEY_LEG_MISSING": "Thiếu chặng {from} → {to}. Vui lòng tạo lại.",
     "ORIGIN_REQUIRED": "Chọn điểm xuất phát để lập chặng đi và về.",
     "ENDPOINT_REQUIRED": "Chọn điểm kết thúc chuyến đi.",
     "DESTINATION_REQUIRED": "Chọn ít nhất một điểm đến.",

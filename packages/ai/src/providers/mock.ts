@@ -454,7 +454,10 @@ function buildMockJourney(
         | "motorbike"
         | "ferry")
     : ("other" as const);
-  const cityNames = [...new Set(days.map((d) => d.city))];
+  const routeCities = days
+    .map((day) => day.city)
+    .filter((city, index, stops) => city !== stops[index - 1]);
+  const cityNames = [...new Set(routeCities)];
   return {
     title: overview.title,
     overview: text(
@@ -486,13 +489,13 @@ function buildMockJourney(
           "Suggested outbound journey — verify details",
         ),
         from: origin,
-        to: cityNames[0] ?? "",
+        to: routeCities[0] ?? "",
         recommended_mode: mode,
         options: [],
       },
-      ...cityNames.slice(1).map((city, i) => ({
+      ...routeCities.slice(1).map((city, i) => ({
         segment: text("Liên tỉnh đề xuất", "Suggested intercity journey"),
-        from: cityNames[i]!,
+        from: routeCities[i]!,
         to: city,
         recommended_mode: mode,
         options: [],
@@ -502,7 +505,7 @@ function buildMockJourney(
           "Chặng về đề xuất — cần xác minh",
           "Suggested return journey — verify details",
         ),
-        from: cityNames.at(-1) ?? "",
+        from: routeCities.at(-1) ?? "",
         to: end,
         recommended_mode: mode,
         options: [],

@@ -53,6 +53,34 @@ export class PostgresCityRepository implements CityRepository {
     return result.rows.map(mapCity);
   }
 
+  async routeCities(values: string[]): Promise<Map<string, City>> {
+    if (!values.length) return new Map();
+    const { rows } = await this.sql.query<CityRow & { input: string }>(
+      `select input.value as input, city.*
+       from unnest($1::text[], $2::text[]) as input(value, lookup_key)
+       cross join lateral (
+         select slug, name, country, timezone, currency, lat, lon, popular
+         from cities
+         where slug=input.value or lookup_keys @> array[input.lookup_key]::text[]
+         order by (country<>'' and lat is not null and lon is not null) desc,
+                  (slug=input.value) desc, slug
+         limit 1
+       ) city`,
+      [values, values.map(normalizeCityInput)],
+    );
+    return new Map(rows.map((row) => [row.input, mapCity(row)]));
+  }
+
+  async byCountry(country: string): Promise<City[]> {
+    const result = await this.sql.query<CityRow>(
+      `select slug, name, country, timezone, currency, lat, lon, popular
+       from cities where country = $1 and lat is not null and lon is not null
+       order by popular desc, slug limit 10`,
+      [country],
+    );
+    return result.rows.map(mapCity);
+  }
+
   async popular(): Promise<City[]> {
     const result = await this.sql.query<CityRow>(
       `select slug, name, country, timezone, currency, lat, lon, popular

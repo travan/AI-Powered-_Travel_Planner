@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:apps="http://schemas.google.com/apps/2006">
+  <title>Mail Filters</title>
+  <id>tag:mail.google.com,2008:filters:planner-feedback</id>
+  <updated>2026-11-10T00:00:00Z</updated>
+  <author><name>Horizon</name></author>
+  <entry>
+    <category term="filter"/>
+    <title>Mail Filter</title>
+    <id>tag:mail.google.com,2008:filter:planner-feedback</id>
+    <updated>2026-11-10T00:00:00Z</updated>
+    <content/>
+    <apps:property name="hasTheWord" value="subject:&quot;Horizon Planner Feedback&quot;"/>
+    <apps:property name="label" value="Phản hồi lịch trình"/>
+    <apps:property name="sizeOperator" value="s_sl"/>
+    <apps:property name="sizeUnit" value="s_smb"/>
+  </entry>
+  <entry>
+    <category term="filter"/>
+    <title>Mail Filter</title>
+    <id>tag:mail.google.com,2008:filter:planner-feedback-priority</id>
+    <updated>2026-11-10T00:00:00Z</updated>
+    <content/>
+    <apps:property name="hasTheWord" value="subject:&quot;Horizon Planner Feedback Priority&quot;"/>
+    <apps:property name="shouldStar" value="true"/>
+    <apps:property name="sizeOperator" value="s_sl"/>
+    <apps:property name="sizeUnit" value="s_smb"/>
+  </entry>
+</feed>

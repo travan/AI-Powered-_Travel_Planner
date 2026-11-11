@@ -141,6 +141,12 @@ export class AppConfigService {
     return {
       provider,
       resetUrl: new URL("/reset-password", appUrl).toString(),
+      ...this.smtp,
+    };
+  }
+
+  get smtp() {
+    return {
       smtpHost: process.env.SMTP_HOST?.trim(),
       smtpPort: parsePositiveInt(process.env.SMTP_PORT, 587, "SMTP_PORT"),
       smtpSecure: parseBoolean(process.env.SMTP_SECURE, false),

@@ -4,6 +4,7 @@ import { httpServerHandler } from "cloudflare:node";
 import { buildApp } from "../dist/app.js";
 import { workerRequestContext } from "../dist/cloudflare/request-context.js";
 import { JourneyService } from "../dist/modules/itinerary/journey/journey.service.js";
+import { FeedbackMailWorker } from "../dist/modules/itinerary/learning/feedback-mail.worker.js";
 import { CityCatalogWorker } from "../dist/modules/cities/application/city-catalog.worker.js";
 
 import { withWorkerLogs, logEvent } from "../dist/observability/logger.js";
@@ -49,6 +50,7 @@ export default {
   async scheduled(_event, env, ctx) {
     return withWorkerLogs((task) => ctx.waitUntil(task), () => inRequest(env, ctx, async () => {
       const { app } = await application();
+      await app.get(FeedbackMailWorker).processNext();
       await app.get(JourneyService).processNextJob();
       await app.get(CityCatalogWorker).processNextJob();
     }), true);

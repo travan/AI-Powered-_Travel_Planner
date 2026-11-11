@@ -17,7 +17,7 @@ The application uses stored history to improve the context supplied to the exist
 
 ## User controls and APIs
 
-The itinerary and saved-trip panels include feedback/rating, a memory toggle, dataset-preparation opt-in and a JSONL download. Expense entry includes a category selector.
+The itinerary and saved-trip panels collect ratings and feedback. The profile page contains the memory toggle, dataset-preparation opt-in and JSONL download. Expense entry includes a category selector.
 
 - `GET/PATCH /api/learning/settings`: authenticated personal settings. Memory defaults on; training dataset consent defaults off.
 - `POST /api/itinerary/:id/feedback`: owner-only rating 1–5 and optional note.
@@ -25,6 +25,14 @@ The itinerary and saved-trip panels include feedback/rating, a memory toggle, da
 - `GET /api/learning/dataset`: private, non-cacheable JSONL export requiring explicit training consent.
 
 Disabling memory stops historical context from being used for generation; ordinary saved planning history remains available as part of the app. Revoking training consent immediately disables further exports through these tools. Already downloaded files remain under the recipient's control.
+
+## Feedback email delivery
+
+Apply the backend migrations before releasing the feedback endpoint. Configure the existing server-only `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, `SMTP_USER` and `SMTP_PASSWORD` on the API runtime. Use a verified sender and an encrypted public SMTP endpoint for the Cloudflare Worker, such as implicit TLS on port 465. The existing Worker cron drains the queue. Nest drains it on a local timer. A missing SMTP configuration leaves requests queued.
+
+Feedback submissions and mail queue entries commit together. Identical resubmissions of the current rating, note and snapshot reuse the saved feedback. The worker retries failures and uses the same Message-ID across attempts. A crash after the relay accepts a message and before the database records delivery can cause a repeat. The queue clears its copy of the message text after delivery.
+
+Create the Gmail label **Phản hồi lịch trình**, then import [planner-feedback-gmail.xml](planner-feedback-gmail.xml) from **Settings → Filters and Blocked Addresses → Import filters**. The filters label subjects containing `Horizon Planner Feedback` and star subjects containing `Horizon Planner Feedback Priority` for ratings 1–3. After configuring SMTP and the filters, submit a test rating of 2 and check the inbox, label, star and delivery timestamp in `planner_feedback_mail`.
 
 ## Dataset quality and privacy
 
