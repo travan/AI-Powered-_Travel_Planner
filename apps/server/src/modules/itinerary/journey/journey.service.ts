@@ -34,6 +34,8 @@ import type {
   Itinerary,
   PlanningJob,
   PlanningJobSummary,
+  PlanningCriteria,
+  ItineraryDay,
   PlanRevision,
 } from "@travel/types";
 import * as travelTypes from "@travel/types";
@@ -141,17 +143,55 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
   async listJobs(userId: string): Promise<PlanningJobSummary[]> {
     // Uses itinerary_jobs_user_idx; exclude translation and revision jobs.
-    const result = await this.sql.query<PlanningJobSummary>(
-      `select id::text,status,stage,attempts,itinerary_id::text,created_at,
-        coalesce(payload->'dto'->'city_names', '[]'::jsonb) as city_names,
-        coalesce((payload->'dto'->>'num_days')::int,
-          (payload->'dto'->>'end_date')::date - (payload->'dto'->>'start_date')::date + 1,
+    const result = await this.sql.query<
+      PlanningJobSummary & {
+        journey?: PlanningCriteria["journey"];
+        city_slugs?: string[];
+        saved_days?: ItineraryDay[];
+      }
+    >(
+      `select j.id::text,j.status,j.stage,j.attempts,j.itinerary_id::text,j.created_at,
+        coalesce(j.payload->'dto'->'city_names', '[]'::jsonb) as city_names,
+        coalesce(i.result->'planning'->'journey', j.payload->'dto'->'planning'->'journey') as journey,
+        coalesce(nullif(i.result->'planning'->'journey'->'destinations', '[]'::jsonb), j.payload->'dto'->'cities') as city_slugs,
+        case when j.payload->'dto'->'cities' is null then i.result->'days' end as saved_days,
+        coalesce((j.payload->'dto'->>'num_days')::int,
+          (j.payload->'dto'->>'end_date')::date - (j.payload->'dto'->>'start_date')::date + 1,
           0) as num_days
-       from itinerary_jobs where user_id=$1 and kind='generate'
-       order by created_at desc, id desc limit 20`,
+       from itinerary_jobs j
+       left join itineraries i on i.id=j.itinerary_id and i.user_id=j.user_id::text
+       where j.user_id=$1 and j.kind='generate'
+       order by j.created_at desc, j.id desc limit 20`,
       [userId],
     );
-    return result.rows;
+    const jobs = result.rows.map(
+      ({ journey, city_slugs, saved_days, ...job }) => {
+        const stops = city_slugs?.length
+          ? city_slugs.map((slug, index) => ({
+              slug,
+              label: job.city_names[index] ?? slug,
+            }))
+          : (saved_days?.map((day) => ({
+              slug: day.city_slug,
+              label: day.city,
+              names: day.city_names,
+            })) ?? job.city_names.map((label) => ({ slug: undefined, label })));
+        return { job, journey, stops };
+      },
+    );
+    const cities = await this.itineraries.lookupRouteCities(
+      jobs.flatMap(({ journey, stops }) =>
+        [
+          ...stops.flatMap((stop) => [stop.slug, stop.label]),
+          journey?.origin.label,
+          journey?.endpoint?.label,
+        ].filter((value): value is string => !!value),
+      ),
+    );
+    return jobs.map(({ job, journey, stops }) => ({
+      ...job,
+      route: this.itineraries.describeRoute(journey, stops, cities),
+    }));
   }
 
   async getJob(userId: string, id: string) {
@@ -251,11 +291,16 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     } catch (error) {
-      if (process.env.NODE_ENV === "production") logEvent("journey.job_failed", "error", { jobId: job?.id, code: "JOURNEY_JOB_FAILED" });
-      else this.logger.error(
-        `Journey job ${job?.id ?? "claim"} failed`,
-        error instanceof Error ? error.message : String(error),
-      );
+      if (process.env.NODE_ENV === "production")
+        logEvent("journey.job_failed", "error", {
+          jobId: job?.id,
+          code: "JOURNEY_JOB_FAILED",
+        });
+      else
+        this.logger.error(
+          `Journey job ${job?.id ?? "claim"} failed`,
+          error instanceof Error ? error.message : String(error),
+        );
       const terminal =
         error instanceof HttpException &&
         [400, 403, 404, 409].includes(error.getStatus());
@@ -1117,7 +1162,16 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       );
     const saved = await this.sql.query<{ id: string }>(
       `insert into trip_plan_revisions(trip_id,user_id,base_version,previous_plan,candidate,diff,instruction,scope) values($1,$2,$3,$4,$5,$6,$7,$8) returning id::text`,
-      [tripId, userId, before.version, before, candidate, diff, dto.instruction ?? null, dto.scope],
+      [
+        tripId,
+        userId,
+        before.version,
+        before,
+        candidate,
+        diff,
+        dto.instruction ?? null,
+        dto.scope,
+      ],
     );
     return saved.rows[0]!.id;
   }

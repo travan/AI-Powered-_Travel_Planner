@@ -19,6 +19,11 @@ import type {
   LearningSettingsDto,
   PlannerFeedbackDto,
 } from "./learning.dto.js";
+import * as travelTypes from "@travel/types";
+const { itineraryRoute, routeLabels } =
+  (travelTypes as unknown as { default?: typeof travelTypes }).default ??
+  travelTypes;
+
 export function safeMemoryText(text: unknown, max = 700): string {
   return typeof text === "string"
     ? text
@@ -227,9 +232,36 @@ export class PlannerLearningService {
         }
       }
     }
+    const route = itineraryRoute(snapshot);
+    const cityRoute = routeLabels(
+      {
+        origin:
+          route.origin?.names && route.origin.slug ? route.origin : undefined,
+        destinations: route.destinations,
+        end: route.end?.names && route.end.slug ? route.end : undefined,
+      },
+      snapshot.locale ?? "vi",
+    ).join(" → ");
     await this.sql.query(
-      `insert into planner_feedback(user_id,itinerary_id,rating,note,plan_snapshot) values($1,$2,$3,$4,$5) on conflict(user_id,itinerary_id) do update set rating=excluded.rating,note=excluded.note,plan_snapshot=excluded.plan_snapshot,updated_at=now()`,
-      [userId, itineraryId, input.rating, input.note ?? "", snapshot],
+      `with feedback as (
+         insert into planner_feedback(user_id,itinerary_id,rating,note,plan_snapshot)
+         values($1,$2,$3,$4,$5)
+         on conflict(user_id,itinerary_id) do update set rating=excluded.rating,
+           note=excluded.note,plan_snapshot=excluded.plan_snapshot,updated_at=now()
+         where (planner_feedback.rating,planner_feedback.note,planner_feedback.plan_snapshot)
+           is distinct from (excluded.rating,excluded.note,excluded.plan_snapshot)
+         returning user_id,itinerary_id,rating,note
+       )
+       insert into planner_feedback_mail(user_id,itinerary_id,rating,note,route)
+       select user_id,itinerary_id,rating,note,$6 from feedback`,
+      [
+        userId,
+        itineraryId,
+        input.rating,
+        input.note ?? "",
+        snapshot,
+        cityRoute,
+      ],
     );
     return { saved: true };
   }

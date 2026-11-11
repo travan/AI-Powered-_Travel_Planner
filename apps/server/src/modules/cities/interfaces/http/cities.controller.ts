@@ -31,6 +31,11 @@ export class CitiesController {
     return this.cities.search(query.q);
   }
 
+  @Get("country-suggestions")
+  async countrySuggestions(@Query() query: CitySearchQueryDto) {
+    return { suggestion: await this.cities.countrySuggestions(query.q) };
+  }
+
   @Get("popular")
   popular() {
     return this.cities.popular();

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { PlanningJobSummary } from "@travel/types";
+import { routeLabels, type PlanningJobSummary } from "@travel/types";
 import { createClient } from "../../lib/supabase/client";
 import { getPlanningRequests } from "../../lib/journey-api";
 import { useAppLanguage } from "../i18n/LanguageProvider";
@@ -113,7 +113,10 @@ export function RecentPlanningRequests() {
               </span>
               <div className="min-w-0">
                 <p className="break-words font-headline text-base font-extrabold text-on-surface sm:text-lg">
-                  {request.city_names.join(" → ") || t("fallback")}
+                  {(request.route
+                    ? routeLabels(request.route, locale)
+                    : request.city_names
+                  ).join(" → ") || t("fallback")}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-on-surface-variant sm:text-sm">
                   <time dateTime={request.created_at}>

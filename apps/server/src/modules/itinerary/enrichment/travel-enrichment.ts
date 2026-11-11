@@ -9,7 +9,7 @@ import type {
 } from "@travel/types";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
 import * as types from "@travel/types";
-const { mapUrl, timelineMinutes, activityMinutes, mealSlot } =
+const { mapUrl, timelineMinutes, activityMinutes, mealSlot, placeKey } =
   (types as unknown as { default?: typeof types }).default ?? types;
 const norm = (s: string) =>
   s
@@ -21,7 +21,9 @@ const norm = (s: string) =>
 export function resolveCity(cities: CityPlanningData[], value?: string) {
   return value
     ? cities.find((c) =>
-        [c.slug, ...Object.values(c.name)].some((n) => norm(n) === norm(value)),
+        [c.slug, ...Object.values(c.name)].some(
+          (n) => placeKey(n) === placeKey(value),
+        ),
       )
     : undefined;
 }
@@ -151,7 +153,8 @@ export function enrichTravel(
         : { source: "ai_suggestion" };
   };
   for (const day of out.days) {
-    const city = resolveCity(cities, day.city_slug ?? day.city);
+    const city =
+      resolveCity(cities, day.city_slug) ?? resolveCity(cities, day.city);
     if (city) {
       day.city_slug = city.slug;
       day.city_names = city.name;
@@ -254,7 +257,10 @@ export function enrichTravel(
     r.ig_search_link = "";
   }
   const planning = input?.planning ?? out.planning;
-  if (planning?.journey.return_to_origin) {
+  if (
+    planning?.journey.return_to_origin &&
+    (planning.journey.destinations?.length ?? 0) <= 1
+  ) {
     for (const kind of ["flight", "airport_transfer"] as const) {
       const legs = out.transport_summary.filter(
         (leg) =>
@@ -305,11 +311,12 @@ export function enrichTravel(
       (input || leg.price.status !== "user_confirmed")
     )
       leg.price.amount = null;
-    leg.from_city_slug = resolveCity(
-      cities,
-      leg.from_city_slug ?? leg.from,
+    leg.from_city_slug = (
+      resolveCity(cities, leg.from) ?? resolveCity(cities, leg.from_city_slug)
     )?.slug;
-    leg.to_city_slug = resolveCity(cities, leg.to_city_slug ?? leg.to)?.slug;
+    leg.to_city_slug = (
+      resolveCity(cities, leg.to) ?? resolveCity(cities, leg.to_city_slug)
+    )?.slug;
     if (leg.from_city_slug)
       leg.from =
         cities.find((c) => c.slug === leg.from_city_slug)?.name.en ?? leg.from;
@@ -350,6 +357,109 @@ export function enrichTravel(
     );
   }
   return out;
+}
+
+export function itineraryRouteIssues(
+  plan: Itinerary,
+  input: ItineraryInput,
+  cities: CityPlanningData[],
+): PlanningIssue[] {
+  const journey = input.planning?.journey;
+  if (!journey) return [];
+  const identity = (label: string, slug?: string) =>
+    resolveCity(cities, label)?.slug ??
+    resolveCity(cities, slug)?.slug ??
+    placeKey(label);
+  const origin = identity(
+    journey.origin.label,
+    journey.origin.names ? journey.origin.city_slug : undefined,
+  );
+  const endpoint = journey.return_to_origin ? journey.origin : journey.endpoint;
+  const end =
+    endpoint &&
+    identity(endpoint.label, endpoint.names ? endpoint.city_slug : undefined);
+  const expected = journey.destinations;
+  const days = plan.days ?? [];
+  const visits: string[] = [];
+  for (const [index, day] of days.entries()) {
+    const stop = identity(day.city, day.city_slug);
+    const travelOnly = day.activities.every(
+      (activity) =>
+        ["transfer", "rest", "meal", "check_in", "check_out"].includes(
+          activity.kind ?? "",
+        ) || ["transport", "food", "accommodation"].includes(activity.category),
+    );
+    if (
+      !expected.includes(stop) &&
+      travelOnly &&
+      ((index === 0 && stop === origin) ||
+        (index === days.length - 1 && stop === end))
+    )
+      continue;
+    if (visits.at(-1) !== stop) visits.push(stop);
+  }
+
+  const issues: PlanningIssue[] = [];
+  const vi = input.locale === "vi";
+  if (
+    visits.length !== expected.length ||
+    visits.some((stop, index) => stop !== expected[index])
+  )
+    issues.push({
+      code: "JOURNEY_DAY_ORDER",
+      severity: "error",
+      message: vi
+        ? "Lịch từng ngày chưa đi qua đủ điểm đến theo đúng thứ tự. Vui lòng tạo lại."
+        : "The daily schedule does not cover the requested stops in order. Generate it again.",
+    });
+  const edges = new Map<string, Set<string>>();
+  for (const leg of plan.transport_summary ?? []) {
+    const from = identity(leg.from, leg.from_city_slug);
+    const to = identity(leg.to, leg.to_city_slug);
+    if (!from || !to) continue;
+    const next = edges.get(from) ?? new Set<string>();
+    next.add(to);
+    edges.set(from, next);
+  }
+  const stops = [origin, ...expected, end].filter(
+    (stop): stop is string => !!stop,
+  );
+  const required = new Set(stops);
+  const reachable = (from: string, to: string) => {
+    const pending = [from];
+    const visited = new Set(pending);
+    for (const current of pending) {
+      if (current === to) return true;
+      for (const next of edges.get(current) ?? []) {
+        if (visited.has(next) || (next !== to && required.has(next))) continue;
+        visited.add(next);
+        pending.push(next);
+      }
+    }
+    return false;
+  };
+  for (let index = 1; index < stops.length; index++) {
+    const from = stops[index - 1]!,
+      to = stops[index]!;
+    if (reachable(from, to)) continue;
+    const label = (stop: string) =>
+      cities.find((city) => city.slug === stop)?.name[vi ? "vi" : "en"] ??
+      (stop === origin
+        ? journey.origin.label
+        : stop === end
+          ? endpoint?.label
+          : undefined) ??
+      stop;
+    issues.push({
+      code: "JOURNEY_LEG_MISSING",
+      severity: "error",
+      params: { from: label(from), to: label(to) },
+      message: vi
+        ? `Thiếu chặng ${label(from)} → ${label(to)}. Vui lòng tạo lại.`
+        : `Missing the leg from ${label(from)} to ${label(to)}. Generate it again.`,
+    });
+  }
+  return issues;
 }
 
 const minutes = timelineMinutes;

@@ -16,6 +16,7 @@ const mock = vi.hoisted(() => ({
   push: vi.fn(),
   createDraft: vi.fn(),
   quote: vi.fn(),
+  lookup: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mock.push }),
@@ -23,7 +24,9 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@travel/hooks", () => ({
   useCitySearch: () => ({ suggestions: [] }),
-  usePopularCities: () => ({ cities: [] }),
+  usePopularCities: () => ({
+    cities: [{ slug: "ha-noi", name: { en: "Hanoi", vi: "Hà Nội" } }],
+  }),
 }));
 vi.mock("../../../../../../apps/web/components/layout/SiteHeader", () => ({
   SiteHeader: () => null,
@@ -47,6 +50,7 @@ vi.mock("../../../../../../apps/web/lib/api", async (original) => ({
 }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   validateJourney: mock.validate,
+  journeyRequest: mock.lookup,
   resolveJourneyLocation: vi.fn(),
 }));
 vi.mock(
@@ -113,10 +117,59 @@ beforeEach(() => {
     data: { session: { access_token: "test-token" } },
   });
   mock.validate.mockResolvedValue({ valid: true, issues: [] });
+  mock.lookup.mockResolvedValue({ suggestion: null });
   mock.generate.mockResolvedValue({ status: "queued", job_id: "job-1" });
 });
 afterEach(cleanup);
 describe("compact planner submission", () => {
+  it("previews the country proposal, replaces it in place, and displays one language", async () => {
+    const draft = emptyPlanner();
+    draft.planning.journey.origin.label = "Hanoi";
+    draft.cities = [
+      {
+        slug: "beijing",
+        name: "Beijing",
+        names: { en: "Beijing", vi: "Bắc Kinh" },
+      },
+    ];
+    localStorage.setItem(key, JSON.stringify(draft));
+    mock.lookup.mockResolvedValue({
+      suggestion: {
+        country: "RU",
+        names: { en: "Russia", vi: "Nga" },
+        cities: [
+          { slug: "moscow", name: { en: "Moscow", vi: "Moskva" } },
+          { slug: "kazan", name: { en: "Kazan", vi: "Kazan" } },
+        ],
+      },
+    });
+    show();
+    const destination = screen.getByTestId("web-plan-city-input");
+    fireEvent.change(destination, { target: { value: "Russia" } });
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() =>
+      expect(screen.getByTestId("web-plan-route").textContent).toBe(
+        "Hà Nội → Bắc Kinh → Moskva → Hà Nội",
+      ),
+    );
+    expect(mock.generate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(screen.getByTestId("web-plan-route").textContent).toBe(
+      "Hanoi → Beijing → Moscow → Hanoi",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Change city" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kazan (Russia)" }));
+    expect(screen.getByTestId("web-plan-route").textContent).toBe(
+      "Hanoi → Beijing → Kazan → Hanoi",
+    );
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
+    expect(mock.generate.mock.calls[0]![0]).toMatchObject({
+      cities: ["beijing", "kazan"],
+      locale: "en",
+    });
+  });
+
   it("initially shows two text fields with all options collapsed and no cache control", () => {
     show();
     expect(

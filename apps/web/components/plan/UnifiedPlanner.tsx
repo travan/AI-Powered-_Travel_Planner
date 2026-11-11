@@ -36,6 +36,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   TRIP_STYLES,
   plannerToday,
+  journeyRoute,
+  routeLabels,
+  placeKey,
   createManualCity,
   validatePlanning,
   type GenerateRequest,
@@ -54,6 +57,7 @@ import {
 } from "../../lib/api";
 import {
   resolveJourneyLocation,
+  journeyRequest,
   validateJourney,
   type LocationCandidate,
 } from "../../lib/journey-api";
@@ -63,6 +67,23 @@ import { RecentPlanningRequests } from "./RecentPlanningRequests";
 
 const DRAFT_KEY = "horizon.planner.draft.v3";
 const INTENT_KEY = "horizon.search.intent";
+type CountrySuggestion = {
+  country: string;
+  names: Record<"en" | "vi", string>;
+  cities: { slug: string; name: Record<string, string> }[];
+};
+
+async function countrySuggestion(query: string, signal?: AbortSignal) {
+  return (
+    await journeyRequest<{ suggestion: CountrySuggestion | null }>(
+      `cities/country-suggestions?q=${encodeURIComponent(query)}`,
+      undefined,
+      undefined,
+      "GET",
+      signal,
+    )
+  ).suggestion;
+}
 
 function CsvField({
   label,
@@ -143,8 +164,10 @@ export function UnifiedPlanner() {
     [locating, setLocating] = useState(false);
   const [dateNotice, setDateNotice] = useState(false);
   const cityQuery = form.destinationQuery ?? "";
-  const setCityQuery = (value: string) =>
+  const setCityQuery = (value: string) => {
+    if (!value) replacement.current = undefined;
     setForm((draft) => ({ ...draft, destinationQuery: value }));
+  };
   const [cityComposing, setCityComposing] = useState(false);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
   const [message, setMessage] = useState("");
@@ -277,6 +300,80 @@ export function UnifiedPlanner() {
     process.env["NEXT_PUBLIC_API_URL"] ?? "",
   );
   const p = form.planning;
+  const [countryProposals, setCountryProposals] = useState<
+    Record<string, CountrySuggestion>
+  >({});
+  const replacement = useRef<string | undefined>(undefined);
+  const [countryMatch, setCountryMatch] = useState<{
+    key: string;
+    suggestion: CountrySuggestion | null;
+  }>();
+  const country =
+    countryMatch?.key === placeKey(cityQuery) ? countryMatch.suggestion : null;
+  useEffect(() => {
+    const query = cityQuery.trim();
+    if (cityComposing || query.length < 2) return;
+    const abort = new AbortController();
+    const timer = setTimeout(() => {
+      void countrySuggestion(query, abort.signal)
+        .then((suggestion) => {
+          if (!abort.signal.aborted)
+            setCountryMatch({ key: placeKey(query), suggestion });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
+  }, [cityQuery, cityComposing]);
+  const apiBase = process.env["NEXT_PUBLIC_API_URL"] ?? "";
+  const { suggestions: origins } = useCitySearch(
+    p.journey.origin.source === "manual" ? p.journey.origin.label : "",
+    apiBase,
+  );
+  const { suggestions: endpoints } = useCitySearch(
+    p.journey.endpoint?.label ?? "",
+    apiBase,
+  );
+  const displayLocation = (
+    location: PlanningCriteria["journey"]["origin"],
+    options: typeof origins,
+  ) => {
+    const matches = [
+      ...new Map(options.map((city) => [city.slug, city])).values(),
+    ].filter((city) =>
+      [city.slug, ...Object.values(city.name)].some(
+        (name) => placeKey(name) === placeKey(location.label),
+      ),
+    );
+    const match = matches.length === 1 ? matches[0] : undefined;
+    return match
+      ? { ...location, city_slug: match.slug, names: match.name }
+      : location;
+  };
+  const destinationLabels = (city: PlannerDraft["cities"][number]) =>
+    city.names ??
+    [...popularCities, ...suggestions].find((entry) => entry.slug === city.slug)
+      ?.name;
+  const previewJourney = {
+    ...p.journey,
+    origin: displayLocation(p.journey.origin, [...origins, ...popularCities]),
+    endpoint:
+      p.journey.endpoint &&
+      displayLocation(p.journey.endpoint, [...endpoints, ...popularCities]),
+  };
+  const previewRoute = routeLabels(
+    journeyRoute(
+      previewJourney,
+      form.cities.map((city) => ({
+        slug: city.slug,
+        label: city.name,
+        names: destinationLabels(city),
+      })),
+    ),
+    locale,
+  );
   const change = <K extends keyof PlanningCriteria>(
     key: K,
     value: Partial<PlanningCriteria[K]>,
@@ -312,11 +409,14 @@ export function UnifiedPlanner() {
               },
             },
           };
-    return preparePlannerSubmission(
-      { ...draft, destinationQuery },
-      locale,
-      suggestions,
-    );
+    return {
+      ...preparePlannerSubmission(
+        { ...draft, destinationQuery },
+        locale,
+        suggestions,
+      ),
+      pendingDestination: destinationQuery.trim(),
+    };
   };
   const redirectToSignIn = async (request: GenerateRequest) => {
     const guestKey =
@@ -501,15 +601,55 @@ export function UnifiedPlanner() {
     const labels =
       names ??
       [...popularCities, ...suggestions].find((c) => c.slug === slug)?.name;
-    setForm((f) => ({
-      ...f,
-      cities: mergePlannerCity(f.cities, {
-        slug,
-        name,
-        ...(labels ? { names: labels } : {}),
-      }),
+    const replacing = replacement.current;
+    replacement.current = undefined;
+    const city = { slug, name, ...(labels ? { names: labels } : {}) };
+    setForm((draft) => ({
+      ...draft,
+      cities: replacing
+        ? draft.cities
+            .map((entry) => (entry.slug === replacing ? city : entry))
+            .reduce<
+              PlannerDraft["cities"]
+            >((selected, entry) => mergePlannerCity(selected, entry), [])
+        : mergePlannerCity(draft.cities, city),
       destinationQuery: "",
     }));
+  };
+  const selectCountryCity = (
+    match: CountrySuggestion,
+    slug: string,
+    name: string,
+    names?: Record<string, string>,
+  ) => {
+    setCountryProposals((previous) => ({ ...previous, [slug]: match }));
+    addCity(slug, name, names);
+  };
+  const acceptDestination = async (query: string) => {
+    const key = placeKey(query);
+    const match =
+      countryMatch?.key === key
+        ? countryMatch.suggestion
+        : await countrySuggestion(query).catch(() => null);
+    if (match) {
+      setCountryMatch({ key, suggestion: match });
+      const proposal = match.cities[0];
+      if (proposal) {
+        selectCountryCity(
+          match,
+          proposal.slug,
+          proposal.name[locale] ?? proposal.name.en ?? proposal.slug,
+          proposal.name,
+        );
+        setMessage(
+          locale === "vi"
+            ? `Đã đề xuất ${proposal.name.vi ?? proposal.name.en} (${match.names.vi}). Bạn có thể đổi điểm trước khi tạo.`
+            : `Suggested ${proposal.name.en} (${match.names.en}). You can change the stop before generating.`,
+        );
+      }
+      return true;
+    }
+    return false;
   };
   const locate = () => {
     setError("");
@@ -573,14 +713,28 @@ export function UnifiedPlanner() {
     if (currencyBusy || currencyFailure) return;
     setBusy(true);
     setError("");
-    const { draft, request } = prepareCurrent();
-    setForm(draft);
+    const { draft, request, pendingDestination } = prepareCurrent();
     try {
       const local = validatePlanning(request);
       if (!local.valid) {
         setIssues(local.issues);
         return;
       }
+      if (pendingDestination && (await acceptDestination(pendingDestination)))
+        return;
+      // Older drafts may contain an unresolved country saved as a free-text city.
+      for (const city of form.cities.filter(
+        (entry) =>
+          !entry.names && entry.slug === createManualCity(entry.name).slug,
+      )) {
+        const match = await countrySuggestion(city.name).catch(() => null);
+        if (!match) continue;
+        replacement.current = city.slug;
+        setForm({ ...draft, destinationQuery: city.name });
+        setCountryMatch({ key: placeKey(city.name), suggestion: match });
+        return;
+      }
+      setForm(draft);
       const checked = await validateJourney(request);
       setIssues(checked.issues);
       if (!checked.valid) return;
@@ -786,15 +940,7 @@ export function UnifiedPlanner() {
         {" "}
         <UiText id="td5c955769085" fallback="Chuyến đi của bạn" />{" "}
       </h2>
-      <p>
-        {[
-          p.journey.origin.label || t("Chưa chọn điểm đầu"),
-          ...form.cities.map((c) => c.name),
-          p.journey.return_to_origin
-            ? p.journey.origin.label || t("Quay về điểm đầu")
-            : p.journey.endpoint?.label || t("Chưa chọn điểm cuối"),
-        ].join(" → ")}
-      </p>
+      <p>{previewRoute.join(" → ")}</p>
       <p>
         {form.dated
           ? `${form.start || t("Ngày đi")} → ${form.end || t("Ngày về")}`
@@ -911,24 +1057,32 @@ export function UnifiedPlanner() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && cityQuery.trim()) {
                       e.preventDefault();
-                      const matches = suggestions.filter((c) =>
-                        [c.slug, ...Object.values(c.name)].some(
-                          (n) =>
-                            n.toLocaleLowerCase() ===
-                            cityQuery.trim().toLocaleLowerCase(),
+                      const query = cityQuery.trim();
+                      const matches = suggestions.filter((city) =>
+                        [city.slug, ...Object.values(city.name)].some(
+                          (name) => placeKey(name) === placeKey(query),
                         ),
                       );
-                      if (matches.length === 1)
+                      const city =
+                        !country && matches.length === 1
+                          ? matches[0]
+                          : undefined;
+                      if (city) {
                         addCity(
-                          matches[0]!.slug,
-                          matches[0]!.name[locale] ??
-                            matches[0]!.name.en ??
-                            matches[0]!.slug,
+                          city.slug,
+                          city.name[locale] ?? city.name.en ?? city.slug,
+                          city.name,
                         );
-                      else {
-                        const draft = createManualCity(cityQuery);
-                        addCity(draft.slug, draft.name);
+                        return;
                       }
+                      setBusy(true);
+                      void acceptDestination(query)
+                        .then((handled) => {
+                          if (handled) return;
+                          const manual = createManualCity(query);
+                          addCity(manual.slug, manual.name);
+                        })
+                        .finally(() => setBusy(false));
                     }
                   }}
                 />
@@ -936,23 +1090,60 @@ export function UnifiedPlanner() {
               {fieldError("journey.destinations")}
               {cityQuery.trim() && (
                 <div className="space-y-2">
-                  {suggestions.map((c) => (
+                  {country && (
+                    <p className="text-sm" role="status">
+                      {country.cities.length
+                        ? (locale === "vi"
+                            ? "Thành phố đề xuất tại "
+                            : "Suggested cities in ") + country.names[locale]
+                        : (locale === "vi"
+                            ? "Hãy tìm một thành phố tại "
+                            : "Find a city in ") + country.names[locale]}
+                    </p>
+                  )}
+                  {(country?.cities ?? suggestions).map((city) => (
                     <button
                       type="button"
-                      key={c.slug}
-                      onClick={() =>
-                        addCity(c.slug, c.name[locale] ?? c.name.en ?? c.slug)
-                      }
+                      key={city.slug}
+                      onClick={() => {
+                        const name =
+                          city.name[locale] ?? city.name.en ?? city.slug;
+                        if (country)
+                          selectCountryCity(
+                            country,
+                            city.slug,
+                            name,
+                            city.name,
+                          );
+                        else addCity(city.slug, name, city.name);
+                      }}
                       className="block text-primary"
                     >
-                      {c.name[locale] ?? c.name.en ?? c.slug}
+                      {city.name[locale] ?? city.name.en ?? city.slug}
+                      {country && ` (${country.names[locale]})`}
                     </button>
                   ))}
-                  <details className="text-sm">
+                  <details
+                    className="text-sm"
+                    open={country?.cities.length === 0 || undefined}
+                  >
                     <summary className="cursor-pointer text-primary">
                       {ux("search_help")}
                     </summary>
-                    <ResolveCitySearch query={cityQuery} onSelect={addCity} />
+                    <ResolveCitySearch
+                      key={country?.country ?? "city"}
+                      query={cityQuery}
+                      country={
+                        country
+                          ? { code: country.country, name: country.names.en }
+                          : undefined
+                      }
+                      onSelect={(slug, name, names) => {
+                        if (country)
+                          selectCountryCity(country, slug, name, names);
+                        else addCity(slug, name, names);
+                      }}
+                    />
                   </details>
                 </div>
               )}
@@ -971,6 +1162,29 @@ export function UnifiedPlanner() {
                         )?.name[locale] ??
                         c.name}
                     </span>
+                    {countryProposals[c.slug] && (
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-primary underline"
+                        onClick={() => {
+                          const match = countryProposals[c.slug]!;
+                          const name = match.names[locale];
+                          replacement.current = c.slug;
+                          setCountryMatch({
+                            key: placeKey(name),
+                            suggestion: match,
+                          });
+                          setCityQuery(name);
+                          plannerFormRef.current
+                            ?.querySelector<HTMLInputElement>(
+                              '[data-testid="web-plan-city-input"]',
+                            )
+                            ?.focus();
+                        }}
+                      >
+                        {locale === "vi" ? "Đổi thành phố" : "Change city"}
+                      </button>
+                    )}
                     <div className="flex gap-3">
                       <button
                         type="button"
@@ -1006,6 +1220,14 @@ export function UnifiedPlanner() {
                   </li>
                 ))}
               </ol>
+              {previewRoute.length > 1 && (
+                <p
+                  className="rounded-xl bg-primary-fixed/20 p-3 text-sm font-semibold"
+                  data-testid="web-plan-route"
+                >
+                  {previewRoute.join(" → ")}
+                </p>
+              )}
               {issues.some(
                 (issue) =>
                   issue.severity === "error" &&

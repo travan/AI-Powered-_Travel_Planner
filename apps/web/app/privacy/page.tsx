@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy — Horizon Travel Planner" 
 const policy = {
   vi: {
     title: "Quyền riêng tư — Horizon Travel Planner",
-    updated: "Cập nhật ngày 04/11/2026",
+    updated: "Cập nhật ngày 10/11/2026",
     intro:
       "Horizon Travel Planner là ứng dụng lập kế hoạch du lịch do Trà Nguyễn Thị Vân vận hành. Trang này giải thích dữ liệu được xử lý khi bạn dùng ứng dụng và đăng nhập bằng Google.",
     sections: [
@@ -24,7 +24,7 @@ const policy = {
       ],
       [
         "Ghi nhớ và dataset huấn luyện",
-        "Mỗi yêu cầu, kết quả AI (kể cả bản sửa và kết quả cache), phản hồi, chỉnh sửa lịch trình và thay đổi chi tiêu được lưu trong database. Nếu bật ghi nhớ, các lần tạo sau tham khảo lịch sử riêng và chi tiêu đã duyệt mà bạn còn quyền truy cập. Có thể tắt ghi nhớ tại phần phản hồi lịch trình. Lưu dữ liệu không tự huấn luyện lại trọng số model. Chuẩn bị dataset mặc định tắt và cần lựa chọn riêng: bản xuất JSONL chỉ gồm lịch trình được đánh giá tốt, đủ chất lượng và thống kê chi tiêu đã duyệt; loại trừ yêu cầu tự do, danh tính Google, tên người, địa chỉ, ngày đi cụ thể, token và mã đặt chỗ. Dataset không tự gửi đến dịch vụ huấn luyện. Xóa tài khoản sẽ xóa lịch sử học trong database; file đã tải về cần tự quản lý.",
+        "Mỗi yêu cầu, kết quả AI (kể cả bản sửa và kết quả cache), phản hồi, chỉnh sửa lịch trình và thay đổi chi tiêu được lưu trong database. Nếu bật ghi nhớ, các lần tạo sau tham khảo lịch sử riêng và chi tiêu đã duyệt mà bạn còn quyền truy cập. Có thể tắt ghi nhớ trong mục Quyền riêng tư và cá nhân hóa ở Hồ sơ. Khi bạn gửi phản hồi, điểm, ghi chú và tuyến tóm tắt được gửi qua email cho đội vận hành. Lưu dữ liệu không tự huấn luyện lại trọng số model. Chuẩn bị dataset mặc định tắt và cần lựa chọn riêng: bản xuất JSONL chỉ gồm lịch trình được đánh giá tốt, đủ chất lượng và thống kê chi tiêu đã duyệt; loại trừ yêu cầu tự do, danh tính Google, tên người, địa chỉ, ngày đi cụ thể, token và mã đặt chỗ. Dataset không tự gửi đến dịch vụ huấn luyện. Xóa tài khoản sẽ xóa lịch sử học trong database; file đã tải về cần tự quản lý.",
       ],
       [
         "Lưu trữ và nhà cung cấp hạ tầng",
@@ -49,7 +49,7 @@ const policy = {
   },
   en: {
     title: "Privacy — Horizon Travel Planner",
-    updated: "Updated November 4, 2026",
+    updated: "Updated November 10, 2026",
     intro:
       "Horizon Travel Planner is a travel planning application operated by Trà Nguyễn Thị Vân. This page explains the data processed when you use the application and sign in with Google.",
     sections: [
@@ -67,7 +67,7 @@ const policy = {
       ],
       [
         "Planning memory and training datasets",
-        "Each request, AI candidate (including repairs and cache returns), feedback, revision and spending change is stored in the database. When enabled, planning memory uses your history and approved expenses you can still access. You can disable memory in the itinerary feedback panel. Storage does not automatically retrain model weights. Dataset preparation is off by default and requires a separate choice: JSONL exports include positively reviewed, quality-checked plans and approved spending statistics, excluding free-text requests, Google identity, personal names, addresses, exact dates, tokens and booking references. Datasets are not automatically uploaded to training services. Account deletion removes database learning history; downloaded files remain under your control.",
+        "Each request, AI candidate (including repairs and cache returns), feedback, revision and spending change is stored in the database. When enabled, planning memory uses your history and approved expenses you can still access. You can disable memory under Privacy and personalization in your profile. When you submit feedback, the rating, note and route summary are emailed to the team. Storage does not automatically retrain model weights. Dataset preparation is off by default and requires a separate choice: JSONL exports include positively reviewed, quality-checked plans and approved spending statistics, excluding free-text requests, Google identity, personal names, addresses, exact dates, tokens and booking references. Datasets are not automatically uploaded to training services. Account deletion removes database learning history; downloaded files remain under your control.",
       ],
       [
         "Storage and infrastructure providers",

@@ -993,6 +993,8 @@
     "discard_unsaved_changes": "Discard unsaved changes"
   },
   "issues": {
+    "JOURNEY_DAY_ORDER": "The daily schedule does not cover the requested stops in order. Generate it again.",
+    "JOURNEY_LEG_MISSING": "Missing the leg from {from} to {to}. Generate it again.",
     "ORIGIN_REQUIRED": "Choose an origin to plan the outbound and return journeys.",
     "ENDPOINT_REQUIRED": "Choose the final destination.",
     "DESTINATION_REQUIRED": "Choose at least one destination.",

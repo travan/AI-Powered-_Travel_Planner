@@ -1,7 +1,7 @@
 "use client";
 import { localizedPlan } from "@travel/types";
 import { useAppLanguage } from "../i18n/LanguageProvider";
-import { PlannerLearningPanel } from "../itinerary/PlannerLearningPanel";
+import { PlannerFeedbackPanel } from "../itinerary/PlannerFeedbackPanel";
 import { WeatherPanel } from "../itinerary/WeatherPanel";
 import React, { useState } from "react";
 import { TranslationControls } from "../itinerary/TranslationControls";
@@ -173,7 +173,9 @@ export function SavedAiPlanPanel({
       </div>
 
       <JourneySummary plan={displayPlan} />
-      {tripId && token && <PlannerLearningPanel plan={displayPlan} token={token} tripId={tripId} />}
+      {tripId && token && (
+        <PlannerFeedbackPanel token={token} tripId={tripId} />
+      )}
       <WeatherPanel plan={displayPlan} />
       <OverviewCard
         itinerary={displayPlan}

@@ -1,3 +1,4 @@
+import { FeedbackMailWorker } from "./learning/feedback-mail.worker.js";
 import { CurrencyService } from "./enrichment/currency.service.js";
 import { CurrencyController } from "./interfaces/http/currency.controller.js";
 import { PlannerLearningService } from "./learning/learning.service.js";
@@ -23,6 +24,7 @@ import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
   ],
   providers: [
     PlannerLearningService,
+    FeedbackMailWorker,
     CurrencyService,
     WeatherService,
     ItineraryService,

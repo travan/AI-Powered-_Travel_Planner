@@ -1,7 +1,7 @@
 "use client";
 import { localizedPlan } from "@travel/types";
 import { useAppLanguage } from "../i18n/LanguageProvider";
-import { PlannerLearningPanel } from "./PlannerLearningPanel";
+import { PlannerFeedbackPanel } from "./PlannerFeedbackPanel";
 import { WeatherPanel } from "./WeatherPanel";
 import React, { useState } from "react";
 import type { Itinerary } from "@travel/types";
@@ -33,7 +33,7 @@ export function ItineraryContents({
         token={token}
         onChange={setTranslation}
       />
-      <PlannerLearningPanel plan={display} token={token} itineraryId={sourceId} />
+      <PlannerFeedbackPanel token={token} itineraryId={sourceId} />
       <WeatherPanel plan={display} />
       <OverviewCard itinerary={display} />
       <JourneySummary plan={display} />

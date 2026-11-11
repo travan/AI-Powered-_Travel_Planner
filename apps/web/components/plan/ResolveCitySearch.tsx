@@ -12,8 +12,10 @@ type Candidate = {
 export function ResolveCitySearch({
   query,
   onSelect,
+  country,
 }: {
   query: string;
+  country?: { code: string; name: string };
   onSelect: (
     slug: string,
     name: string,
@@ -22,6 +24,7 @@ export function ResolveCitySearch({
 }) {
   const { locale } = useAppLanguage(),
     vi = locale === "vi";
+  const [cityQuery, setCityQuery] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([]),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -32,7 +35,9 @@ export function ResolveCitySearch({
   const run = async (candidate?: Candidate) => {
     setBusy(true);
     setMessage("");
-    const current = query.trim();
+    const current = country
+      ? `${cityQuery.trim()}, ${country.name}`
+      : query.trim();
     try {
       const { data } = await createClient().auth.getSession();
       if (!data.session) {
@@ -61,8 +66,11 @@ export function ResolveCitySearch({
           `cities/resolve/search?q=${encodeURIComponent(current)}`,
           data.session.access_token,
         );
-        setCandidates(result.candidates);
-        if (!result.candidates.length)
+        const matches = country
+          ? result.candidates.filter((entry) => entry.country === country.code)
+          : result.candidates;
+        setCandidates(matches);
+        if (!matches.length)
           setMessage(
             vi
               ? "Chưa tìm thấy. Thử thêm quốc gia hoặc tỉnh/thành."
@@ -81,9 +89,20 @@ export function ResolveCitySearch({
   };
   return (
     <div className="space-y-2">
+      {country && (
+        <input
+          className="block w-full rounded-xl border p-2"
+          aria-label={vi ? "Tên thành phố" : "City name"}
+          value={cityQuery}
+          onChange={(event) => {
+            setCityQuery(event.target.value);
+            setCandidates([]);
+          }}
+        />
+      )}
       <button
         type="button"
-        disabled={busy || query.trim().length < 3}
+        disabled={busy || (country ? cityQuery : query).trim().length < 2}
         onClick={() => run()}
         className="text-sm font-semibold text-primary underline"
       >

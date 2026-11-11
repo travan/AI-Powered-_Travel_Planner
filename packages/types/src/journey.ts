@@ -1,9 +1,19 @@
 import type { Itinerary, ItineraryInput, Activity } from "./itinerary";
 
+export function placeKey(label: string): string {
+  return label
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
 export type Requirement = { value: string; priority: "required" | "preferred" };
 export interface JourneyLocation {
   label: string;
   city_slug?: string;
+  names?: Record<string, string>;
   latitude?: number;
   longitude?: number;
   accuracy_m?: number;
@@ -120,6 +130,7 @@ export interface PlanningJob {
 export interface PlanningJobSummary extends PlanningJob {
   created_at: string;
   city_names: string[];
+  route?: import("./journey-route").JourneyRoute;
   num_days: number;
 }
 
@@ -483,9 +494,14 @@ export function upgradeJourneyPlan(
     const end = planning.journey.return_to_origin
       ? planning.journey.origin
       : planning.journey.endpoint;
+    const matches = (point: JourneyLocation, label: string, slug?: string) =>
+      (point.names && slug && slug === point.city_slug) ||
+      [point.label, ...Object.values(point.names ?? {})].some(
+        (name) => placeKey(name) === placeKey(label),
+      );
     if (
-      !result.transport_summary.some(
-        (s) => s.from === planning.journey.origin.label,
+      !result.transport_summary.some((leg) =>
+        matches(planning.journey.origin, leg.from, leg.from_city_slug),
       )
     )
       issues.push({
@@ -493,7 +509,12 @@ export function upgradeJourneyPlan(
         severity: "warning",
         message: "Chặng từ điểm xuất phát chưa đủ dữ liệu, cần bổ sung.",
       });
-    if (end && !result.transport_summary.some((s) => s.to === end.label))
+    if (
+      end &&
+      !result.transport_summary.some((leg) =>
+        matches(end, leg.to, leg.to_city_slug),
+      )
+    )
       issues.push({
         code: "RETURN_MISSING",
         severity: "warning",

@@ -7,6 +7,8 @@ import { WeatherService } from "../enrichment/weather.service.js";
 import {
   enrichTravel,
   itineraryQuality,
+  itineraryRouteIssues,
+  resolveCity,
   reconcileBudget,
 } from "../enrichment/travel-enrichment.js";
 import { normalizeOllamaItinerary } from "@travel/ai";
@@ -36,6 +38,7 @@ const {
   tripDayCount,
   flexibleMonthWindows,
   plannerToday,
+  journeyRoute,
 } =
   (travelTypes as unknown as { default?: typeof travelTypes }).default ??
   travelTypes;
@@ -45,12 +48,18 @@ import type {
   AiTokenUsage,
   Itinerary,
   ItineraryInput,
+  JourneyLocation,
+  PlanningCriteria,
+  RoutePlace,
   ItineraryOverview,
   TripStyle,
 } from "@travel/types";
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 import { CitiesService } from "../../cities/application/cities.service.js";
-import type { CityPlanningData } from "../../cities/domain/city.entity.js";
+import type {
+  City,
+  CityPlanningData,
+} from "../../cities/domain/city.entity.js";
 import { workerRequestContext } from "../../../cloudflare/request-context.js";
 
 @Injectable()
@@ -88,6 +97,59 @@ export class ItineraryService {
     return saved
       ? ok({ saved: true as const, trip_id: saved.tripId })
       : notFound("Itinerary not found");
+  }
+
+  private normalizedLocation(
+    location: JourneyLocation,
+    city?: City | null,
+    locale = "en",
+  ): JourneyLocation {
+    if (!city || location.source === "browser" || !city.country)
+      return location;
+    return {
+      ...location,
+      city_slug: city.slug,
+      label: city.name[locale] ?? city.name.en ?? city.slug,
+      names: city.name,
+    };
+  }
+
+  lookupRouteCities(values: string[]) {
+    return this.cities.routeCities([...new Set(values)]);
+  }
+
+  describeRoute(
+    journey: PlanningCriteria["journey"] | undefined,
+    stops: RoutePlace[],
+    cities: Map<string, City>,
+  ) {
+    const location = (point: JourneyLocation) =>
+      this.normalizedLocation(point, cities.get(point.label));
+    const normalized = journey && {
+      ...journey,
+      origin: location(journey.origin),
+      endpoint: journey.endpoint && location(journey.endpoint),
+    };
+    return journeyRoute(
+      normalized,
+      stops.map((stop) => {
+        const city =
+          cities.get(stop.slug ?? stop.label) ?? cities.get(stop.label);
+        if (city?.country)
+          return {
+            slug: city.slug,
+            label: city.name.en ?? city.slug,
+            names: city.name,
+          };
+        return {
+          ...stop,
+          names:
+            this.cities.countryReference(stop.label)?.names ??
+            city?.name ??
+            stop.names,
+        };
+      }),
+    );
   }
 
   async generate(input: {
@@ -129,7 +191,11 @@ export class ItineraryService {
     const names = input.dto.city_names?.length
       ? input.dto.city_names
       : input.dto.cities;
-    const rememberedCities = [];
+    const rememberedCities: {
+      city: CityPlanningData;
+      catalogReference: { slug: string; name: string };
+      planningData: PreFetchedCityData;
+    }[] = [];
     for (const [index, name] of names.entries()) {
       const city = await this.cities.remember(name, input.dto.cities[index]);
       const planningData = await this.cities.findForPlanning(city.slug);
@@ -146,10 +212,43 @@ export class ItineraryService {
         },
         planningData: planningData
           ? toPreFetchedCityData(planningData, request.currency, request.locale)
-          : toMinimalCityData(name, request.currency),
+          : toMinimalCityData(displayName, request.currency),
       });
     }
-    request.cities = rememberedCities.map(({ city }) => city.slug);
+    const destinationCities = rememberedCities.filter(
+      (entry, index) =>
+        entry.city.slug !== rememberedCities[index - 1]?.city.slug,
+    );
+    request.cities = destinationCities.map(({ city }) => city.slug);
+    const routeCities = destinationCities.map(({ city }) => city);
+    if (request.planning) {
+      const journey = request.planning.journey;
+      const normalize = async (location: JourneyLocation) => {
+        if (location.source === "browser") return location;
+        const city =
+          resolveCity(routeCities, location.label) ??
+          (await this.cities.findForPlanning(location.label));
+        if (city && !routeCities.some((known) => known.slug === city.slug))
+          routeCities.push(city);
+        return this.normalizedLocation(location, city, request.locale);
+      };
+      request.planning = {
+        ...request.planning,
+        journey: {
+          ...journey,
+          destinations: request.cities,
+          origin: await normalize(journey.origin),
+          endpoint:
+            !journey.return_to_origin && journey.endpoint
+              ? await normalize(journey.endpoint)
+              : journey.endpoint,
+        },
+      };
+    }
+    const qualityFor = (plan: Itinerary) => [
+      ...itineraryRouteIssues(plan, request, routeCities),
+      ...itineraryQuality(plan, request),
+    ];
     let flexibleDateNote: string | undefined;
     if (request.flexible_month) {
       const today = plannerToday();
@@ -167,7 +266,7 @@ export class ItineraryService {
         ? await this.weather.forPlan(
             {
               city_catalog: Object.fromEntries(
-                rememberedCities.map(({ city }) => [
+                destinationCities.map(({ city }) => [
                   city.slug,
                   {
                     name: city.name,
@@ -176,11 +275,11 @@ export class ItineraryService {
                   },
                 ]),
               ),
-              days: rememberedCities.flatMap(({ city }) =>
+              days: destinationCities.flatMap(({ city }) =>
                 dates.map((date) => ({ city_slug: city.slug, date })),
               ),
             },
-            new Map(rememberedCities.map(({ city }) => [city.slug, city])),
+            new Map(destinationCities.map(({ city }) => [city.slug, city])),
           )
         : [];
       const selected = selectFlexibleWindow(windows, request.cities, weather);
@@ -195,7 +294,7 @@ export class ItineraryService {
             ? "Flexible dates were selected among fully forecast periods, prioritizing less rain and comfortable activity temperatures. Forecasts may change."
             : "Dates were selected at random within the month because complete forecasts were unavailable for comparison. Seasonal climate is not a forecast for specific dates.";
     }
-    const cityData = rememberedCities.map(({ planningData }) => planningData);
+    const cityData = destinationCities.map(({ planningData }) => planningData);
     const memory =
       this.learning && requestId
         ? await this.learning.context(input.userId, request, requestId)
@@ -204,7 +303,7 @@ export class ItineraryService {
     const providerName = process.env["AI_PROVIDER"] ?? "mock";
     const cacheKey = generationCacheKey(
       request,
-      rememberedCities.map(({ catalogReference }) => catalogReference.slug),
+      destinationCities.map(({ catalogReference }) => catalogReference.slug),
       providerName,
       createHash("sha256")
         .update(
@@ -230,7 +329,14 @@ export class ItineraryService {
         userId: input.userId,
         cacheKey,
       });
-      if (reusable) {
+      if (
+        reusable &&
+        !reusable.result.issues?.some(
+          (issue) =>
+            issue.code === "JOURNEY_DAY_ORDER" ||
+            issue.code === "JOURNEY_LEG_MISSING",
+        )
+      ) {
         if (this.learning)
           await this.learning.record(
             input.userId,
@@ -270,7 +376,7 @@ export class ItineraryService {
           attempt: 1,
           result: detail,
         });
-      const quality = itineraryQuality(detail, request);
+      const quality = qualityFor(detail);
       if (quality.length && providerName !== "mock") {
         await input.onStage?.("repair");
         try {
@@ -293,7 +399,11 @@ export class ItineraryService {
             });
           if (
             repaired.days?.length &&
-            itineraryQuality(repaired, request).length < quality.length
+            (itineraryRouteIssues(repaired, request, routeCities).length <
+              itineraryRouteIssues(detail, request, routeCities).length ||
+              (itineraryRouteIssues(repaired, request, routeCities).length ===
+                itineraryRouteIssues(detail, request, routeCities).length &&
+                qualityFor(repaired).length < quality.length))
           )
             detail = repaired;
         } catch {
@@ -360,15 +470,8 @@ export class ItineraryService {
       detail.trip_style = request.trip_style;
     }
     detail.locale = request.locale === "vi" ? "vi" : "en";
-    detail = enrichTravel(
-      detail,
-      rememberedCities.map((c) => c.city),
-      request,
-    );
-    detail.issues = [
-      ...(detail.issues ?? []),
-      ...itineraryQuality(detail, request),
-    ];
+    detail = enrichTravel(detail, routeCities, request);
+    detail.issues = [...(detail.issues ?? []), ...qualityFor(detail)];
     detail = reconcileBudget(detail, request);
     if (flexibleDateNote && detail.seasonal_notes)
       detail.seasonal_notes.warnings = [
@@ -378,7 +481,7 @@ export class ItineraryService {
     if (this.weather)
       detail.weather = await this.weather.forPlan(
         detail,
-        new Map(rememberedCities.map((c) => [c.city.slug, c.city])),
+        new Map(routeCities.map((city) => [city.slug, city])),
       );
     if (memory)
       detail.learning_summary = {
@@ -393,7 +496,7 @@ export class ItineraryService {
       userId: input.userId,
       request,
       result: detail,
-      catalogCities: rememberedCities.map(
+      catalogCities: destinationCities.map(
         ({ catalogReference }) => catalogReference,
       ),
     });
@@ -412,22 +515,61 @@ export class ItineraryService {
     };
   }
   async refreshPresentation(plan: Itinerary): Promise<Itinerary> {
+    const journey = plan.planning?.journey;
     const values = [
-      ...new Set(plan.days.map((d) => d.city_slug ?? d.city).filter(Boolean)),
+      ...new Set(
+        [
+          ...plan.days.map((day) => day.city_slug ?? day.city),
+          ...(journey?.destinations ?? []),
+          journey?.origin.source === "browser"
+            ? undefined
+            : journey?.origin.label,
+          journey?.endpoint?.label,
+        ].filter((value): value is string => !!value),
+      ),
     ];
-    const cities = (
+    const known = new Map(
       await Promise.all(
-        values.map((value) => this.cities.findForPlanning(value)),
-      )
-    ).filter((c): c is CityPlanningData => !!c);
-    const display = reconcileBudget(enrichTravel(plan, cities), {
-      planning: plan.planning,
-      locale: plan.locale ?? "en",
-      currency: plan.currency,
-      num_travelers: plan.num_travelers,
-      cities: values,
-      trip_style: plan.trip_style ?? "mixed",
-    });
+        values.map(
+          async (value) =>
+            [value, await this.cities.findForPlanning(value)] as const,
+        ),
+      ),
+    );
+    const cities = [...known.values()].filter(
+      (city): city is CityPlanningData => !!city,
+    );
+    const planning = plan.planning &&
+      journey && {
+        ...plan.planning,
+        journey: {
+          ...journey,
+          destinations: (journey.destinations ?? []).map(
+            (slug) => known.get(slug)?.slug ?? slug,
+          ),
+          origin: this.normalizedLocation(
+            journey.origin,
+            known.get(journey.origin.label),
+          ),
+          endpoint:
+            journey.endpoint &&
+            this.normalizedLocation(
+              journey.endpoint,
+              known.get(journey.endpoint.label),
+            ),
+        },
+      };
+    const display = reconcileBudget(
+      enrichTravel({ ...plan, planning }, cities),
+      {
+        planning,
+        locale: plan.locale ?? "en",
+        currency: plan.currency,
+        num_travelers: plan.num_travelers,
+        cities: values,
+        trip_style: plan.trip_style ?? "mixed",
+      },
+    );
     if (this.weather)
       display.weather = await this.weather.forPlan(
         display,
@@ -494,7 +636,7 @@ function generationCacheKey(
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: 9,
+        version: 10,
         planning: request.planning ?? null,
         catalog_version: process.env["CITY_CATALOG_VERSION"] ?? "1",
         catalogFingerprint,

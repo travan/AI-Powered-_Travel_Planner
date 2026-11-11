@@ -3,7 +3,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import nodemailer from "nodemailer";
+import { createSmtpTransport } from "../../../shared/infrastructure/smtp.js";
 import { AppConfigService } from "../../../config/app-config.service.js";
 
 @Injectable()
@@ -24,18 +24,7 @@ export class RecoveryMailer {
   async send(email: string, url: string) {
     this.assertConfigured();
     const settings = this.config.passwordRecovery;
-    const transport = nodemailer.createTransport({
-      host: settings.smtpHost,
-      port: settings.smtpPort,
-      secure: settings.smtpSecure,
-      requireTLS: this.config.nodeEnv === "production" && !settings.smtpSecure,
-      auth: settings.smtpUser
-        ? { user: settings.smtpUser, pass: settings.smtpPassword }
-        : undefined,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-    });
+    const transport = createSmtpTransport(this.config);
     await transport.sendMail({
       from: settings.from,
       to: email,

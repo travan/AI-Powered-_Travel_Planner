@@ -42,6 +42,43 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
   };
   const a = await signup(),
     b = await signup();
+  const {
+    rows: [legacy],
+  } = await db.query(
+    `insert into itinerary_jobs(user_id, status, payload) values($1, 'failed', $2) returning id`,
+    [
+      a.id,
+      {
+        dto: {
+          cities: ["bắc-kinh", "moscow"],
+          city_names: ["Bắc Kinh", "Moskva"],
+          num_days: 4,
+          planning: {
+            journey: {
+              origin: { label: "Ha Noi", source: "manual" },
+              destinations: ["bắc-kinh", "moscow"],
+              return_to_origin: true,
+            },
+          },
+        },
+      },
+    ],
+  );
+  const history = await request.get("/api/planning/requests", {
+    headers: a.headers,
+  });
+  expect(history.ok(), await history.text()).toBeTruthy();
+  const { route } = (await history.json()).find(
+    (job: { id: string }) => job.id === legacy.id,
+  );
+  expect(route).toMatchObject({
+    origin: { slug: "ha-noi", names: { en: "Hanoi", vi: "Hà Nội" } },
+    destinations: [
+      { slug: "beijing", names: { en: "Beijing", vi: "Bắc Kinh" } },
+      { slug: "moscow", names: { en: "Moscow", vi: "Moskva" } },
+    ],
+    end: { slug: "ha-noi" },
+  });
   const vi = await request.post("/api/cities", {
     headers: a.headers,
     data: { name: "Đài Bắc" },
@@ -52,6 +89,16 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
     data: { name: "Taipei" },
   });
   expect((await vi.json()).slug).toBe((await en.json()).slug);
+  for (const country of ["Russia", "Nga"]) {
+    const lookup = await request.get(
+      `/api/cities/country-suggestions?q=${encodeURIComponent(country)}`,
+    );
+    expect(lookup.ok()).toBeTruthy();
+    expect((await lookup.json()).suggestion).toMatchObject({
+      country: "RU",
+      cities: [{ slug: "moscow", name: { vi: "Moskva", en: "Moscow" } }],
+    });
+  }
   const folded = await request.post("/api/cities", {
     headers: a.headers,
     data: { name: "bac kinh" },
@@ -119,6 +166,67 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
   );
   expect(saved.ok()).toBeTruthy();
   const tripId = (await saved.json()).trip_id;
+  await expect
+    .poll(async () => {
+      const outbox = await db.query(
+        "select count(*)::int n from planner_feedback_mail where itinerary_id=$1 and sent_at is not null",
+        [first.itinerary_id],
+      );
+      return outbox.rows[0].n;
+    })
+    .toBe(1);
+  await request.post("http://127.0.0.1:3350/fail-next");
+  const submit = () =>
+    request.post(`/api/trips/${tripId}/learning-feedback`, {
+      headers: a.headers,
+      data: { rating: 2, note: "Shorten the transfer" },
+    });
+  const submissions = await Promise.all([submit(), submit()]);
+  expect(submissions.every((response) => response.ok())).toBeTruthy();
+  const priorityMail = async () => {
+    const result = await db.query(
+      "select id,attempts,claim_token,sent_at from planner_feedback_mail where itinerary_id=$1 and rating=2",
+      [first.itinerary_id],
+    );
+    expect(result.rows).toHaveLength(1);
+    return result.rows[0];
+  };
+  await expect
+    .poll(async () => {
+      const mail = await priorityMail();
+      return [mail.attempts, mail.claim_token, mail.sent_at];
+    })
+    .toEqual([1, null, null]);
+  const { id: mailId } = await priorityMail();
+  await db.query(
+    "update planner_feedback_mail set next_attempt_at=now() where id=$1",
+    [mailId],
+  );
+  await expect.poll(async () => !!(await priorityMail()).sent_at).toBe(true);
+  expect((await priorityMail()).attempts).toBe(2);
+  const messages = await (
+    await request.get("http://127.0.0.1:3350/messages")
+  ).json();
+  const sent = messages.filter((mail: { raw: string }) =>
+    mail.raw.includes(mailId),
+  );
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to).toEqual(["travan.it.96@gmail.com"]);
+  expect(sent[0].raw).toContain(
+    "Subject: Horizon Planner Feedback Priority - 2/5",
+  );
+  expect(sent[0].raw).toContain("Shorten the transfer");
+  expect(
+    (
+      await request.post(`/api/itinerary/${first.itinerary_id}/feedback`, {
+        headers: a.headers,
+        data: {
+          rating: 5,
+          note: "Prefer quiet cafes. contact private@example.invalid",
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
   for (const amount of [10, 15, 20]) {
     const r = await request.post(`/api/trips/${tripId}/expenses`, {
       headers: a.headers,

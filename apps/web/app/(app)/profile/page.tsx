@@ -3,6 +3,7 @@ import { UiText, useUiText } from "../../../components/i18n/UiText";
 
 import { useEffect, useState } from "react";
 import type { UserProfileSummary } from "@travel/types";
+import { PlannerPrivacySettings } from "../../../components/profile/PlannerPrivacySettings";
 import { SiteHeader } from "../../../components/layout/SiteHeader";
 import { getMyProfile } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
@@ -11,6 +12,7 @@ export default function ProfilePage() {
   const t = useUiText();
 
   const [profile, setProfile] = useState<UserProfileSummary | null>(null);
+  const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +30,10 @@ export default function ProfilePage() {
         }
 
         const nextProfile = await getMyProfile(session.access_token);
-        if (!cancelled) setProfile(nextProfile);
+        if (!cancelled) {
+          setProfile(nextProfile);
+          setToken(session.access_token);
+        }
       } catch {
         if (!cancelled) setError(t("Unable to load your profile."));
       }
@@ -89,6 +94,7 @@ export default function ProfilePage() {
                   {JSON.stringify(profile.travel_preferences, null, 2)}
                 </pre>
               </div>
+              {token && <PlannerPrivacySettings token={token} />}
             </div>
           )}
         </section>
