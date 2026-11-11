@@ -32,18 +32,37 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
       - run: corepack enable && pnpm install --frozen-lockfile
-      - name: Scan tracked content and dependency advisories
+      - name: Scan tracked content
         run: |
           scan_dir="$(mktemp -d)"
           trap 'rm -rf "$scan_dir"' EXIT
           chmod 755 "$scan_dir"
           git archive HEAD | tar -x -C "$scan_dir"
           docker run --rm -v "$scan_dir:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:b5918eb91b8d2473cec722f066abb4352e4ffdc4ec9f4283ec143aba9ec9ebc4 dir /repo --redact --no-banner
-          pnpm audit --prod --audit-level high
+      - name: Check for new high or critical dependency advisories
+        env:
+          BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          audit_dir="$(mktemp -d)"
+          trap 'rm -rf "$audit_dir"' EXIT
+          baseline="$BASE_COMMIT"
+          if [ -z "$baseline" ] || ! git cat-file -e "$baseline^{commit}"; then
+            baseline="$(git rev-parse HEAD^)"
+          fi
+          pnpm audit --prod --json > "$audit_dir/current.json" || test "$?" -eq 1
+          if git diff --quiet "$baseline" HEAD -- pnpm-lock.yaml pnpm-workspace.yaml ':(glob)**/package.json'; then
+            node scripts/check-dependency-audit.mjs "$audit_dir/current.json"
+          else
+            mkdir "$audit_dir/baseline"
+            git archive "$baseline" | tar -x -C "$audit_dir/baseline"
+            pnpm --dir "$audit_dir/baseline" audit --prod --json > "$audit_dir/baseline.json" || test "$?" -eq 1
+            node scripts/check-dependency-audit.mjs "$audit_dir/current.json" "$audit_dir/baseline.json"
+          fi
       - run: pnpm test:security
       - name: Check provider contracts with fixtures
         run: >-

@@ -36,7 +36,7 @@ Monitor p95 reads, HTTP 429/5xx, DB connection wait, job age, worker concurrency
 
 ## Security CI
 
-Make `Security Gate` a required PR check in branch protection. The Cloudflare and Vercel jobs defined in the repository both depend on it. Configure the separate `security-sandbox` environment and its test-only credentials to enable the manual provider checks. A provider marked `mock-only` did not receive a live call.
+Make `Security Gate` a required PR check in branch protection. The Cloudflare and Vercel jobs defined in the repository both depend on it. Configure the separate `security-sandbox` environment and its test-only credentials to enable the manual provider checks. A provider marked `mock-only` did not receive a live call. The dependency check reports inherited high and critical advisories and fails when a change introduces a new affected dependency path. Address inherited advisories separately before certifying production readiness.
 
 ## Request inventory
 

@@ -37,7 +37,7 @@ async function setMockSession(
 
 test.beforeEach(async ({ page, request }) => {
   await request.post(`${API_BASE_URL}/__e2e/reset-business-fixtures`);
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
 });
 
@@ -45,7 +45,7 @@ test("host can manage members, invite, share, friend join, contributor block, an
   page,
   request,
 }) => {
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
 
   await expect(page.getByTestId("web-trip-workspace")).toBeVisible();
   await page.getByTestId("web-workspace-tab-members").click();
@@ -86,14 +86,14 @@ test("host can manage members, invite, share, friend join, contributor block, an
     "contributor",
   );
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(
     page,
     "e2e-user-3",
     "friend@example.com",
     "Friend Traveler",
   );
-  await page.goto("/trips/join?token=11111111-invite-token&type=invite");
+  await page.goto("/trips/join?token=11111111-invite-token&type=invite", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("web-trip-join-page")).toBeVisible();
   await page.getByTestId("web-trip-join-submit").click();
   await expect(page.getByTestId("web-trip-join-message")).toContainText(
@@ -105,14 +105,14 @@ test("host can manage members, invite, share, friend join, contributor block, an
     "Friend Traveler",
   );
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(
     page,
     "e2e-user-2",
     "viewer@example.com",
     "Viewer Traveler",
   );
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await page.getByTestId("web-workspace-tab-members").click();
   await expect(page.getByTestId("web-member-role-e2e-user-3")).toBeDisabled();
   await expect(page.getByTestId("web-member-save-e2e-user-3")).toBeDisabled();
@@ -126,9 +126,9 @@ test("host can manage members, invite, share, friend join, contributor block, an
   expect(forbiddenUpdate.status()).toBe(403);
   await expect(page.getByTestId("web-workspace-tab-audit")).toHaveCount(0);
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
 
   await page.getByTestId("web-workspace-tab-audit").click();
   await page.getByTestId("web-audit-filter").selectOption("trip");
@@ -148,7 +148,7 @@ test("host can manage members, invite, share, friend join, contributor block, an
 test("host can plan activities from catalog and track participation", async ({
   page,
 }) => {
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
 
   await page.getByTestId("web-workspace-tab-schedule").click();
   await expect(page.getByTestId("web-activity-planner")).toBeVisible();
@@ -207,14 +207,14 @@ test("host can plan activities from catalog and track participation", async ({
     "1/1",
   );
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(
     page,
     "e2e-user-2",
     "guest@example.com",
     "Guest Traveler",
   );
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await page.getByTestId("web-workspace-tab-schedule").click();
   await expect(
     page.locator("[data-testid^='web-activity-status-']").first(),
@@ -233,9 +233,9 @@ test("host can plan activities from catalog and track participation", async ({
     page.locator("[data-testid^='web-activity-participation-']").first(),
   ).toContainText("joined");
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await page.getByTestId("web-workspace-tab-schedule").click();
   await page.getByTestId("web-custom-activity-title").fill("Sunset photo walk");
   await page.getByTestId("web-custom-activity-category").fill("photo");
@@ -259,7 +259,7 @@ test("host can track transport booking across multiple travel modes", async ({
   page,
   request,
 }) => {
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
 
   await page.getByTestId("web-workspace-tab-schedule").click();
   await page
@@ -359,7 +359,7 @@ test("host can capture bills, create custom expense splits, and settle balances"
   );
   expect(promoteExpenseParticipant.ok()).toBeTruthy();
 
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
 
   await page.getByTestId("web-workspace-tab-schedule").click();
   await page
@@ -514,14 +514,14 @@ test("host can capture bills, create custom expense splits, and settle balances"
   );
   expect(forbiddenSettle.status()).toBe(403);
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(
     page,
     "e2e-user-2",
     "viewer@example.com",
     "Viewer Traveler",
   );
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await page.getByTestId("web-workspace-tab-bills").click();
   await expect(
     page.locator("[data-testid^='web-expense-split-status-']").first(),
@@ -533,9 +533,9 @@ test("host can capture bills, create custom expense splits, and settle balances"
   await guestSplit.selectOption("settled");
   await expect(guestSplit).toHaveValue("settled");
 
-  await page.goto("/plan");
+  await page.goto("/plan", { waitUntil: "domcontentloaded" });
   await setMockSession(page, "e2e-user-1", "host@example.com", "Host Traveler");
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await page.getByTestId("web-workspace-tab-audit").click();
   await page.getByTestId("web-audit-filter").selectOption("bill_upload");
   await expect(page.getByTestId("web-audit-list")).toContainText("bill_upload");
@@ -559,7 +559,7 @@ test("host can capture bills, create custom expense splits, and settle balances"
 test("workspace captures key responsive surfaces", async ({
   page,
 }, testInfo) => {
-  await page.goto(`/trips/${tripId}/workspace`);
+  await page.goto(`/trips/${tripId}/workspace`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("web-trip-workspace")).toBeVisible();
 
   const captureDir = path.join(process.cwd(), "ui-captures", "workspace");
