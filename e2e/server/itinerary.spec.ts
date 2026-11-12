@@ -281,9 +281,19 @@ test("guest search draft can be claimed and retrieved as the same stored request
 
 test("unknown cities require identification; Vietnamese aliases reuse the canonical city", async ({request}) => {
  const headers={Authorization:`Bearer ${token}`};
- const unknown=await request.post("/api/cities",{headers,data:{name:`Unknown ${randomUUID()}`}});
- expect(unknown.status()).toBe(400);
- expect((await unknown.json()).code).toBe("CITY_UNRESOLVED");
+ const name = `Unknown ${randomUUID()}`;
+ const cacheKey = `nominatim:city:${name.toLowerCase()}`;
+ await db.query(
+   "insert into travel_external_cache(cache_key,body,expires_at) values($1,'[]',now()+interval '5 minutes')",
+   [cacheKey],
+ );
+ try {
+   const unknown = await request.post("/api/cities", { headers, data: { name } });
+   expect(unknown.status()).toBe(400);
+   expect((await unknown.json()).code).toBe("CITY_UNRESOLVED");
+ } finally {
+   await db.query("delete from travel_external_cache where cache_key=$1", [cacheKey]);
+ }
  const known=await request.post("/api/cities",{headers,data:{name:"Đà Lạt"}});
  expect(known.ok()).toBeTruthy();
  expect(await known.json()).toMatchObject({slug:"da-lat",name:{en:"Da Lat",vi:"Đà Lạt"}});
