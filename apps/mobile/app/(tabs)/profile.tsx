@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../../components/Ionicons";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
