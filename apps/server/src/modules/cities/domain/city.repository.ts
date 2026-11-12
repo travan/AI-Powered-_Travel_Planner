@@ -8,6 +8,6 @@ export interface CityRepository {
   byCountry(country: string): Promise<City[]>;
   popular(): Promise<City[]>;
   findBySlug(slug: string): Promise<City | null>;
-  findForPlanning(value: string): Promise<CityPlanningData | null>;
+  findForPlanning(value: string, catalogLimit?: number): Promise<CityPlanningData | null>;
   remember(name: string): Promise<City>;
 }

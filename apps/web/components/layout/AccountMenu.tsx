@@ -95,7 +95,7 @@ export function AccountMenu({
       {signOutError && (
         <p
           role="alert"
-          className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl bg-error-container p-3 text-sm text-on-error-container"
+          className="absolute left-0 top-full z-50 mt-2 w-64 rounded-xl bg-error-container p-3 text-sm text-on-error-container lg:left-auto lg:right-0"
         >
           {t("Không thể đăng xuất. Kiểm tra kết nối rồi thử lại.")}
         </p>
@@ -123,7 +123,7 @@ export function AccountMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-12 w-56 rounded-xl bg-surface border border-outline/10 shadow-[0_8px_32px_rgba(0,93,144,0.14)] overflow-hidden z-50"
+          className="absolute left-0 top-12 w-56 rounded-xl bg-surface border border-outline/10 shadow-[0_8px_32px_rgba(0,93,144,0.14)] overflow-hidden z-50 lg:left-auto lg:right-0"
         >
           {/* User info */}
           {isAuthenticated && (displayName || email) && (

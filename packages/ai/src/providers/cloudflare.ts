@@ -1,3 +1,7 @@
+import {
+  isWorkersAiQuota,
+  PlanningGenerationError,
+} from "./planning-generation-error.js";
 import { generateDailyPlan } from "./daily-plan.js";
 import { normalizeItinerary } from "../normalize-itinerary.js";
 import {
@@ -90,6 +94,22 @@ export class CloudflareAIProvider implements AIProvider {
     );
   }
 
+  fillDay<T>(
+    prompt: string,
+    locale: string,
+    maxTokens: number,
+    schema: Record<string, unknown>,
+  ) {
+    return this.generate<T>(
+      prompt,
+      locale,
+      "detail",
+      maxTokens,
+      undefined,
+      schema,
+    );
+  }
+
   private async generate<T>(
     prompt: string,
     locale: string,
@@ -98,20 +118,64 @@ export class CloudflareAIProvider implements AIProvider {
     system?: string,
     schema?: Record<string, unknown>,
   ): Promise<T> {
-    const output = (await this.ai.run(this.model, {
-      messages: [
-        {
-          role: "system",
-          content: `${system ?? SYSTEM_PROMPT(locale)}\nReturn only a valid JSON object, without markdown.`,
-        },
-        { role: "user", content: prompt },
-      ],
-      response_format: schema
-        ? { type: "json_schema", json_schema: schema }
-        : { type: "json_object" },
-      max_tokens: maxTokens,
-      temperature: 0.2,
-    })) as {
+    const started = Date.now();
+    const day = prompt.match(
+      /^Write ONLY the detailed timeline for day (\d+)\//,
+    )?.[1];
+    const phase = day
+      ? prompt.includes("Repair ONLY this day")
+        ? "day_repair"
+        : "day"
+      : prompt.startsWith("Plan a geographically clustered")
+        ? prompt.includes("Fix these outline problems")
+          ? "outline_repair"
+          : "outline"
+        : operation;
+    if (phase === "outline_repair" || phase === "day_repair") {
+      const previous = this.usage.at(-1);
+      if (previous?.outcome === "received") previous.outcome = "invalid_output";
+    }
+    const fullRepair = prompt.includes(
+      "\nRepair the following quality issues once;",
+    );
+    const context = {
+      phase: fullRepair ? "full_repair" : phase,
+      day: day ? Number(day) : undefined,
+    } as Pick<AiTokenUsage, "phase" | "day">;
+    const output = (await this.ai
+      .run(this.model, {
+        messages: [
+          {
+            role: "system",
+            content: `${system ?? SYSTEM_PROMPT(locale)}\nReturn only a valid JSON object, without markdown.`,
+          },
+          { role: "user", content: prompt },
+        ],
+        response_format: schema
+          ? { type: "json_schema", json_schema: schema }
+          : { type: "json_object" },
+        max_tokens: maxTokens,
+        temperature: 0.2,
+      })
+      .catch((error: unknown) => {
+        if (operation)
+          this.usage.push({
+            operation,
+            ...context,
+            provider: "cloudflare",
+            model: this.model,
+            input_tokens: null,
+            output_tokens: null,
+            total_tokens: null,
+            duration_ms: Date.now() - started,
+            outcome: isWorkersAiQuota(error)
+              ? "quota_rejected"
+              : "provider_error",
+          });
+        if (isWorkersAiQuota(error))
+          throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED");
+        throw error;
+      })) as {
       response?: string | object;
       usage?: {
         prompt_tokens?: number;
@@ -119,23 +183,32 @@ export class CloudflareAIProvider implements AIProvider {
         total_tokens?: number;
       };
     };
-    if (!output?.response)
-      throw new Error("Workers AI returned an empty response");
     if (operation)
       this.usage.push({
         operation,
+        ...context,
         provider: "cloudflare",
         model: this.model,
-        input_tokens: output.usage?.prompt_tokens ?? null,
-        output_tokens: output.usage?.completion_tokens ?? null,
-        total_tokens: output.usage?.total_tokens ?? null,
+        input_tokens: output?.usage?.prompt_tokens ?? null,
+        output_tokens: output?.usage?.completion_tokens ?? null,
+        total_tokens: output?.usage?.total_tokens ?? null,
+        duration_ms: Date.now() - started,
+        outcome: "received",
       });
-    const result =
-      typeof output.response === "string"
-        ? JSON.parse(output.response)
-        : output.response;
-    if (!result || typeof result !== "object" || Array.isArray(result))
-      throw new Error("Workers AI returned invalid JSON");
-    return result as T;
+    try {
+      if (!output?.response)
+        throw new Error("Workers AI returned an empty response");
+      const result =
+        typeof output.response === "string"
+          ? JSON.parse(output.response)
+          : output.response;
+      if (!result || typeof result !== "object" || Array.isArray(result))
+        throw new Error("Workers AI returned invalid JSON");
+      return result as T;
+    } catch (error) {
+      const usage = operation && this.usage.at(-1);
+      if (usage) usage.outcome = "invalid_output";
+      throw error;
+    }
   }
 }

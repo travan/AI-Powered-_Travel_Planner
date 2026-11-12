@@ -32,6 +32,7 @@
 		"DATABASE_PROVIDER": "postgres",
 		"AUTH_PROVIDER": "local",
 		"AI_PROVIDER": "cloudflare",
+		"PLANNING_CATALOG_PERCENT": "0",
 		"CLOUDFLARE_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 		"NEXT_PUBLIC_APP_URL": "https://ai-powered-travel-planner-api.vercel.app",
 		"CORS_ORIGINS": "https://ai-powered-travel-planner-api.vercel.app,https://ai-powered-travel-planner-api-git-code-f15b26-travan1s-projects.vercel.app",

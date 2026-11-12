@@ -464,7 +464,7 @@ export function itineraryRouteIssues(
 
 const minutes = timelineMinutes;
 export function itineraryQuality(
-  plan: Itinerary,
+  plan: Pick<Itinerary, "days" | "locale">,
   input?: ItineraryInput,
 ): PlanningIssue[] {
   const issues: PlanningIssue[] = [];

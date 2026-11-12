@@ -2,22 +2,8 @@
 
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { journeyRequest } from "@/lib/journey-api";
+import { useNotifications, type Notification } from "./NotificationProvider";
 import { useAppLanguage } from "../i18n/LanguageProvider";
-
-type Notification = {
-  id: string;
-  subject_id: string;
-  trip_id: string | null;
-  category: string;
-  event: string;
-  attempt: number | null;
-  created_at: string;
-  read_at: string | null;
-};
-
-type Page = { items: Notification[]; next: string | null };
 
 const categories: Record<string, [string, string]> = {
   generate: ["Trip planning", "Tạo lịch trình"],
@@ -131,162 +117,32 @@ export function NotificationBell({ className }: { className?: string }) {
   const { locale } = useAppLanguage();
   const language = locale === "vi" ? 1 : 0;
   const label = language ? "Thông báo" : "Notifications";
-  const [session, setSession] = useState<{ token: string; userId: string }>();
-  const [count, setCount] = useState(0);
-  const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<Page>();
-  const [error, setError] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const refresh = useRef<() => void>(() => {});
-  const liveSession = useRef(session);
-  liveSession.current = session;
+  const { store, userId, count, page, error, loadingMore } = useNotifications();
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const open = openFor === (userId ?? "guest");
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const client = createClient();
-    let active = true;
-    const update = (
-      value: { access_token: string; user: { id: string } } | null,
-    ) => {
-      if (!active) return;
-      if (liveSession.current?.userId !== value?.user.id) {
-        setPage(undefined);
-        setCount(0);
-        setOpen(false);
-      }
-      setSession(
-        value
-          ? { token: value.access_token, userId: value.user.id }
-          : undefined,
-      );
+    if (!open) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target))
+        setOpenFor(null);
     };
-    void client.auth
-      .getSession()
-      .then(({ data }) => update(data.session))
-      .catch(() => {});
-    const { data } = client.auth.onAuthStateChange((_event, value) =>
-      update(value),
-    );
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpenFor(null);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("keydown", dismissOnEscape);
     return () => {
-      active = false;
-      data.subscription.unsubscribe();
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, []);
+  }, [open]);
 
-  useEffect(() => {
-    if (!session) return;
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    let pending = false;
-    let refreshQueued = false;
-    const load = async () => {
-      clearTimeout(timer);
-      if (abort.signal.aborted || document.hidden) return;
-      if (pending) {
-        refreshQueued = true;
-        return;
-      }
-      pending = true;
-      try {
-        const result = await journeyRequest<{ count: number }>(
-          "notifications/unread",
-          session.token,
-          undefined,
-          "GET",
-          abort.signal,
-        );
-        if (!abort.signal.aborted) setCount(result.count);
-      } catch {
-        // The next foreground refresh can recover from a temporary failure.
-      } finally {
-        pending = false;
-        if (refreshQueued) {
-          refreshQueued = false;
-          void load();
-        } else if (!abort.signal.aborted && !document.hidden)
-          timer = setTimeout(load, 55_000 + Math.random() * 10_000);
-      }
-    };
-    refresh.current = () => void load();
-    window.addEventListener("focus", refresh.current);
-    window.addEventListener("cohorizon:job-status", refresh.current);
-    document.addEventListener("visibilitychange", refresh.current);
-    const listener = refresh.current;
-    void load();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-      refresh.current = () => {};
-      window.removeEventListener("focus", listener);
-      window.removeEventListener("cohorizon:job-status", listener);
-      document.removeEventListener("visibilitychange", listener);
-    };
-  }, [session]);
-
-  useEffect(() => {
-    if (!open || !session) return;
-    const abort = new AbortController();
-    setPage(undefined);
-    setError(false);
-    journeyRequest<Page>(
-      "notifications",
-      session.token,
-      undefined,
-      "GET",
-      abort.signal,
-    )
-      .then((result) => {
-        if (!abort.signal.aborted) setPage(result);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setError(true);
-      });
-    return () => abort.abort();
-  }, [open, session]);
-
-  const more = async () => {
-    if (!page?.next || !session || loadingMore) return;
-    setLoadingMore(true);
-    setError(false);
-    try {
-      const next = await journeyRequest<Page>(
-        `notifications?before=${page.next}`,
-        session.token,
-      );
-      if (liveSession.current?.userId === session.userId)
-        setPage({ items: [...page.items, ...next.items], next: next.next });
-    } catch {
-      setError(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const read = async (item: Notification) => {
-    if (item.read_at || !session) return;
-    try {
-      await journeyRequest(
-        `notifications/${item.id}/read`,
-        session.token,
-        undefined,
-        "PATCH",
-      );
-      if (liveSession.current?.userId !== session.userId) return;
-      setPage(
-        (previous) =>
-          previous && {
-            ...previous,
-            items: previous.items.map((row) =>
-              row.id === item.id
-                ? { ...row, read_at: new Date().toISOString() }
-                : row,
-            ),
-          },
-      );
-      refresh.current();
-    } catch {
-      setError(true);
-    }
-  };
+  useEffect(() => setOpenFor(null), [userId]);
 
   const groups = new Map<string, Notification[]>();
   for (const item of page?.items ?? []) {
@@ -295,18 +151,17 @@ export function NotificationBell({ className }: { className?: string }) {
   }
 
   return (
-    <div
-      className={className}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-      }}
-    >
+    <div ref={root} className={className}>
       <button
+        ref={trigger}
         type="button"
         aria-label={label}
         aria-expanded={open}
         className="relative grid size-10 place-items-center rounded-full text-outline hover:bg-surface-container-low"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpenFor(open ? null : (userId ?? "guest"));
+          if (!open) store.open();
+        }}
       >
         <span
           aria-hidden="true"
@@ -333,14 +188,14 @@ export function NotificationBell({ className }: { className?: string }) {
                 : "Could not load notifications. Please try again."}
             </p>
           )}
-          {!session && (
+          {!userId && (
             <Link href="/login">
               {language
                 ? "Đăng nhập để xem thông báo"
                 : "Sign in to see notifications"}
             </Link>
           )}
-          {session && !page && !error && (
+          {userId && !page && !error && (
             <p role="status">{language ? "Đang tải…" : "Loading…"}</p>
           )}
           {page?.items.length === 0 && (
@@ -368,13 +223,16 @@ export function NotificationBell({ className }: { className?: string }) {
                   {items.map((item) => (
                     <li
                       key={item.id}
-                      className="flex items-start justify-between gap-2"
+                      className="min-w-0"
                     >
                       <Link
                         href={destination(item)}
                         prefetch={false}
-                        onClick={() => void read(item)}
-                        className="text-primary hover:underline"
+                        onPointerEnter={(event) => {
+                          if (event.pointerType === "mouse") void store.markRead(item.id);
+                        }}
+                        onClick={() => void store.markRead(item.id)}
+                        className="block w-full break-words text-primary hover:underline focus-visible:underline"
                       >
                         {events[item.event]?.[language] ??
                           (language ? "Đã cập nhật" : "Updated")}
@@ -385,15 +243,6 @@ export function NotificationBell({ className }: { className?: string }) {
                           {new Date(item.created_at).toLocaleString(locale)}
                         </time>
                       </Link>
-                      {!item.read_at && (
-                        <button
-                          type="button"
-                          onClick={() => void read(item)}
-                          className="text-xs text-primary"
-                        >
-                          {language ? "Đánh dấu đã đọc" : "Mark as read"}
-                        </button>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -405,7 +254,7 @@ export function NotificationBell({ className }: { className?: string }) {
               type="button"
               className="mt-2 text-sm text-primary"
               disabled={loadingMore}
-              onClick={() => void more()}
+              onClick={store.loadMore}
             >
               {language ? "Xem thêm" : "Load more"}
             </button>

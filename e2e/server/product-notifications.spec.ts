@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { createPlanningCriteria } from "../../packages/types/src/journey";
@@ -25,6 +26,25 @@ async function signUp(request: APIRequestContext, base = "") {
   };
 }
 
+async function tokyoPlanningFixture(db: InstanceType<typeof Client>) {
+  await db.query(
+    `insert into cities(slug,name,country,timezone,currency,lat,lon,popular)
+     values('tokyo','{"en":"Tokyo","vi":"Tokyo"}','JP','Asia/Tokyo','JPY',35.68,139.69,false)
+     on conflict(slug) do nothing`,
+  );
+  const planning = createPlanningCriteria();
+  planning.journey.origin = { label: "Tokyo", source: "manual" };
+  planning.journey.destinations = ["tokyo"];
+  return {
+    cities: ["tokyo"],
+    num_days: 1,
+    currency: "USD",
+    trip_style: "mixed",
+    num_travelers: 2,
+    planning,
+  };
+}
+
 test("job admissions are idempotent and notifications remain private", async ({
   request,
 }) => {
@@ -33,17 +53,7 @@ test("job admissions are idempotent and notifications remain private", async ({
   const owner = await signUp(request);
   const other = await signUp(request);
   try {
-    const planning = createPlanningCriteria();
-    planning.journey.origin = { label: "Hà Nội", source: "manual" };
-    planning.journey.destinations = ["da-nang"];
-    const data = {
-      cities: ["da-nang"],
-      num_days: 3,
-      currency: "VND",
-      trip_style: "mixed",
-      num_travelers: 2,
-      planning,
-    };
+    const data = await tokyoPlanningFixture(db);
     const headers = { ...owner.headers, "Idempotency-Key": randomUUID() };
     const submit = () =>
       request.post("/api/itinerary/generate", { headers, data });
@@ -91,14 +101,67 @@ test("job admissions are idempotent and notifications remain private", async ({
         })
       ).ok(),
     ).toBeTruthy();
-    const status = await request.get(`/api/itinerary/jobs/${id}`, {
-      headers: owner.headers,
+    await expect.poll(async () => {
+      const response = await request.get(`/api/itinerary/jobs/${id}`, {
+        headers: owner.headers,
+      });
+      const status = await response.json();
+      expect(status).not.toHaveProperty("payload");
+      return status;
+    }, { timeout: 25_000 }).toMatchObject({
+      status: "complete",
+      itinerary_id: expect.any(String),
     });
-    expect(await status.json()).not.toHaveProperty("payload");
   } finally {
+    await db.query("delete from itineraries where user_id=$1", [owner.id]);
     await db.query("delete from users where id=any($1::uuid[])", [
       [owner.id, other.id],
     ]);
+    await db.end();
+  }
+});
+
+test("the worker honors Retry-After and exposes the provider failure after three attempts", async ({
+  request,
+}) => {
+  const db = new Client({ connectionString: process.env.E2E_POSTGRES_URL });
+  await db.connect();
+  const owner = await signUp(request);
+  const scenario = (mode: string) =>
+    request.post("http://127.0.0.1:3349/scenario", { data: { mode } });
+  try {
+    const data = await tokyoPlanningFixture(db);
+    expect((await scenario("temporarily-unavailable")).ok()).toBeTruthy();
+    const response = await request.post("/api/itinerary/generate", {
+      headers: owner.headers,
+      data,
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const { job_id: id } = await response.json();
+    const status = async () => {
+      const result = await request.get(`/api/itinerary/jobs/${id}`, {
+        headers: owner.headers,
+      });
+      expect(result.ok()).toBeTruthy();
+      return result.json();
+    };
+    for (const attempts of [1, 2]) {
+      await expect.poll(status).toMatchObject({ stage: "retry", attempts });
+      const { rows: [retry] } = await db.query(
+        "select extract(epoch from available_at-now()) as seconds from itinerary_jobs where id=$1",
+        [id],
+      );
+      expect(Number(retry.seconds)).toBeGreaterThan(35);
+      // Advance the isolated fixture rather than waiting 45 seconds per retry.
+      await db.query("update itinerary_jobs set available_at=now() where id=$1", [id]);
+    }
+    await expect.poll(status).toMatchObject({
+      status: "failed", attempts: 3, error_code: "AI_UNAVAILABLE",
+    });
+  } finally {
+    await scenario("success");
+    await db.query("delete from itineraries where user_id=$1", [owner.id]);
+    await db.query("delete from users where id=$1", [owner.id]);
     await db.end();
   }
 });
@@ -137,9 +200,9 @@ test("the production web build shows notifications and keeps server data private
     );
     await expect(status).toBeVisible();
     await status.click();
-    await page
-      .getByRole("button", { name: /Mark as read|Đánh dấu đã đọc/ })
-      .click();
+    await page.getByRole("region", { name: /Notifications|Thông báo/ })
+      .getByRole("link", { name: /Failed|Thất bại/ })
+      .hover();
     await expect(bell).not.toContainText("1");
     const flight = await page.request.get(`${web}/plan?_rsc=security-check`, {
       headers: { RSC: "1" },
@@ -280,6 +343,64 @@ test("retry events are durable and private trip events disappear after membershi
     await db.query("delete from users where id=any($1::uuid[])", [
       [owner.id, guest.id],
     ]);
+    await db.end();
+  }
+});
+
+test("a catalog job completes with no AI calls under the runtime database role", async ({ request }) => {
+  const db = new Client({ connectionString: process.env.E2E_POSTGRES_URL });
+  await db.connect();
+  const owner = await signUp(request);
+  const city = `catalog-${randomUUID()}`;
+  try {
+    await db.query(
+      "insert into cities(slug,name,country,timezone,currency,lat,lon) values($1,$2,'VN','Asia/Ho_Chi_Minh','USD',21,105)",
+      [city, { en: city }],
+    );
+    for (const [category, count] of [["attraction", 4], ["restaurant", 3], ["cafe", 1]] as const)
+      for (let i = 0; i < count; i++)
+        await db.query(
+          "insert into place_catalog(name,category,city_slug,source,last_verified_at) values($1,$2,$3,'verified_catalog',now())",
+          [`${category} ${i}`, category, city],
+        );
+    await db.query(
+      `insert into planning_day_templates(city_slug,place_ids,activity_ids,source,approved,verified_at)
+       select $1,array_agg(id),'{}','verified_catalog',true,now() from place_catalog where city_slug=$1`,
+      [city],
+    );
+    const planning = createPlanningCriteria();
+    planning.journey.origin = { label: city, source: "manual" };
+    planning.journey.destinations = [city];
+    planning.stay_preferences.type = "none";
+    planning.dining_preferences.independent_only = false;
+    const { rows: [{ id }] } = await db.query(
+      "insert into itinerary_jobs(user_id,kind,payload,planning_reuse) values($1,'generate',$2,true) returning id",
+      [owner.id, { dto: { cities: [city], num_days: 1, currency: "USD", trip_style: "mixed", num_travelers: 2, planning } }],
+    );
+    await expect.poll(async () => {
+      const response = await request.get(`/api/itinerary/jobs/${id}`, { headers: owner.headers });
+      return response.json();
+    }).toMatchObject({ status: "complete", itinerary_id: expect.any(String) });
+    await expect.poll(async () => (await db.query(
+      "select strategy,outcome,catalog_days,ai_days,calls from planning_ai_attempts where job_id=$1", [id],
+    )).rows[0]).toEqual({ strategy: "catalog", outcome: "complete", catalog_days: 1, ai_days: 0, calls: [] });
+    const report = JSON.parse(execFileSync(process.execPath, [
+      "scripts/report-planning-usage.mjs",
+      new Date(Date.now() - 60_000).toISOString(),
+      new Date(Date.now() + 60_000).toISOString(),
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, PLANNING_METRICS_DATABASE_URL: process.env.E2E_POSTGRES_URL },
+    }));
+    expect(report.summary).toEqual(expect.arrayContaining([
+      expect.objectContaining({ strategy: "catalog", destination: city, complete: 1, calls: 0, catalogDayShare: 1, neuronsPerCompleted: 0 }),
+    ]));
+  } finally {
+    await db.query("delete from itineraries where user_id=$1", [owner.id]);
+    await db.query("delete from users where id=$1", [owner.id]);
+    await db.query("delete from planning_day_templates where city_slug=$1", [city]);
+    await db.query("delete from place_catalog where city_slug=$1", [city]);
+    await db.query("delete from cities where slug=$1", [city]);
     await db.end();
   }
 });

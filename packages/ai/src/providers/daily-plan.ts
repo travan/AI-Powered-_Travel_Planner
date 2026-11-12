@@ -1,3 +1,4 @@
+import { PlanningGenerationError } from "./planning-generation-error.js";
 import * as types from "@travel/types";
 const { referencePlaces } =
   (types as unknown as { default?: typeof types }).default ?? types;
@@ -465,9 +466,7 @@ export async function generateDailyPlan(
   allocateCatalogPlaces(outline);
   problems = outlineErrors(outline);
   if (problems.length)
-    throw new Error(
-      `AI model could not produce a varied complete day outline: ${problems.join("; ")}`,
-    );
+    throw new PlanningGenerationError("AI_OUTLINE_INVALID");
   const days: ItineraryDay[] = [],
     used: string[] = [];
   for (const dayOutline of outline.days as DayOutline[]) {
@@ -566,9 +565,7 @@ export async function generateDailyPlan(
       );
     errors = validate(response);
     if (errors.length)
-      throw new Error(
-        `AI model returned incomplete day ${dayOutline.day_number}: ${errors.join("; ")}`,
-      );
+      throw new PlanningGenerationError("AI_DAY_INVALID", `AI model returned incomplete day ${dayOutline.day_number}`);
     const activities: Activity[] = slots.map((slot) => {
       const row = Array.isArray(response.activities)
         ? response.activities.find((a: Json) => a.slot_id === slot.slot_id)

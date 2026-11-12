@@ -1,3 +1,5 @@
+export { PlanningGenerationError } from "./providers/planning-generation-error.js";
+export { prepareDailySlots } from "./providers/daily-plan.js";
 export type { AIProvider, PreFetchedCityData } from "./provider.js";
 export { OpenAIProvider } from "./providers/openai.js";
 export { GeminiProvider } from "./providers/gemini.js";

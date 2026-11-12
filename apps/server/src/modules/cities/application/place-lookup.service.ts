@@ -70,9 +70,13 @@ export class PlaceLookupService {
     } catch {
       throw new ServiceUnavailableException("Location lookup unavailable");
     }
-    if (!response.ok)
-      throw new ServiceUnavailableException("Location lookup unavailable");
-    const raw = (await response.json()) as Location[];
+    if (!response.ok) {
+      throw Object.assign(
+        new ServiceUnavailableException("Location lookup unavailable"),
+        { headers: response.headers },
+      );
+    }
+    const raw = await response.json().catch(() => null) as Location[] | null;
     if (!Array.isArray(raw))
       throw new ServiceUnavailableException("Invalid location response");
     const results = raw.filter(
