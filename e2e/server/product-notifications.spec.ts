@@ -381,6 +381,14 @@ test("a catalog job completes with no AI calls under the runtime database role",
       const response = await request.get(`/api/itinerary/jobs/${id}`, { headers: owner.headers });
       return response.json();
     }).toMatchObject({ status: "complete", itinerary_id: expect.any(String) });
+    // Itinerary completion queues a separate worker that writes catalog rows.
+    await expect.poll(async () => (await db.query(
+      `select ingestion.status
+       from city_catalog_ingestion_jobs ingestion
+       join itinerary_jobs job on job.itinerary_id = ingestion.itinerary_id
+       where job.id = $1`,
+      [id],
+    )).rows[0]?.status).toBe("completed");
     await expect.poll(async () => (await db.query(
       "select strategy,outcome,catalog_days,ai_days,calls from planning_ai_attempts where job_id=$1", [id],
     )).rows[0]).toEqual({ strategy: "catalog", outcome: "complete", catalog_days: 1, ai_days: 0, calls: [] });
@@ -399,6 +407,7 @@ test("a catalog job completes with no AI calls under the runtime database role",
     await db.query("delete from itineraries where user_id=$1", [owner.id]);
     await db.query("delete from users where id=$1", [owner.id]);
     await db.query("delete from planning_day_templates where city_slug=$1", [city]);
+    await db.query("delete from activity_catalog where city_slug=$1", [city]);
     await db.query("delete from place_catalog where city_slug=$1", [city]);
     await db.query("delete from cities where slug=$1", [city]);
     await db.end();
