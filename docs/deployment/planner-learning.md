@@ -61,3 +61,40 @@ Cloud retains three country-level legacy inputs (`nga`, `russia`, `taiwan`) requ
 Validation passed: 339 unit tests, server/web type checks, production Next.js build, 16 real PostgreSQL/API E2E tests, and fresh/upgrade/repeated migration parity checks. CI now runs the API suite with a dedicated application role after schema parity. Both local and cloud operator exports completed with zero records because no existing account has opted in.
 
 Backend release `working-0f69d337cc310247`, Worker version `44fb847c-1936-4e5c-b1ff-df85ec36ffbf`, and Vercel production deployment `dpl_AejsSRwSq9P4iBDct7ZemigJAB8V` are deployed. Public smoke checks verify the exact backend release, database health and bilingual search; anonymous memory/dataset access returns 401. Browser verification confirms the published privacy page describes the memory controls and dataset opt-in. The upload manifest contains no regular environment or training-data files.
+
+## Catalog-first generation and measurement
+
+Apply the planning reuse migration before deploying the worker. The Cloudflare
+worker defaults to `PLANNING_CATALOG_PERCENT=0`. Use `100` on an isolated
+staging deployment for the catalog run and `0` for the legacy run. A percentage
+selects a stable cohort by job ID. A job with stored progress continues on its
+original strategy so retries can reuse finished days. The catalog cohort
+currently accepts structured planner requests. Free-form instructions continue
+through the existing generator.
+
+Run fresh (non-cache) fixtures for 1, 3, and 10 days, including Hanoi → Busan,
+with the same model, catalog snapshot and trip constraints. Run a separate
+cache-hit fixture. The server records per-attempt metrics and uses nullable
+token fields for missing provider data. The job that started at 09:19 on
+November 12, 2026 is a historical failure reference: nine AI calls and
+approximately 2,146 Neurons before any complete day.
+
+For each matched staging window, export aggregate measurements with:
+
+```sh
+PLANNING_METRICS_DATABASE_URL=… node scripts/report-planning-usage.mjs <start-ISO> <end-ISO>
+```
+
+Use a TLS-configured application-role URL. Compare completion, catalog-day
+share, calls by stage, and estimated Neurons per completed job, including
+consumption from failed jobs. Estimated Neurons are currently calculated for
+the configured Llama 3.3 70B model. A missing token count or an unpriced model
+leaves the comparison metric blank. Keep production rollout at 0 until the
+matched 10-day run shows at least 30% savings and passes the same route,
+schedule, booking and budget checks. Increase the cohort gradually after that.
+
+The migration seeds shared templates from fresh catalog references. A reviewed
+shared template can be entered by the application operator with verified
+references and an approval flag. AI additions stay in the private itinerary
+and checkpoint until reviewed. Dataset export continues to require the existing
+training consent and quality checks.

@@ -153,6 +153,31 @@ describe("cloud daily planning", () => {
       vi.unstubAllGlobals();
     }
   });
+  it("keeps the departure city explicit and accepts additions to a sparse catalog", async () => {
+    const run = binding();
+    const provider = new CloudflareAIProvider({ run });
+    const { createPlanningCriteria } = await import("@travel/types");
+    const planning = createPlanningCriteria();
+    planning.journey.origin = { label: "Hà Nội", source: "manual", city_slug: "ha-noi" };
+    planning.journey.destinations = ["busan", "seoul"];
+    const destination = (city: string) => ({
+      city, places: [{ name: `${city} museum`, source: "catalog", last_verified_at: "2026-11-01" }],
+      hotels: [], restaurants: [],
+    }) as Parameters<typeof provider.generateDetail>[2][number];
+    const result = await provider.generateDetail(
+      { ...input, cities: ["busan", "seoul"], planning },
+      { ...overview, cities: ["Busan", "Seoul"] },
+      [destination("Busan"), destination("Seoul")],
+    );
+    const request = run.mock.calls[0]![1];
+    expect(request.messages[1].content).toContain(
+      '"origin":"Hà Nội","destinations":["Busan","Seoul"],"endpoint":"Hà Nội"',
+    );
+    expect(request.response_format.json_schema.properties.days.items.properties.places.items)
+      .toEqual({ type: "string" });
+    expect(result.days).toHaveLength(7);
+    expect(run).toHaveBeenCalledTimes(8);
+  });
   it("rejects incomplete cloud output after repairing only the affected day", async () => {
     const run = binding(true);
     const provider = new CloudflareAIProvider({ run });

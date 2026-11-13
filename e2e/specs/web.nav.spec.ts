@@ -61,3 +61,132 @@ test.describe("web desktop nav", () => {
     await expect(exploreLink).not.toHaveClass(/text-primary/);
   });
 });
+
+test.describe("notifications", () => {
+  async function fixture(page: import("@playwright/test").Page) {
+    const calls = { unread: 0, list: 0, reads: 0 };
+    const item = {
+      id: "e2e-notification", subject_id: "e2e-draft", trip_id: null,
+      category: "draft", event: "updated", attempt: null,
+      created_at: "2026-01-02T08:00:00.000Z", read_at: null,
+    };
+    let failNextRead = false;
+    await page.route("**/api/notifications**", async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
+      const headers = { "access-control-allow-origin": "*" };
+      if (pathname.endsWith("/unread")) {
+        calls.unread++;
+        await route.fulfill({ headers, json: { count: 1 } });
+      } else if (pathname.endsWith("/read")) {
+        calls.reads++;
+        const fail = failNextRead;
+        failNextRead = false;
+        await route.fulfill({ headers, status: fail ? 503 : 200, json: { read: !fail } });
+      } else {
+        calls.list++;
+        await route.fulfill({ headers, json: { items: [item], next: null } });
+      }
+    });
+    await page.goto("/login");
+    await injectWebMockAuthSession(page);
+    await page.goto("/plan");
+    const bell = page.getByRole("button", { name: /Notifications|Thông báo/ });
+    await expect(bell).toContainText("1");
+    return { calls, bell, failRead: () => { failNextRead = true; } };
+  }
+
+  test("dismisses on click outside and Escape, and reads once on hover then click", async ({ page }) => {
+    const { calls, bell } = await fixture(page);
+    expect(calls.unread, "initial unread request").toBe(1);
+    await bell.click();
+    const popup = page.getByRole("region", { name: /Notifications|Thông báo/ });
+    const group = popup.locator("summary");
+    await group.click();
+    await expect(popup).toBeVisible();
+    await page.locator("header").getByRole("link", { name: "CoHorizon" }).click();
+    await expect(popup).toBeHidden();
+    await bell.click();
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(bell).toBeFocused();
+
+    await bell.click();
+    const entry = popup.getByRole("link", { name: /Updated|Đã cập nhật/ });
+    if (!(await entry.isVisible())) await group.click();
+    await entry.hover();
+    await expect(bell).not.toContainText("1");
+    await expect.poll(() => calls.reads).toBe(1);
+    expect(calls.unread, "unread requests after hover").toBe(1);
+    await entry.click();
+    expect(calls.unread, "unread requests after activating a read item").toBe(1);
+    await page.getByTestId("desktop-navigation").getByRole("link", { name: "Guides" }).click();
+    await expect(page).toHaveURL(/\/guides$/);
+    expect(calls).toEqual({ unread: 1, list: 1, reads: 1 });
+    await page.clock.install();
+    await page.clock.fastForward(70_000);
+    expect(calls.unread).toBe(1);
+  });
+
+  test("restores the unread badge on failure and supports keyboard retry", async ({ page }) => {
+    const { bell, calls, failRead } = await fixture(page);
+    failRead();
+    await bell.click();
+    const popup = page.getByRole("region", { name: /Notifications|Thông báo/ });
+    await popup.locator("summary").click();
+    const entry = popup.getByRole("link", { name: /Updated|Đã cập nhật/ });
+    await entry.hover();
+    await expect(popup.getByRole("alert")).toBeVisible();
+    await expect(bell).toContainText("1");
+    await entry.focus();
+    await page.keyboard.press("Enter");
+    await expect(bell).not.toContainText("1");
+    await expect.poll(() => calls.reads).toBe(2);
+    expect(calls.unread).toBe(1);
+  });
+
+  test.describe("touch and responsive layout", () => {
+    test.use({ hasTouch: true });
+
+    test("keeps both languages in bounds and reads on tap", async ({ page }) => {
+      const { bell, calls } = await fixture(page);
+      for (const language of ["EN", "VI"]) {
+        await page.getByRole("button", { name: language, exact: true }).click();
+        for (const width of [320, 390, 768, 1023, 1024, 1280]) {
+          await page.setViewportSize({ width, height: 850 });
+          const desktop = page.getByTestId("desktop-navigation");
+          const mobile = page.getByTestId("mobile-navigation");
+          if (width >= 1024) {
+            await expect(desktop).toBeVisible();
+            await expect(mobile).toBeHidden();
+            const navBounds = await desktop.boundingBox();
+            for (const link of await desktop.getByRole("link").all()) {
+              const bounds = await link.boundingBox();
+              expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(navBounds!.x + navBounds!.width);
+              expect(bounds!.height).toBeLessThan(42);
+            }
+          } else {
+            await expect(desktop).toBeHidden();
+            await expect(mobile).toBeVisible();
+          }
+          const bellBounds = await bell.boundingBox();
+          const accountBounds = await page.locator("header button[aria-expanded]").last().boundingBox();
+          expect(bellBounds!.x >= accountBounds!.x + accountBounds!.width ||
+            accountBounds!.x >= bellBounds!.x + bellBounds!.width).toBeTruthy();
+          await bell.tap();
+          const popup = page.getByRole("region", { name: /Notifications|Thông báo/ });
+          const bounds = await popup.boundingBox();
+          expect(bounds!.x).toBeGreaterThanOrEqual(0);
+          expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+          await bell.tap();
+        }
+      }
+      await page.setViewportSize({ width: 390, height: 850 });
+      await bell.tap();
+      const popup = page.getByRole("region", { name: /Notifications|Thông báo/ });
+      await popup.locator("summary").tap();
+      await popup.getByRole("link", { name: /Updated|Đã cập nhật/ }).tap();
+      await expect(bell).not.toContainText("1");
+      await expect.poll(() => calls.reads).toBe(1);
+    });
+  });
+});

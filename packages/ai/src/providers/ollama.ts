@@ -165,9 +165,10 @@ async function generateJson(
   });
 
   if (!response.ok) {
-    const details = (await response.text()).slice(0, 500);
-    throw new Error(
-      `Ollama request for ${model} failed with HTTP ${response.status}: ${details}`,
+    await response.body?.cancel().catch(() => {});
+    throw Object.assign(
+      new Error(`Ollama request for ${model} failed with HTTP ${response.status}`),
+      { status: response.status, headers: response.headers },
     );
   }
 

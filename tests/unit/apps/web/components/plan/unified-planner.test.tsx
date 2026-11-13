@@ -287,7 +287,7 @@ describe("compact planner submission", () => {
     await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
     expect(mock.generate.mock.calls[0]![0]).toMatchObject({
       city_names: ["Tây An"],
-      planning: { journey: { origin: { label: "Hà Nội" } } },
+      planning: { journey: { origin: { label: "Hà Nội", city_slug: "ha-noi" } } },
     });
   });
   it("opens the optional group containing invalid hidden settings", () => {

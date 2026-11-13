@@ -222,7 +222,7 @@ export function validatePlanning(input: Partial<ItineraryInput>): {
     if (
       !flexibleMonthWindows(
         input.flexible_month,
-        input.num_days ?? 1,
+        p ? tripDayCount(input) : (input.num_days ?? 1),
         plannerToday(),
       ).length ||
       (input.start_date &&

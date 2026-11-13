@@ -33,6 +33,11 @@ createServer(async (req, res) => {
     res.statusCode = 500;
     return res.end('{"error":"model runner crashed"}');
   }
+  if (mode === "temporarily-unavailable") {
+    res.statusCode = 503;
+    res.setHeader("retry-after", "45");
+    return res.end('{"error":"temporarily unavailable"}');
+  }
   const result = {
     title: "Tokyo local model trip",
     num_days: 1,

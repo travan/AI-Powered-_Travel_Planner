@@ -15,7 +15,7 @@ export function BottomNav() {
     <nav
       aria-label={navigationText("main_navigation")}
       data-testid="mobile-navigation"
-      className="md:hidden fixed bottom-0 inset-x-0 z-50 grid grid-cols-4 gap-1 rounded-t-3xl bg-white/95 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-4px_24px_rgba(0,93,144,0.06)]"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-50 grid grid-cols-4 gap-1 rounded-t-3xl bg-white/95 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-4px_24px_rgba(0,93,144,0.06)]"
     >
       {PRIMARY_NAVIGATION.map((item) => {
         const active = isNavigationActive(pathname, item.href);

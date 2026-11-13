@@ -32,6 +32,24 @@ function createCitiesService(): CitiesService {
   } as unknown as CitiesService;
 }
 
+it("looks up every selected destination even if display names are incomplete", async () => {
+  const cities = createCitiesService();
+  const lookupError = new Error("stop after the second lookup");
+  const lookup = vi.mocked(cities.remember);
+  lookup.mockImplementationOnce(createCitiesService().remember)
+    .mockRejectedValueOnce(lookupError);
+  const service = new ItineraryService(createRepository(vi.fn()), cities);
+  await expect(service.generate({
+    userId: "user-1",
+    dto: {
+      cities: ["busan", "seoul"], city_names: ["Busan"], num_days: 10,
+      currency: "VND", trip_style: "mixed", num_travelers: 2,
+    },
+  })).rejects.toBe(lookupError);
+  expect(lookup).toHaveBeenNthCalledWith(1, "Busan", "busan");
+  expect(lookup).toHaveBeenNthCalledWith(2, "seoul", "seoul");
+});
+
 describe("ItineraryService.save", () => {
   it("returns the workspace trip id after saving", async () => {
     const repository = createRepository(

@@ -99,6 +99,12 @@ export function needsSuggestedTravelTimes(form: PlannerDraft): boolean {
   );
 }
 
+function requestLocation(location: PlanningCriteria["journey"]["origin"]) {
+  const result = { ...location, label: location.label.trim() };
+  delete result.names;
+  return result;
+}
+
 export const buildPlannerRequest = (
   f: PlannerDraft,
   locale: "en" | "vi",
@@ -128,6 +134,10 @@ export const buildPlannerRequest = (
     },
     journey: {
       ...f.planning.journey,
+      origin: requestLocation(f.planning.journey.origin),
+      endpoint:
+        f.planning.journey.endpoint &&
+        requestLocation(f.planning.journey.endpoint),
       destinations: f.cities.map((c) => c.slug),
     },
     stay_preferences: {

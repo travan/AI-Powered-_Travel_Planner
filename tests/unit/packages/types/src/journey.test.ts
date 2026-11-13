@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createPlanningCriteria,
   localTripInstant,
@@ -100,6 +100,23 @@ describe("complete journey rules", () => {
       Date.parse("2026-11-03T08:00:00Z"),
     );
     expect(tripDayCount(request())).toBe(3);
+  });
+  it("validates flexible dates against the normalized trip length", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-11-29T02:00:00Z"));
+      const input = { ...request(), flexible_month: "2026-11", num_days: 1 };
+      expect(validatePlanning(input)).toMatchObject({
+        valid: false,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: "MONTH_UNAVAILABLE", field: "flexible_month" }),
+        ]),
+      });
+      input.end_date = "2026-11-02";
+      expect(validatePlanning(input).valid).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("requires endpoint for one-way travel and validates return times", () => {
     const input = request();

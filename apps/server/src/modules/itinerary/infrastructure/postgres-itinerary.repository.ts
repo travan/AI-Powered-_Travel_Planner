@@ -107,15 +107,21 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
+    jobClaim?: { id: string; token: string };
     catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string> {
     const saved = await this.sql.query<{ id: string }>(
-      `with saved as (
+      `with ${input.jobClaim ? `claim as (
+         select id from itinerary_jobs where id=$12 and claim_token=$13
+           and user_id::text=$1 and status='processing' and itinerary_id is null for update
+       ),` : ""} saved as (
          insert into itineraries (
            user_id, cities, countries, start_date, end_date, num_days,
            budget, currency, trip_style, status, result
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)
+         ${input.jobClaim
+           ? "select $1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10 from claim"
+           : "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)"}
          returning id
        ),
        queued as (
@@ -123,7 +129,10 @@ export class PostgresItineraryRepository implements ItineraryRepository {
          select saved.id, jsonb_build_object('cities', $11::jsonb)
          from saved
          returning itinerary_id
-       )
+       ) ${input.jobClaim ? `, linked as (
+         update itinerary_jobs set itinerary_id=saved.id from saved where itinerary_jobs.id=$12
+         returning itinerary_jobs.id
+       )` : ""}
        select saved.id::text
        from saved
        inner join queued on queued.itinerary_id = saved.id`,
@@ -139,8 +148,10 @@ export class PostgresItineraryRepository implements ItineraryRepository {
         input.request.trip_style,
         input.result,
         JSON.stringify(input.catalogCities),
+        ...(input.jobClaim ? [input.jobClaim.id, input.jobClaim.token] : []),
       ],
     );
+    if (!saved.rows[0]) throw new Error("Planning job claim lost");
     if (process.env.DOCUMENT_STORE === "postgres") {
       await this.sql.query(
         `insert into user_prompt_history (user_id, prompt_text, normalized_query) values ($1, $2, $3)`,

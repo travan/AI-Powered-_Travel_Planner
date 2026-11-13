@@ -154,6 +154,8 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
     "oauth_transactions",
     "itinerary_jobs",
     "journey_job_dispatch",
+    "planning_day_templates",
+    "planning_ai_attempts",
     "product_notifications",
     "trip_plan_revisions",
     "accommodations",

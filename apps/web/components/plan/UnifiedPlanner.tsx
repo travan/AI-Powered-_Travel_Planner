@@ -417,19 +417,24 @@ export function UnifiedPlanner() {
       plannerFormRef.current?.querySelector<HTMLInputElement>(
         '[data-testid="web-plan-city-input"]',
       )?.value ?? cityQuery;
-    const draft =
-      origin === form.planning.journey.origin.label
-        ? form
-        : {
-            ...form,
-            planning: {
-              ...form.planning,
-              journey: {
-                ...form.planning.journey,
-                origin: { label: origin, source: "manual" as const },
-              },
-            },
-          };
+    const journey = form.planning.journey;
+    const currentOrigin =
+      origin === journey.origin.label
+        ? journey.origin
+        : { label: origin, source: "manual" as const };
+    const endpoint = journey.endpoint;
+    const draft = {
+      ...form,
+      planning: {
+        ...form.planning,
+        journey: {
+          ...journey,
+          origin: displayLocation(currentOrigin, [...origins, ...popularCities]),
+          endpoint: endpoint &&
+            displayLocation(endpoint, [...endpoints, ...popularCities]),
+        },
+      },
+    };
     return {
       ...preparePlannerSubmission(
         { ...draft, destinationQuery },
@@ -1007,7 +1012,7 @@ export function UnifiedPlanner() {
   return (
     <div className="min-h-screen bg-background text-on-surface">
       <SiteHeader />
-      <main className="mx-auto max-w-3xl px-4 pt-6 pb-36 md:pb-12">
+      <main className="mx-auto max-w-3xl px-4 pt-6 pb-36 lg:pb-12">
         <h1 className="mb-5 font-headline text-2xl font-bold">
           {ux("compact_heading")}
         </h1>

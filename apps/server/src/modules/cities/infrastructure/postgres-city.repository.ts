@@ -103,7 +103,7 @@ export class PostgresCityRepository implements CityRepository {
     return result.rows[0] ? mapCity(result.rows[0]) : null;
   }
 
-  async findForPlanning(value: string): Promise<CityPlanningData | null> {
+  async findForPlanning(value: string, catalogLimit?: number): Promise<CityPlanningData | null> {
     const result = await this.sql.query<CityRow>(
       `select slug, name, country, timezone, currency, lat, lon, popular
        from cities
@@ -134,8 +134,8 @@ export class PostgresCityRepository implements CityRepository {
            and status = 'active'
            and superseded_by_place_id is null
          order by quality_score desc, popularity_score desc, current_name asc
-         limit 30`,
-        [row.slug],
+         limit $2`,
+        [row.slug, catalogLimit ?? 30],
       ),
       this.sql.query<CityPlaceRow>(
         `select id::text, last_verified_at::text, lat, lon, google_place_id, name,
@@ -156,8 +156,8 @@ export class PostgresCityRepository implements CityRepository {
          where city_slug = $1
            and is_outdated = false
          order by quality_score desc, name asc
-         limit 30`,
-        [row.slug],
+         limit $2`,
+        [row.slug, catalogLimit ?? 30],
       ),
       this.sql.query<CityActivityRow>(
         `select id::text, last_verified_at::text, title,
@@ -168,16 +168,16 @@ export class PostgresCityRepository implements CityRepository {
                duration_minutes,
                source
          from activity_catalog
-         where city_slug = $1
+         where city_slug = $1 and not is_outdated
          order by quality_score desc, popularity_score desc, title asc
-         limit 30`,
-        [row.slug],
+         limit $2`,
+        [row.slug, catalogLimit ?? 30],
       ),
     ]);
 
     return {
       ...mapCity(row),
-      places: [...places.rows, ...catalogPlaces.rows].slice(0, 40),
+      places: [...places.rows, ...catalogPlaces.rows].slice(0, catalogLimit ?? 40),
       activities: activities.rows,
     };
   }

@@ -18,6 +18,7 @@ vi.mock("../../../../../../apps/web/components/layout/AccountMenu", () => ({
   AccountMenu: () => null,
 }));
 import { SiteHeader } from "../../../../../../apps/web/components/layout/SiteHeader";
+import { NotificationProvider } from "../../../../../../apps/web/components/layout/NotificationProvider";
 import { BottomNav } from "../../../../../../apps/web/components/layout/BottomNav";
 import { LanguageProvider } from "../../../../../../apps/web/components/i18n/LanguageProvider";
 const links = (id: string) =>
@@ -34,8 +35,10 @@ describe("shared primary navigation", () => {
   it("uses the same destinations and labels on desktop and mobile in both languages", () => {
     render(
       <LanguageProvider initialLocale="vi">
-        <SiteHeader />
-        <BottomNav />
+        <NotificationProvider>
+          <SiteHeader />
+          <BottomNav />
+        </NotificationProvider>
       </LanguageProvider>,
     );
     const desktop = links("desktop-navigation");
@@ -74,8 +77,10 @@ describe("shared primary navigation", () => {
     route.pathname = "/trips/trip-1/workspace";
     render(
       <LanguageProvider initialLocale="en">
-        <SiteHeader />
-        <BottomNav />
+        <NotificationProvider>
+          <SiteHeader />
+          <BottomNav />
+        </NotificationProvider>
       </LanguageProvider>,
     );
     for (const id of ["desktop-navigation", "mobile-navigation"])

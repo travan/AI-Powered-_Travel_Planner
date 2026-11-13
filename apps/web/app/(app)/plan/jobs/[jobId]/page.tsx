@@ -13,7 +13,7 @@ import { getJourneyJob, notifyJobStatusChanged, retryJourneyJob } from "../../..
 import { pollWhileVisible } from "@/lib/visible-poll";
 import { ApiRequestError } from "@/lib/api";
 import type { PlanningJob } from "@travel/types";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 const LABELS: Record<string, string> = {
   queued: "Yêu cầu đang chờ xử lý",
   catalog: "Đang lấy dữ liệu địa điểm",
@@ -26,6 +26,7 @@ const LABELS: Record<string, string> = {
 };
 export default function JourneyJobPage() {
   const t = useUiText();
+  const locale = useLocale();
   const issueText = useIssueText();
   const requestsText = useTranslations("plannerUX.requests");
   const { jobId } = useParams<{ jobId: string }>(),
@@ -83,6 +84,21 @@ export default function JourneyJobPage() {
       setRetrying(false);
     }
   };
+  const retryAt = job?.error_code === "AI_QUOTA_EXHAUSTED" &&
+    typeof job.error_params?.retry_at === "string"
+    ? Date.parse(job.error_params.retry_at) : NaN;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const delay = retryAt - Date.now();
+    if (!Number.isFinite(delay) || delay <= 0) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), delay + 100);
+    return () => window.clearTimeout(timer);
+  }, [retryAt]);
+  const resetTime = Number.isFinite(retryAt)
+    ? new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
+      }).format(retryAt)
+    : "";
   return (
     <main className="mx-auto max-w-xl space-y-6 px-5 py-20">
       <p className="text-sm font-bold text-primary">
@@ -96,8 +112,11 @@ export default function JourneyJobPage() {
         {job?.status === "failed" ? (
           job.error_code ? (
             issueText({
-              code: job.error_code,
-              params: job.error_params,
+              code: job.error_code === "PLANNING_INVALID" &&
+                typeof job.error_params?.reason === "string"
+                ? job.error_params.reason
+                : job.error_code,
+              params: { ...job.error_params, retry_time: resetTime },
               message: job.error ?? undefined,
             })
           ) : (
@@ -111,7 +130,7 @@ export default function JourneyJobPage() {
         )}
       </p>
       {job?.status === "failed" && job.kind === "generate" && job.error_code !== "PLANNING_INVALID" && (
-        <button type="button" disabled={retrying} onClick={() => void retry()} className="rounded-full bg-primary px-5 py-3 text-white">
+        <button type="button" disabled={retrying || retryAt > now} onClick={() => void retry()} className="rounded-full bg-primary px-5 py-3 text-white">
           {t("Thử lại")}
         </button>
       )}

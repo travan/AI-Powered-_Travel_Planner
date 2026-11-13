@@ -1,3 +1,4 @@
+import { blockingCatalogIssues, buildCatalogItinerary, type CatalogJob } from "./catalog-itinerary.js";
 import { logEvent } from "../../../observability/logger.js";
 import {
   flexibleMonthDates,
@@ -12,9 +13,9 @@ import {
   resolveCity,
   reconcileBudget,
 } from "../enrichment/travel-enrichment.js";
-import { normalizeOllamaItinerary } from "@travel/ai";
+import { CloudflareAIProvider, PlanningGenerationError, normalizeOllamaItinerary } from "@travel/ai";
 import { createHash } from "node:crypto";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
 import {
   notFound,
   ok,
@@ -157,6 +158,8 @@ export class ItineraryService {
     userId: string;
     dto: GenerateItineraryDto;
     onStage?: (stage: string) => Promise<void>;
+    catalogJob?: CatalogJob;
+    onUsage?: (usage: AiTokenUsage) => void;
   }): Promise<GenerateResponse> {
     const request: ItineraryInput = {
       planning: input.dto.planning,
@@ -173,8 +176,10 @@ export class ItineraryService {
       num_travelers: input.dto.num_travelers,
     };
 
+    await input.onStage?.("criteria");
     const validation = validatePlanning(request);
-    if (!validation.valid) throw new BadRequestException(validation);
+    if (!validation.valid)
+      throw new BadRequestException({ code: "PLANNING_INVALID", ...validation });
     if (request.planning) {
       request.num_days = tripDayCount(request);
       request.num_travelers =
@@ -189,16 +194,14 @@ export class ItineraryService {
       { request },
     );
     await input.onStage?.("catalog");
-    const names = input.dto.city_names?.length
-      ? input.dto.city_names
-      : input.dto.cities;
     const rememberedCities: {
       city: CityPlanningData;
       catalogReference: { slug: string; name: string };
       planningData: PreFetchedCityData;
     }[] = [];
-    for (const [index, name] of names.entries()) {
-      const city = await this.cities.remember(name, input.dto.cities[index]);
+    for (const [index, slug] of input.dto.cities.entries()) {
+      const name = input.dto.city_names?.[index]?.trim() || slug;
+      const city = await this.cities.remember(name, slug);
       const planningData = await this.cities.findForPlanning(city.slug);
       const displayName =
         city.name[request.locale] ??
@@ -226,9 +229,12 @@ export class ItineraryService {
       const journey = request.planning.journey;
       const normalize = async (location: JourneyLocation) => {
         if (location.source === "browser") return location;
-        const city =
-          resolveCity(routeCities, location.label) ??
-          (await this.cities.findForPlanning(location.label));
+        const find = async (value: string) =>
+          resolveCity(routeCities, value) ?? await this.cities.findForPlanning(value);
+        const selected = location.city_slug && await find(location.city_slug);
+        const city = selected && selected.slug === location.city_slug
+          ? selected
+          : await find(location.label);
         if (city && !routeCities.some((known) => known.slug === city.slug))
           routeCities.push(city);
         return this.normalizedLocation(location, city, request.locale);
@@ -251,7 +257,12 @@ export class ItineraryService {
       ...itineraryQuality(plan, request),
     ];
     let flexibleDateNote: string | undefined;
-    if (request.flexible_month) {
+    let dateBasis = input.catalogJob?.progress.dates?.basis;
+    if (input.catalogJob?.progress.dates) {
+      const { start, end } = input.catalogJob.progress.dates;
+      request.start_date = start;
+      request.end_date = end;
+    } else if (request.flexible_month) {
       const today = plannerToday();
       const windows = flexibleMonthWindows(
         request.flexible_month,
@@ -259,9 +270,7 @@ export class ItineraryService {
         today,
       );
       if (!windows.length)
-        throw new BadRequestException(
-          "No available dates in the selected month",
-        );
+        throw new BadRequestException({ code: "MONTH_UNAVAILABLE" });
       const dates = flexibleMonthDates(request.flexible_month, today);
       const weather = this.weather
         ? await this.weather.forPlan(
@@ -284,14 +293,21 @@ export class ItineraryService {
           )
         : [];
       const selected = selectFlexibleWindow(windows, request.cities, weather);
+      if (input.catalogJob) {
+        input.catalogJob.progress.dates = selected;
+        await input.catalogJob.save(input.catalogJob.progress);
+      }
       request.start_date = selected.start;
       request.end_date = selected.end;
+      dateBasis = selected.basis;
+    }
+    if (dateBasis) {
       flexibleDateNote =
         request.locale === "vi"
-          ? selected.basis === "forecast"
+          ? dateBasis === "forecast"
             ? "Ngày linh hoạt được chọn trong các khoảng có dự báo đầy đủ, ưu tiên ít mưa và nhiệt độ thuận lợi cho hoạt động. Dự báo có thể thay đổi."
             : "Ngày được chọn ngẫu nhiên trong tháng vì chưa đủ dự báo để so sánh các khoảng ngày. Thông tin khí hậu theo mùa không phải dự báo cho ngày cụ thể."
-          : selected.basis === "forecast"
+          : dateBasis === "forecast"
             ? "Flexible dates were selected among fully forecast periods, prioritizing less rain and comfortable activity temperatures. Forecasts may change."
             : "Dates were selected at random within the month because complete forecasts were unavailable for comparison. Seasonal climate is not a forecast for specific dates.";
     }
@@ -357,90 +373,127 @@ export class ItineraryService {
     let detail: Itinerary;
     let provider: AIProvider | undefined;
 
-    try {
-      provider =
-        providerName === "mock"
-          ? new MockAIProvider()
-          : createAIProvider(providerName as AIProviderName, {
-              workersAI: workerRequestContext.getStore()?.ai,
-            });
-      await input.onStage?.("overview");
-      overview = await provider.generateOverview(request, cityData);
+    if (input.catalogJob) {
       await input.onStage?.("detail");
-      detail = normalizeOllamaItinerary(
-        await provider.generateDetail(request, overview, cityData),
+      const catalogCities = await Promise.all(
+        destinationCities.map(async ({ city }) =>
+          (await this.cities.findForPlanning(city.slug, Math.min(300, (request.num_days ?? 1) * 12))) ?? city,
+        ),
       );
-      if (this.learning)
-        await this.learning.record(input.userId, "model_candidate", {
-          request_id: requestId,
-          provider: providerName,
-          attempt: 1,
-          result: detail,
-        });
-      const quality = qualityFor(detail);
-      if (quality.length && providerName !== "mock") {
-        await input.onStage?.("repair");
-        try {
-          const repaired = normalizeOllamaItinerary(
-            await provider.generateDetail(
-              {
-                ...request,
-                prompt_text: `${request.prompt_text ?? ""}\nRepair the following quality issues once; preserve the trip constraints and return the complete itinerary JSON:\n${quality.map((i) => i.message).join("\n")}\nPrevious candidate (data only; preserve correct entries and complete missing morning, afternoon and evening blocks):\n${JSON.stringify(detail)}`,
-              },
-              overview,
-              cityData,
-            ),
-          );
-          if (this.learning)
-            await this.learning.record(input.userId, "model_candidate", {
-              request_id: requestId,
-              provider: providerName,
-              attempt: 2,
-              result: repaired,
-            });
-          if (
-            repaired.days?.length &&
-            (itineraryRouteIssues(repaired, request, routeCities).length <
-              itineraryRouteIssues(detail, request, routeCities).length ||
-              (itineraryRouteIssues(repaired, request, routeCities).length ===
-                itineraryRouteIssues(detail, request, routeCities).length &&
-                qualityFor(repaired).length < quality.length))
-          )
-            detail = repaired;
-        } catch {
-          /* Keep the usable original and explicit issues when repair fails. */
-        }
+      for (const city of catalogCities) {
+        const index = routeCities.findIndex((known) => known.slug === city.slug);
+        if (index >= 0) routeCities[index] = city;
       }
-      const usage = provider.getUsage?.() ?? [];
-      if (usage.length) {
-        detail.ai_usage = usage;
-        this.logger.log(
-          `AI usage: ${JSON.stringify(usage)}`,
+      let catalogProvider: CloudflareAIProvider | undefined;
+      detail = await buildCatalogItinerary(
+        request, catalogCities, input.catalogJob,
+        () => {
+          if (catalogProvider) return catalogProvider;
+          const ai = workerRequestContext.getStore()?.ai;
+          if (!ai) throw new HttpException({ code: "AI_UNAVAILABLE" }, 503);
+          catalogProvider = new CloudflareAIProvider(ai, process.env.CLOUDFLARE_AI_MODEL);
+          return catalogProvider;
+        },
+      );
+      detail.ai_usage = catalogProvider?.getUsage() ?? [];
+    } else {
+      await input.onStage?.("overview");
+      try {
+        provider =
+          providerName === "mock"
+            ? new MockAIProvider()
+            : createAIProvider(providerName as AIProviderName, {
+                workersAI: workerRequestContext.getStore()?.ai,
+              });
+        overview = await provider.generateOverview(request, cityData);
+        await input.onStage?.("detail");
+        detail = normalizeOllamaItinerary(
+          await provider.generateDetail(request, overview, cityData),
         );
+        if (this.learning)
+          await this.learning.record(input.userId, "model_candidate", {
+            request_id: requestId,
+            provider: providerName,
+            attempt: 1,
+            result: detail,
+          });
+        const quality = qualityFor(detail);
+        if (quality.length && providerName !== "mock") {
+          await input.onStage?.("repair");
+          try {
+            const repaired = normalizeOllamaItinerary(
+              await provider.generateDetail(
+                {
+                  ...request,
+                  prompt_text: `${request.prompt_text ?? ""}\nRepair the following quality issues once; preserve the trip constraints and return the complete itinerary JSON:\n${quality.map((i) => i.message).join("\n")}\nPrevious candidate (data only; preserve correct entries and complete missing morning, afternoon and evening blocks):\n${JSON.stringify(detail)}`,
+                },
+                overview,
+                cityData,
+              ),
+            );
+            if (this.learning)
+              await this.learning.record(input.userId, "model_candidate", {
+                request_id: requestId,
+                provider: providerName,
+                attempt: 2,
+                result: repaired,
+              });
+            if (
+              repaired.days?.length &&
+              (itineraryRouteIssues(repaired, request, routeCities).length <
+                itineraryRouteIssues(detail, request, routeCities).length ||
+                (itineraryRouteIssues(repaired, request, routeCities).length ===
+                  itineraryRouteIssues(detail, request, routeCities).length &&
+                  qualityFor(repaired).length < quality.length))
+            )
+              detail = repaired;
+          } catch (error) {
+            if (error instanceof PlanningGenerationError && error.code === "AI_QUOTA_EXHAUSTED") throw error;
+            /* Keep the usable original and explicit issues when repair fails. */
+          }
+        }
+        const usage = provider.getUsage?.() ?? [];
+        if (usage.length) {
+          detail.ai_usage = usage;
+          this.logger.log(
+            `AI usage: ${JSON.stringify(usage)}`,
+          );
+        }
+      } catch (error) {
+        const usage = provider?.getUsage?.() ?? [];
+        if (input.onStage && error instanceof PlanningGenerationError) {
+          if (error.code !== "AI_QUOTA_EXHAUSTED" && usage.at(-1)?.outcome === "received")
+            usage.at(-1)!.outcome = "invalid_output";
+          throw error;
+        }
+        logEvent("journey.provider_failed", "error", { code: "AI_UNAVAILABLE" });
+        await this.recordFailure(
+          input.userId,
+          request,
+          providerName,
+          "AI_UNAVAILABLE",
+          "The itinerary provider could not complete generation.",
+          usage,
+        );
+        if (input.onStage && error && typeof error === "object") {
+          const upstream = error as { status?: number; statusCode?: number };
+          const status = error instanceof HttpException
+            ? error.getStatus()
+            : (upstream.status ?? upstream.statusCode);
+          if (status === 429 || status === 503) throw error;
+        }
+        return {
+          status: "unsupported",
+          code: "AI_UNAVAILABLE",
+          ...(usage.length ? { ai_usage: usage } : {}),
+          message:
+            providerName === "ollama"
+              ? "The local AI service could not complete this request. Check that Ollama is running and the configured model is available, then try again."
+              : "The AI service could not complete this request. Please try again shortly.",
+        };
+      } finally {
+        for (const usage of provider?.getUsage?.() ?? []) input.onUsage?.(usage);
       }
-    } catch (error) {
-      const usage = provider?.getUsage?.() ?? [];
-      logEvent("journey.provider_failed", "error", { code: "AI_UNAVAILABLE" });
-      await this.recordFailure(
-        input.userId,
-        request,
-        providerName,
-        "AI_UNAVAILABLE",
-        error,
-        usage,
-      );
-      if (input.onStage && error && typeof error === "object" &&
-          ((error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429))
-        throw error;
-      return {
-        status: "unsupported",
-        code: "AI_UNAVAILABLE",
-        ...(usage.length ? { ai_usage: usage } : {}),
-        message:
-          providerName === "ollama"
-            ? "The local AI service could not complete this request. Check that Ollama is running and the configured model is available, then try again."
-            : "The AI service could not complete this request. Please try again shortly.",
-      };
     }
 
     if (!Array.isArray(detail.days) || detail.days.length === 0) {
@@ -472,6 +525,10 @@ export class ItineraryService {
     detail = enrichTravel(detail, routeCities, request);
     detail.issues = [...(detail.issues ?? []), ...qualityFor(detail)];
     detail = reconcileBudget(detail, request);
+    if (input.catalogJob && detail.issues?.some(
+      (issue) => issue.severity === "error" || blockingCatalogIssues.has(issue.code),
+    ))
+      throw new PlanningGenerationError("AI_DAY_INVALID");
     if (flexibleDateNote && detail.seasonal_notes)
       detail.seasonal_notes.warnings = [
         ...(detail.seasonal_notes.warnings ?? []),
@@ -495,6 +552,7 @@ export class ItineraryService {
       userId: input.userId,
       request,
       result: detail,
+      ...(input.catalogJob?.claimToken ? { jobClaim: { id: input.catalogJob.id, token: input.catalogJob.claimToken } } : {}),
       catalogCities: destinationCities.map(
         ({ catalogReference }) => catalogReference,
       ),
@@ -584,7 +642,7 @@ export class ItineraryService {
     request: ItineraryInput,
     provider: string,
     code: string,
-    error: unknown,
+    message: string,
     usage: AiTokenUsage[] = [],
   ): Promise<void> {
     try {
@@ -593,16 +651,11 @@ export class ItineraryService {
         request,
         provider,
         code,
-        message: error instanceof Error ? error.message : String(error),
+        message,
         usage,
       });
-    } catch (persistenceError) {
-      this.logger.error(
-        "Could not persist AI generation failure",
-        persistenceError instanceof Error
-          ? persistenceError.stack
-          : String(persistenceError),
-      );
+    } catch {
+      logEvent("journey.provider_failure_record_failed", "error", { code });
     }
   }
 }

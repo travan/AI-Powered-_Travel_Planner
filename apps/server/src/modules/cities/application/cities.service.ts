@@ -5,6 +5,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   notFound,
@@ -71,31 +72,24 @@ export class CitiesService {
       return await this.cities.remember(name);
     } catch (error) {
       if (
-        !this.lookup ||
         !(error instanceof BadRequestException) ||
         (error.getResponse() as { code?: string }).code !== "CITY_UNRESOLVED"
       )
         throw error;
+      if (!this.lookup)
+        throw new ServiceUnavailableException("Location lookup unavailable");
       // External lookups happen only on explicit submission, never on autocomplete.
       let result;
       try {
         result = await this.lookup.cityCandidates(name);
       } catch (upstream) {
-        if (upstream instanceof HttpException && upstream.getStatus() === 503)
-          throw error;
         if (
           !(upstream instanceof HttpException) ||
           upstream.getStatus() !== 429
         )
           throw upstream;
         await new Promise((resolve) => setTimeout(resolve, 1100));
-        try {
-          result = await this.lookup.cityCandidates(name);
-        } catch (retry) {
-          if (retry instanceof HttpException && retry.getStatus() === 503)
-            throw error;
-          throw retry;
-        }
+        result = await this.lookup.cityCandidates(name);
       }
       if (result.candidates.length !== 1)
         throw new BadRequestException({
@@ -111,7 +105,7 @@ export class CitiesService {
     }
   }
 
-  findForPlanning(value: string): Promise<CityPlanningData | null> {
-    return this.cities.findForPlanning(value);
+  findForPlanning(value: string, catalogLimit?: number): Promise<CityPlanningData | null> {
+    return catalogLimit === undefined ? this.cities.findForPlanning(value) : this.cities.findForPlanning(value, catalogLimit);
   }
 }

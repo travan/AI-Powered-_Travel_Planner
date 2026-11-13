@@ -39,7 +39,7 @@ export function LanguageProvider({
           >["children"]
         }
         <div
-          className="fixed bottom-24 right-3 z-50 flex gap-1 rounded-full border border-outline-variant/30 bg-surface p-1 shadow-lg md:bottom-5"
+          className="fixed bottom-24 right-3 z-50 flex gap-1 rounded-full border border-outline-variant/30 bg-surface p-1 shadow-lg lg:bottom-5"
           role="group"
           aria-label={(locale === "vi" ? vi : en).common.language}
         >

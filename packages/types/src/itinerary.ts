@@ -357,6 +357,9 @@ export interface AiTokenUsage {
   output_tokens: number | null;
   total_tokens: number | null;
   duration_ms?: number | null;
+  phase?: "overview" | "outline" | "outline_repair" | "day" | "day_repair" | "full_repair" | "detail" | "translate";
+  day?: number;
+  outcome?: "received" | "invalid_output" | "quota_rejected" | "provider_error";
 }
 
 export interface ItineraryOverview {

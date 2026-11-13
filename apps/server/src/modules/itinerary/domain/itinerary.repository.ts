@@ -11,6 +11,7 @@ export type ItineraryRepository = {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
+    jobClaim?: { id: string; token: string };
     catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string>;
   recordFailure(input: {
