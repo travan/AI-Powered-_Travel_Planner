@@ -15,6 +15,7 @@ export type PlannerDraft = {
   planning: PlanningCriteria;
   cities: SelectedCity[];
   destinationQuery?: string;
+  replacingDestination?: string;
   start: string;
   end: string;
   days: number;
@@ -278,7 +279,7 @@ export function preparePlannerSubmission(
   form: PlannerDraft,
   locale: "en" | "vi",
   suggestions: CitySuggestion[] = [],
-  replacing?: string,
+  replacing = form.replacingDestination,
 ): { draft: PlannerDraft; request: GenerateRequest } {
   const pending = form.destinationQuery?.trim() ?? "";
   let cities = form.cities.reduce<SelectedCity[]>(
@@ -309,6 +310,7 @@ export function preparePlannerSubmission(
     ...form,
     cities,
     destinationQuery: "",
+    replacingDestination: undefined,
     forceRefresh: false,
     planning: {
       ...form.planning,

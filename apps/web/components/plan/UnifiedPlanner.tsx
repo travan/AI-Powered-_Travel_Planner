@@ -68,6 +68,7 @@ import { RecentPlanningRequests } from "./RecentPlanningRequests";
 
 const DRAFT_KEY = "horizon.planner.draft.v3";
 const INTENT_KEY = "horizon.search.intent";
+const SUBMISSION_KEY = "horizon.planner.pending-submission";
 type CountrySuggestion = {
   country: string;
   names: Record<"en" | "vi", string>;
@@ -173,8 +174,11 @@ export function UnifiedPlanner() {
   const [dateNotice, setDateNotice] = useState(false);
   const cityQuery = form.destinationQuery ?? "";
   const setCityQuery = (value: string) => {
-    if (!value) replacement.current = undefined;
-    setForm((draft) => ({ ...draft, destinationQuery: value }));
+    setForm((draft) => ({
+      ...draft,
+      destinationQuery: value,
+      replacingDestination: value ? draft.replacingDestination : undefined,
+    }));
   };
   const [cityComposing, setCityComposing] = useState(false);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
@@ -311,14 +315,38 @@ export function UnifiedPlanner() {
   const [countryProposals, setCountryProposals] = useState<
     Record<string, CountrySuggestion>
   >({});
-  const replacement = useRef<string | undefined>(undefined);
   const submissionKey = useRef<{ payload: string; key: string } | null>(null);
-  const submitGeneration = async (request: GenerateRequest, token: string) => {
+  const submitting = useRef(false);
+  const keyForSubmission = (request: GenerateRequest) => {
     const payload = JSON.stringify(request);
-    if (submissionKey.current?.payload !== payload)
+    if (!submissionKey.current) {
+      try {
+        const stored = sessionStorage.getItem(SUBMISSION_KEY);
+        if (stored) submissionKey.current = JSON.parse(stored);
+      } catch {
+        // Keep retry protection in memory if browser storage is unavailable.
+      }
+    }
+    if (submissionKey.current?.payload !== payload) {
       submissionKey.current = { payload, key: crypto.randomUUID() };
-    const result = await generateItinerary(request, token, submissionKey.current.key);
-    submissionKey.current = null;
+      try {
+        sessionStorage.setItem(SUBMISSION_KEY, JSON.stringify(submissionKey.current));
+      } catch {
+        // The in-memory key still protects retries on this page.
+      }
+    }
+    return submissionKey.current.key;
+  };
+  const submitGeneration = async (request: GenerateRequest, token: string, key = keyForSubmission(request)) => {
+    const result = await generateItinerary(request, token, key);
+    if (result.status !== "unsupported") {
+      submissionKey.current = null;
+      try {
+        sessionStorage.removeItem(SUBMISSION_KEY);
+      } catch {
+        // A storage failure cannot invalidate a successful admission.
+      }
+    }
     window.dispatchEvent(new Event("cohorizon:job-status"));
     return result;
   };
@@ -437,7 +465,6 @@ export function UnifiedPlanner() {
       { ...draft, destinationQuery },
       locale,
       suggestions,
-      replacement.current,
     );
   };
   const redirectToSignIn = async (request: GenerateRequest) => {
@@ -450,7 +477,9 @@ export function UnifiedPlanner() {
       guestKey: string;
       createdAt: number;
       draftId?: string;
-    } = { request, guestKey, createdAt: Date.now() };
+      submissionKey: string;
+    } = { request, guestKey, createdAt: Date.now(), submissionKey: keyForSubmission(request) };
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
     try {
       intent.draftId = (
         await createSearchDraft({
@@ -511,7 +540,10 @@ export function UnifiedPlanner() {
       }
       if (params.get("city")) {
         const slug = params.get("city")!;
-        setForm((f) => ({ ...f, cities: [{ slug, name: slug }] }));
+        setForm((f) => f.cities.length || f.destinationQuery
+          ? f
+          : { ...f, cities: [{ slug, name: slug }] },
+        );
       }
     } catch {
       /* Keep an editable clean form when an old draft cannot be decoded. */
@@ -545,11 +577,16 @@ export function UnifiedPlanner() {
     if (!ready || params.get("resumeGenerate") !== "1" || resumed.current)
       return;
     resumed.current = true;
+    submitting.current = true;
     setBusy(true);
     void (async () => {
       try {
         const raw = sessionStorage.getItem(INTENT_KEY);
-        const intent = raw ? JSON.parse(raw) : null;
+        const draftId = params.get("draftId");
+        const storedIntent = raw ? JSON.parse(raw) : null;
+        const intent = draftId && storedIntent?.draftId && storedIntent.draftId !== draftId
+          ? null
+          : storedIntent;
         const {
           data: { session },
         } = await createClient().auth.getSession();
@@ -558,14 +595,12 @@ export function UnifiedPlanner() {
           return;
         }
         let request = intent?.request as GenerateRequest | undefined;
-        const draftId = params.get("draftId");
         const guestKey =
           intent?.guestKey ?? localStorage.getItem("horizon.search.guest_key");
         if (draftId && guestKey) {
           try {
-            request = (
-              await claimSearchDraft(draftId, guestKey, session.access_token)
-            ).search_payload;
+            const claimed = await claimSearchDraft(draftId, guestKey, session.access_token);
+            request ??= claimed.search_payload;
           } catch (e) {
             if (!request) throw e;
           }
@@ -578,7 +613,7 @@ export function UnifiedPlanner() {
         let restored = restorePlannerRequest(request);
         setForm(restored);
         const targetCurrency = locale === "vi" ? "VND" : "USD";
-        if (restored.planning.budget.currency !== targetCurrency) {
+        if (!intent?.submissionKey && restored.planning.budget.currency !== targetCurrency) {
           if (hasPlannerMoney(restored)) {
             const quote = await getCurrencyQuote(
               restored.planning.budget.currency,
@@ -590,7 +625,7 @@ export function UnifiedPlanner() {
         }
         const prepared = preparePlannerSubmission(restored, locale);
         setForm(prepared.draft);
-        request = prepared.request;
+        if (!intent?.submissionKey) request = prepared.request;
         const checked = validatePlanning(request);
         if (!checked.valid) {
           setIssues(checked.issues);
@@ -598,7 +633,7 @@ export function UnifiedPlanner() {
         }
         window.history.replaceState(null, "", "/plan");
         setBusy(true);
-        navigateResult(await submitGeneration(request, session.access_token));
+        navigateResult(await submitGeneration(request, session.access_token, intent?.submissionKey));
         sessionStorage.removeItem(INTENT_KEY);
       } catch (e) {
         if (
@@ -611,6 +646,7 @@ export function UnifiedPlanner() {
           setError(ux("draft_expired"));
         else setError(apiErrorText(e, "Không thể khôi phục nháp."));
       } finally {
+        submitting.current = false;
         setBusy(false);
       }
     })();
@@ -623,19 +659,18 @@ export function UnifiedPlanner() {
     const labels =
       names ??
       [...popularCities, ...suggestions].find((c) => c.slug === slug)?.name;
-    const replacing = replacement.current;
-    replacement.current = undefined;
     const city = { slug, name, ...(labels ? { names: labels } : {}) };
     setForm((draft) => ({
       ...draft,
-      cities: replacing
+      cities: draft.cities.some((entry) => entry.slug === draft.replacingDestination)
         ? draft.cities
-            .map((entry) => (entry.slug === replacing ? city : entry))
+            .map((entry) => (entry.slug === draft.replacingDestination ? city : entry))
             .reduce<
               PlannerDraft["cities"]
             >((selected, entry) => mergePlannerCity(selected, entry), [])
         : mergePlannerCity(draft.cities, city),
       destinationQuery: "",
+      replacingDestination: undefined,
     }));
   };
   const selectCountryCity = (
@@ -706,16 +741,20 @@ export function UnifiedPlanner() {
     );
   };
   const generate = async () => {
-    if (currencyBusy || currencyFailure) return;
+    if (!ready || submitting.current || currencyBusy || currencyFailure || cityComposing) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
-    const { draft, request } = prepareCurrent();
+    let request: GenerateRequest | undefined;
     try {
+      const prepared = prepareCurrent();
+      const draft = prepared.draft;
+      request = prepared.request;
       const checked = validatePlanning(request);
       setIssues(checked.issues);
       if (!checked.valid) return;
-      replacement.current = undefined;
       setForm(draft);
+      keyForSubmission(request);
       const {
         data: { session },
       } = await createClient().auth.getSession();
@@ -725,7 +764,7 @@ export function UnifiedPlanner() {
       }
       navigateResult(await submitGeneration(request, session.access_token));
     } catch (e) {
-      if (e instanceof ApiRequestError && e.status === 401) {
+      if (request && e instanceof ApiRequestError && e.status === 401) {
         await createClient().auth.signOut();
         await redirectToSignIn(request);
         return;
@@ -734,6 +773,7 @@ export function UnifiedPlanner() {
         apiErrorText(e, "Không thể tạo lịch trình. Bạn có thể thử lại."),
       );
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -1148,12 +1188,15 @@ export function UnifiedPlanner() {
                         onClick={() => {
                           const match = countryProposals[c.slug]!;
                           const name = match.names[locale];
-                          replacement.current = c.slug;
                           setCountryMatch({
                             key: placeKey(name),
                             suggestion: match,
                           });
-                          setCityQuery(name);
+                          setForm((draft) => ({
+                            ...draft,
+                            destinationQuery: name,
+                            replacingDestination: c.slug,
+                          }));
                           plannerFormRef.current
                             ?.querySelector<HTMLInputElement>(
                               '[data-testid="web-plan-city-input"]',
