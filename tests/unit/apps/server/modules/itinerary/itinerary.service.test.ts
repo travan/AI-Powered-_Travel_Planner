@@ -85,6 +85,31 @@ it.each([
   expect(JSON.stringify(run.mock.calls[0])).toContain("Seoul");
 });
 
+it("sends an explicit country destination to itinerary generation without a city lookup", async () => {
+  const cities = createCitiesService();
+  const planning = createPlanningCriteria();
+  planning.journey.origin = { label: "Hà Nội", source: "manual" };
+  planning.journey.destinations = ["country-sg"];
+  const stop = new Error("stop at the first AI call");
+  const run = vi.fn().mockRejectedValue(stop);
+  const service = new ItineraryService(createRepository(vi.fn()), cities);
+
+  await expect(workerRequestContext.run({ pool: {} as never, ai: { run } }, () => service.generate({
+    userId: "user-1",
+    dto: {
+      cities: ["country-sg"], city_names: ["Singapore"], num_days: 3, planning,
+      currency: "VND", trip_style: "mixed", num_travelers: 2,
+    },
+    catalogJob: {
+      id: "job-1", progress: { days: [] },
+      save: vi.fn(), templates: vi.fn().mockResolvedValue([]), usage: vi.fn(),
+    },
+  }))).rejects.toThrow(stop.message);
+  expect(cities.remember).not.toHaveBeenCalled();
+  expect(run).toHaveBeenCalledOnce();
+  expect(JSON.stringify(run.mock.calls[0])).toContain("Singapore");
+});
+
 describe("ItineraryService.save", () => {
   it("returns the workspace trip id after saving", async () => {
     const repository = createRepository(

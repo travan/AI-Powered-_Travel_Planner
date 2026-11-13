@@ -35,6 +35,8 @@ import {
 } from "@travel/ai";
 import * as travelTypes from "@travel/types";
 const {
+  countryDestinationSlug,
+  countryReference,
   upgradeJourneyPlan,
   validatePlanning,
   tripDayCount,
@@ -201,6 +203,22 @@ export class ItineraryService {
     }[] = [];
     for (const [index, slug] of input.dto.cities.entries()) {
       const name = input.dto.city_names?.[index]?.trim() || slug;
+      const country = countryReference(name);
+      if (country && slug === countryDestinationSlug(country.country)) {
+        rememberedCities.push({
+          city: {
+            slug, name: country.names, country: country.country, timezone: "",
+            currency: "", lat: null, lon: null, popular: false,
+            places: [], activities: [],
+          },
+          catalogReference: null,
+          planningData: {
+            ...toMinimalCityData(name, request.currency),
+            country: country.names.en,
+          },
+        });
+        continue;
+      }
       let city: City;
       try {
         city = await this.cities.remember(name, slug);

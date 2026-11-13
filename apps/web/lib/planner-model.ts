@@ -1,4 +1,6 @@
 import {
+  countryDestinationSlug,
+  countryReference,
   createPlanningCriteria,
   createManualCity,
   type CitySuggestion,
@@ -254,11 +256,24 @@ export function mergePlannerCity(
   );
 }
 
+export function createCountryDestination(
+  query: string,
+  locale: "en" | "vi",
+): SelectedCity | null {
+  const country = countryReference(query);
+  return country && {
+    slug: countryDestinationSlug(country.country),
+    name: country.names[locale],
+    names: country.names,
+  };
+}
+
 /** One immutable snapshot for validation, draft saving and generation. */
 export function preparePlannerSubmission(
   form: PlannerDraft,
   locale: "en" | "vi",
   suggestions: CitySuggestion[] = [],
+  replacing?: string,
 ): { draft: PlannerDraft; request: GenerateRequest } {
   const pending = form.destinationQuery?.trim() ?? "";
   let cities = form.cities.reduce<SelectedCity[]>(
@@ -272,14 +287,18 @@ export function preparePlannerSubmission(
       ),
     );
     const match = matches.length === 1 ? matches[0] : undefined;
-    const city = match
+    const city = createCountryDestination(pending, locale) ?? (match
       ? {
           slug: match.slug,
           name: match.name[locale] ?? match.name.en ?? match.slug,
           names: match.name,
         }
-      : createManualCity(pending);
-    cities = mergePlannerCity(cities, city);
+      : createManualCity(pending));
+    cities = replacing && cities.some((entry) => entry.slug === replacing)
+      ? cities
+          .map((entry) => entry.slug === replacing ? city : entry)
+          .reduce<SelectedCity[]>((selected, entry) => mergePlannerCity(selected, entry), [])
+      : mergePlannerCity(cities, city);
   }
   const draft = migratePlannerDraft({
     ...form,
