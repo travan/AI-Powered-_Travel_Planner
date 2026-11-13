@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ItineraryService } from "../../../../../../apps/server/src/modules/itinerary/application/itinerary.service";
 import type { ItineraryRepository } from "../../../../../../apps/server/src/modules/itinerary/domain/itinerary.repository";
 import type { CitiesService } from "../../../../../../apps/server/src/modules/cities/application/cities.service";
+import { createRequire } from "node:module";
+import { createPlanningCriteria } from "../../../../../../packages/types/src/journey";
+import { workerRequestContext } from "../../../../../../apps/server/src/cloudflare/request-context";
+
+const { BadRequestException, ServiceUnavailableException } = createRequire(
+  new URL("../../../../../../apps/server/package.json", import.meta.url),
+)("@nestjs/common");
 
 function createRepository(
   saveAsTrip: ItineraryRepository["saveAsTrip"],
@@ -48,6 +55,34 @@ it("looks up every selected destination even if display names are incomplete", a
   })).rejects.toBe(lookupError);
   expect(lookup).toHaveBeenNthCalledWith(1, "Busan", "busan");
   expect(lookup).toHaveBeenNthCalledWith(2, "seoul", "seoul");
+});
+
+it.each([
+  new ServiceUnavailableException(),
+  new BadRequestException({ code: "CITY_UNRESOLVED" }),
+])("sends a restored destination to Workers AI when city lookup fails", async (lookupError) => {
+  const cities = createCitiesService();
+  vi.mocked(cities.remember).mockRejectedValue(lookupError);
+  const planning = createPlanningCriteria();
+  planning.journey.origin = { label: "Hà Nội", source: "manual" };
+  planning.journey.destinations = ["seoul"];
+  const stop = new Error("stop at the first AI call");
+  const run = vi.fn().mockRejectedValue(stop);
+  const service = new ItineraryService(createRepository(vi.fn()), cities);
+
+  await expect(workerRequestContext.run({ pool: {} as never, ai: { run } }, () => service.generate({
+    userId: "user-1",
+    dto: {
+      cities: ["seoul"], city_names: ["Seoul"], num_days: 3, planning,
+      currency: "VND", trip_style: "mixed", num_travelers: 2,
+    },
+    catalogJob: {
+      id: "job-1", progress: { days: [] },
+      save: vi.fn(), templates: vi.fn().mockResolvedValue([]), usage: vi.fn(),
+    },
+  }))).rejects.toThrow(stop.message);
+  expect(run).toHaveBeenCalledOnce();
+  expect(JSON.stringify(run.mock.calls[0])).toContain("Seoul");
 });
 
 describe("ItineraryService.save", () => {

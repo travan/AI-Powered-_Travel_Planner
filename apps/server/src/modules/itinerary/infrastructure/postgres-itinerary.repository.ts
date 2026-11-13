@@ -127,15 +127,14 @@ export class PostgresItineraryRepository implements ItineraryRepository {
        queued as (
          insert into city_catalog_ingestion_jobs (itinerary_id, payload)
          select saved.id, jsonb_build_object('cities', $11::jsonb)
-         from saved
+         from saved where jsonb_array_length($11::jsonb) > 0
          returning itinerary_id
        ) ${input.jobClaim ? `, linked as (
          update itinerary_jobs set itinerary_id=saved.id from saved where itinerary_jobs.id=$12
          returning itinerary_jobs.id
        )` : ""}
        select saved.id::text
-       from saved
-       inner join queued on queued.itinerary_id = saved.id`,
+       from saved`,
       [
         input.userId,
         input.request.cities,

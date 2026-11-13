@@ -196,12 +196,32 @@ export class ItineraryService {
     await input.onStage?.("catalog");
     const rememberedCities: {
       city: CityPlanningData;
-      catalogReference: { slug: string; name: string };
+      catalogReference: { slug: string; name: string } | null;
       planningData: PreFetchedCityData;
     }[] = [];
     for (const [index, slug] of input.dto.cities.entries()) {
       const name = input.dto.city_names?.[index]?.trim() || slug;
-      const city = await this.cities.remember(name, slug);
+      let city: City;
+      try {
+        city = await this.cities.remember(name, slug);
+      } catch (error) {
+        if (!(error instanceof HttpException)) throw error;
+        const status = error.getStatus();
+        const body = error.getResponse();
+        const unresolved = status === 400 && typeof body === "object" &&
+          "code" in body && body.code === "CITY_UNRESOLVED";
+        if (!unresolved && status !== 429 && status !== 503) throw error;
+        rememberedCities.push({
+          city: {
+            slug, name: { en: name }, country: "", timezone: "",
+            currency: "", lat: null, lon: null, popular: false,
+            places: [], activities: [],
+          },
+          catalogReference: null,
+          planningData: toMinimalCityData(name, request.currency),
+        });
+        continue;
+      }
       const planningData = await this.cities.findForPlanning(city.slug);
       const displayName =
         city.name[request.locale] ??
@@ -320,7 +340,7 @@ export class ItineraryService {
     const providerName = process.env["AI_PROVIDER"] ?? "mock";
     const cacheKey = generationCacheKey(
       request,
-      destinationCities.map(({ catalogReference }) => catalogReference.slug),
+      destinationCities.map(({ city }) => city.slug),
       providerName,
       createHash("sha256")
         .update(
@@ -376,8 +396,10 @@ export class ItineraryService {
     if (input.catalogJob) {
       await input.onStage?.("detail");
       const catalogCities = await Promise.all(
-        destinationCities.map(async ({ city }) =>
-          (await this.cities.findForPlanning(city.slug, Math.min(300, (request.num_days ?? 1) * 12))) ?? city,
+        destinationCities.map(async ({ city, catalogReference }) =>
+          catalogReference
+            ? (await this.cities.findForPlanning(city.slug, Math.min(300, (request.num_days ?? 1) * 12))) ?? city
+            : city,
         ),
       );
       for (const city of catalogCities) {
@@ -553,8 +575,8 @@ export class ItineraryService {
       request,
       result: detail,
       ...(input.catalogJob?.claimToken ? { jobClaim: { id: input.catalogJob.id, token: input.catalogJob.claimToken } } : {}),
-      catalogCities: destinationCities.map(
-        ({ catalogReference }) => catalogReference,
+      catalogCities: destinationCities.flatMap(
+        ({ catalogReference }) => catalogReference ? [catalogReference] : [],
       ),
     });
     if (this.learning)
