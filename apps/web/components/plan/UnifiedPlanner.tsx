@@ -422,10 +422,10 @@ export function UnifiedPlanner() {
       origin === journey.origin.label
         ? journey.origin
         : { label: origin, source: "manual" as const };
-    const { names: _originNames, ...submissionOrigin } = displayLocation(
-      currentOrigin,
-      [...origins, ...popularCities],
-    );
+    const submissionOrigin = {
+      ...displayLocation(currentOrigin, [...origins, ...popularCities]),
+    };
+    delete submissionOrigin.names;
     const draft = {
       ...form,
       planning: {
