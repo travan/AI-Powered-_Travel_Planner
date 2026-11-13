@@ -417,19 +417,22 @@ export function UnifiedPlanner() {
       plannerFormRef.current?.querySelector<HTMLInputElement>(
         '[data-testid="web-plan-city-input"]',
       )?.value ?? cityQuery;
-    const draft =
-      origin === form.planning.journey.origin.label
-        ? form
-        : {
-            ...form,
-            planning: {
-              ...form.planning,
-              journey: {
-                ...form.planning.journey,
-                origin: { label: origin, source: "manual" as const },
-              },
-            },
-          };
+    const journey = form.planning.journey;
+    const currentOrigin =
+      origin === journey.origin.label
+        ? journey.origin
+        : { label: origin, source: "manual" as const };
+    const { names: _originNames, ...submissionOrigin } = displayLocation(
+      currentOrigin,
+      [...origins, ...popularCities],
+    );
+    const draft = {
+      ...form,
+      planning: {
+        ...form.planning,
+        journey: { ...journey, origin: submissionOrigin },
+      },
+    };
     return {
       ...preparePlannerSubmission(
         { ...draft, destinationQuery },

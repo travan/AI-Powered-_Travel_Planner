@@ -231,9 +231,12 @@ export class ItineraryService {
       const journey = request.planning.journey;
       const normalize = async (location: JourneyLocation) => {
         if (location.source === "browser") return location;
-        const city =
-          resolveCity(routeCities, location.label) ??
-          (await this.cities.findForPlanning(location.label));
+        const find = async (value: string) =>
+          resolveCity(routeCities, value) ?? await this.cities.findForPlanning(value);
+        const selected = location.city_slug && await find(location.city_slug);
+        const city = selected && selected.slug === location.city_slug
+          ? selected
+          : await find(location.label);
         if (city && !routeCities.some((known) => known.slug === city.slug))
           routeCities.push(city);
         return this.normalizedLocation(location, city, request.locale);

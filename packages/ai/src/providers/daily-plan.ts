@@ -157,7 +157,12 @@ export function dailyOutlinePrompt(
   overview: ItineraryOverview,
   cities: PreFetchedCityData[],
 ): string {
-  return `Plan a geographically clustered, varied ${overview.total_days}-day trip OUTLINE, not the detailed timeline yet. Write all prose in ${language(input)}.\nTRAVELER: ${JSON.stringify(input)}\nCATALOG: ${JSON.stringify(cities.map((c) => ({ city: c.city, places: c.places, hotels: c.hotels, restaurants: c.restaurants })))}\nGive each day a DIFFERENT named area/theme and ${visitsPerDay(input)} DISTINCT real sightseeing places. Do not reuse a place or an evening venue across days. Use general knowledge for proposed named public places when the catalog is empty; keep them as unverified suggestions. For a full-day theme park use all_day=true and 3 specific areas/experiences within that park, with a lunch break between morning and afternoon. Follow requested destinations and exact days. No side trips to other cities unless requested.\n${priceRule(input.currency)}\nIf staying type=none, return hotels=[]; if already_booked, retain the supplied hotel name and room count as the route anchor. Suggest one lodging AREA per overnight city if no verified hotel exists; stars=0, city, rooms, nights, nightly_estimate (per room/night), estimate_basis="planning_estimate", estimate_assumption (room standard, taxes uncertainty, total rooms x nights). Include estimated outbound/return main travel and airport transfers in transport_summary, with price, transport_kind and options=[]; do not include local day passes here (they are budgeted in each day). Unknown departure/arrival times must stay unknown; do not invent flight times.\nReturn JSON: {"title":"trip title","overview":"2 sentences; include conditional arrival/departure assumptions if times unknown","days":[{"day_number":1,"city":"city","title":"unique area/theme","places":["specific morning place","different morning place","afternoon place","different afternoon place","evening place"],"all_day":false}],"hotels":[{"name":"suggested lodging area","city":"city","stars":0,"rooms":1,"nights":${Math.max(0, overview.total_days - 1)},"nightly_estimate":number,"estimate_basis":"planning_estimate","estimate_assumption":"room/night budgeting assumptions","price_per_night":"labelled planning estimate","price_range":"","booking_url":"","airbnb_url":"","address":"","maps_link":"","note":"why this area suits the route"}],"transport_summary":[{"segment":"label","from":"origin","to":"destination","recommended_mode":"flight|train|bus|taxi|walk|other","transport_kind":"flight|airport_transfer|intercity","price":{"amount":number,"currency":"${input.currency}","scope":"person","status":"estimated","basis":"planning_estimate","assumption":"route and budgeting assumptions; not a quote"},"options":[]}]}.`;
+  const journey = input.planning?.journey;
+  const route = journey
+    ? { origin: journey.origin.label, destinations: cities.map(({ city }) => city),
+        endpoint: (journey.return_to_origin ? journey.origin : journey.endpoint)?.label }
+    : undefined;
+  return `Plan a geographically clustered, varied ${overview.total_days}-day trip OUTLINE, not the detailed timeline yet. Write all prose in ${language(input)}.\nROUTE (ordered, origin and endpoint are separate from sightseeing destinations): ${JSON.stringify(route ?? null)}\nTRAVELER: ${JSON.stringify(input)}\nCATALOG: ${JSON.stringify(cities.map((c) => ({ city: c.city, places: c.places, hotels: c.hotels, restaurants: c.restaurants })))}\nGive each day a DIFFERENT named area/theme and ${visitsPerDay(input)} DISTINCT real sightseeing places. Do not reuse a place or an evening venue across days. Use general knowledge for proposed named public places when the catalog is empty; keep them as unverified suggestions. For a full-day theme park use all_day=true and 3 specific areas/experiences within that park, with a lunch break between morning and afternoon. Follow requested destinations and exact days. No side trips to other cities unless requested.\n${priceRule(input.currency)}\nIf staying type=none, return hotels=[]; if already_booked, retain the supplied hotel name and room count as the route anchor. Suggest one lodging AREA per overnight city if no verified hotel exists; stars=0, city, rooms, nights, nightly_estimate (per room/night), estimate_basis="planning_estimate", estimate_assumption (room standard, taxes uncertainty, total rooms x nights). Include estimated outbound/return main travel and airport transfers in transport_summary, with price, transport_kind and options=[]; do not include local day passes here (they are budgeted in each day). Unknown departure/arrival times must stay unknown; do not invent flight times.\nReturn JSON: {"title":"trip title","overview":"2 sentences; include conditional arrival/departure assumptions if times unknown","days":[{"day_number":1,"city":"city","title":"unique area/theme","places":["specific morning place","different morning place","afternoon place","different afternoon place","evening place"],"all_day":false}],"hotels":[{"name":"suggested lodging area","city":"city","stars":0,"rooms":1,"nights":${Math.max(0, overview.total_days - 1)},"nightly_estimate":number,"estimate_basis":"planning_estimate","estimate_assumption":"room/night budgeting assumptions","price_per_night":"labelled planning estimate","price_range":"","booking_url":"","airbnb_url":"","address":"","maps_link":"","note":"why this area suits the route"}],"transport_summary":[{"segment":"label","from":"origin","to":"destination","recommended_mode":"flight|train|bus|taxi|walk|other","transport_kind":"flight|airport_transfer|intercity","price":{"amount":number,"currency":"${input.currency}","scope":"person","status":"estimated","basis":"planning_estimate","assumption":"route and budgeting assumptions; not a quote"},"options":[]}]}.`;
 }
 
 type Slot = {
@@ -351,12 +356,16 @@ export async function generateDailyPlan(
       ),
     ),
   ];
+  // A hard enum is useful only when a single destination can supply the whole trip.
+  // Otherwise the model may propose unverified places in the correct city.
+  const restrictCatalog =
+    cities.length === 1 && catalogNames.length >= overview.total_days * visitsPerDay(input);
   let outline = await generate(
     dailyOutlinePrompt(input, overview, cities),
     5000,
     (() => {
       const schema = outlineSchema(input, overview.total_days);
-      if (catalogNames.length)
+      if (restrictCatalog)
         schema.properties.days.items.properties.places.items = {
           type: "string",
           enum: catalogNames,
@@ -366,7 +375,7 @@ export async function generateDailyPlan(
     taskSystem(input, true),
   );
   const allocateCatalogPlaces = (candidate: Json) => {
-    if (!catalogNames.length || !Array.isArray(candidate.days)) return;
+    if (!restrictCatalog || !Array.isArray(candidate.days)) return;
     const used = new Set<string>();
     const parkNames = new Set(
       cities.flatMap((city) =>
@@ -454,7 +463,7 @@ export async function generateDailyPlan(
       5000,
       (() => {
         const schema = outlineSchema(input, overview.total_days);
-        if (catalogNames.length)
+        if (restrictCatalog)
           schema.properties.days.items.properties.places.items = {
             type: "string",
             enum: catalogNames,
