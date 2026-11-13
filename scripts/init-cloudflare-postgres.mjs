@@ -2,6 +2,7 @@ import { migratePostgres } from "../apps/server/scripts/migrate-postgres.mjs";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
+import { setTimeout } from "node:timers/promises";
 import { rootCertificates } from "node:tls";
 
 const require = createRequire(
@@ -50,8 +51,9 @@ const password = ci
     : randomBytes(32).toString("hex");
 const apply = process.argv.includes("--apply");
 await client.connect();
-try {
+async function bootstrap() {
   await client.query("begin");
+  await client.query("set local lock_timeout = '5s'");
   await client.query(
     "select pg_advisory_xact_lock(hashtext('travel-cloud-bootstrap'))",
   );
@@ -101,11 +103,11 @@ try {
     grant select, insert, update, delete on private.refresh_tokens to ${role};
     alter role ${role} set search_path to travel_cloud, extensions, public;`);
   const tables = await client.query(
-    "select tablename from pg_tables where schemaname='travel_cloud' and tablename <> 'schema_migrations'",
+    "select tablename, rowsecurity from pg_tables where schemaname='travel_cloud' and tablename <> 'schema_migrations' order by tablename",
   );
-  for (const { tablename } of tables.rows) {
+  for (const { tablename, rowsecurity } of tables.rows) {
     if (!/^[a-z_]+$/.test(tablename)) throw new Error("Unexpected table name");
-    await client.query(
+    if (!rowsecurity) await client.query(
       `alter table travel_cloud.${tablename} enable row level security`,
     );
     const policy = await client.query(
@@ -117,9 +119,11 @@ try {
         `create policy backend_access on travel_cloud.${tablename} to ${role} using(true) with check(true)`,
       );
   }
-  await client.query(
-    "alter table private.password_resets enable row level security",
+  const resetTable = await client.query(
+    "select rowsecurity from pg_tables where schemaname='private' and tablename='password_resets'",
   );
+  if (!resetTable.rows[0]?.rowsecurity)
+    await client.query("alter table private.password_resets enable row level security");
   const resetPolicy = await client.query(
     "select 1 from pg_policies where schemaname='private' and tablename='password_resets' and policyname='travel_backend_access'",
   );
@@ -139,8 +143,25 @@ try {
   if (!grants.rows[0]?.ready)
     throw new Error("Runtime job queue grants are missing");
   await client.query(apply ? "commit" : "rollback");
+  return tables.rowCount;
+}
+
+try {
+  let tableCount;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      tableCount = await bootstrap();
+      break;
+    } catch (error) {
+      await client.query("rollback");
+      const code = error.code ?? error.cause?.code;
+      if (attempt === 3 || !["40P01", "55P03"].includes(code)) throw error;
+      console.warn(`Cloud bootstrap lock conflict (${code}); retrying transaction (${attempt}/3)`);
+      await setTimeout(attempt * 1000);
+    }
+  }
   console.log(
-    `${apply ? "Initialized" : "Dry run passed; rolled back"}: ${tables.rowCount} isolated application tables`,
+    `${apply ? "Initialized" : "Dry run passed; rolled back"}: ${tableCount} isolated application tables`,
   );
   if (apply && !ci) {
     const runtimeUrl = new URL(env.POSTGRES_URL || adminUrl);

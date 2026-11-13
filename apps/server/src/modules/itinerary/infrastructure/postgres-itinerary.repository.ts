@@ -138,7 +138,10 @@ export class PostgresItineraryRepository implements ItineraryRepository {
       [
         input.userId,
         input.request.cities,
-        [],
+        [...new Set(input.request.cities.flatMap((slug) => {
+          const country = input.result.city_catalog?.[slug]?.country;
+          return country ? [country] : [];
+        }))],
         input.request.start_date ?? null,
         input.request.end_date ?? null,
         input.request.num_days ?? input.result.num_days,

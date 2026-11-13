@@ -1,5 +1,6 @@
 import {
   countryDestinationSlug,
+  countryDestinationReference,
   countryReference,
   createPlanningCriteria,
   createManualCity,
@@ -203,10 +204,14 @@ export function restorePlannerRequest(request: GenerateRequest): PlannerDraft {
   return migratePlannerDraft({
     ...form,
     planning,
-    cities: request.cities.map((slug, i) => ({
-      slug,
-      name: request.city_names?.[i] ?? slug,
-    })),
+    cities: request.cities.map((slug, i) => {
+      const country = countryDestinationReference(slug);
+      return {
+        slug,
+        name: request.city_names?.[i] ?? country?.names[request.locale === "vi" ? "vi" : "en"] ?? slug,
+        ...(country ? { names: country.names } : {}),
+      };
+    }),
     start: request.start_date ?? "",
     end: request.end_date ?? "",
     dated: !request.flexible_month && !!request.start_date,

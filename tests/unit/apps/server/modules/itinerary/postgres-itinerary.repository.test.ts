@@ -52,6 +52,22 @@ describe("itinerary persistence", () => {
     });
   });
 
+  it("stores destination countries from the route without including the origin", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ id: "itinerary-1" }] });
+    await new PostgresItineraryRepository({ query }).createComplete({
+      userId: "user-1",
+      request: { ...request, cities: ["country-sg"] },
+      result: {
+        city_catalog: {
+          "country-sg": { name: { en: "Singapore" }, country: "SG", timezone: "" },
+          "ha-noi": { name: { vi: "Hà Nội" }, country: "VN", timezone: "Asia/Ho_Chi_Minh" },
+        },
+      } as never,
+      catalogCities: [],
+    });
+    expect(query.mock.calls[0]![1].slice(1, 3)).toEqual([["country-sg"], ["SG"]]);
+  });
+
   it("propagates database errors instead of pretending the itinerary was saved", async () => {
     const query = vi.fn().mockRejectedValue(new Error("database unavailable"));
     await expect(

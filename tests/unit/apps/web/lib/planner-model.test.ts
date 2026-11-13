@@ -69,6 +69,17 @@ describe("shared planner model", () => {
     ).toEqual(result.request);
   });
 
+  it("restores a country destination and its label when a saved request only has its slug", () => {
+    const form = emptyPlanner("vi");
+    const request = buildPlannerRequest(form, "vi");
+    const restored = restorePlannerRequest({ ...request, cities: ["country-sg"] });
+    expect(preparePlannerSubmission(restored, "vi").request).toMatchObject({
+      cities: ["country-sg"],
+      city_names: ["Singapore"],
+      planning: { journey: { destinations: ["country-sg"] } },
+    });
+  });
+
   it("preserves flexible month and duration through saved requests and login", () => {
     const form = {
       ...emptyPlanner(),
