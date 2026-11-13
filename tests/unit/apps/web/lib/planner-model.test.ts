@@ -101,6 +101,62 @@ describe("shared planner model", () => {
       buildPlannerRequest({ ...form, flexible: false }, "en").flexible_month,
     ).toBeUndefined();
   });
+  it("keeps route and advanced criteria in the JSON request through login", () => {
+    const form = emptyPlanner();
+    form.cities = [
+      { slug: "busan", name: "Busan" },
+      { slug: "seoul", name: "Seoul" },
+    ];
+    form.prompt = "Include a museum";
+    const planning = form.planning;
+    planning.journey.origin = {
+      label: " Hà Nội ",
+      city_slug: "ha-noi",
+      source: "catalog",
+      names: { en: "Hanoi" },
+    };
+    planning.journey.return_to_origin = false;
+    planning.journey.endpoint = {
+      label: " Đà Nẵng ",
+      city_slug: "da-nang",
+      source: "catalog",
+      names: { en: "Da Nang" },
+    };
+    planning.travelers.child_ages = [7];
+    planning.transport_preferences.booking_reference = "FLIGHT";
+    planning.stay_preferences.booked_name = "Hotel";
+    planning.dining_preferences.allergies = ["peanuts"];
+    planning.experience_preferences.interests = ["museums"];
+    const json = JSON.parse(
+      JSON.stringify(preparePlannerSubmission(form, "vi").request),
+    );
+    expect(json).toMatchObject({
+      cities: ["busan", "seoul"],
+      prompt_text: "Include a museum",
+      planning: {
+        ...planning,
+        journey: {
+          ...planning.journey,
+          destinations: ["busan", "seoul"],
+          origin: { label: "Hà Nội", city_slug: "ha-noi", source: "catalog" },
+          endpoint: {
+            label: "Đà Nẵng",
+            city_slug: "da-nang",
+            source: "catalog",
+          },
+        },
+      },
+    });
+    expect(json.planning.journey.origin).not.toHaveProperty("names");
+    expect(json.planning.journey.endpoint).not.toHaveProperty("names");
+    expect(
+      JSON.parse(
+        JSON.stringify(
+          preparePlannerSubmission(restorePlannerRequest(json), "vi").request,
+        ),
+      ),
+    ).toEqual(json);
+  });
   it("keeps the return strictly after departure across month/year boundaries", () => {
     const form = emptyPlanner();
     expect(nextPlannerDate("2026-12-31")).toBe("2027-01-01");

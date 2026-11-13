@@ -194,16 +194,14 @@ export class ItineraryService {
       { request },
     );
     await input.onStage?.("catalog");
-    const names = input.dto.city_names?.length
-      ? input.dto.city_names
-      : input.dto.cities;
     const rememberedCities: {
       city: CityPlanningData;
       catalogReference: { slug: string; name: string };
       planningData: PreFetchedCityData;
     }[] = [];
-    for (const [index, name] of names.entries()) {
-      const city = await this.cities.remember(name, input.dto.cities[index]);
+    for (const [index, slug] of input.dto.cities.entries()) {
+      const name = input.dto.city_names?.[index]?.trim() || slug;
+      const city = await this.cities.remember(name, slug);
       const planningData = await this.cities.findForPlanning(city.slug);
       const displayName =
         city.name[request.locale] ??

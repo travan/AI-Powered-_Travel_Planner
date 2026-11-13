@@ -422,15 +422,17 @@ export function UnifiedPlanner() {
       origin === journey.origin.label
         ? journey.origin
         : { label: origin, source: "manual" as const };
-    const submissionOrigin = {
-      ...displayLocation(currentOrigin, [...origins, ...popularCities]),
-    };
-    delete submissionOrigin.names;
+    const endpoint = journey.endpoint;
     const draft = {
       ...form,
       planning: {
         ...form.planning,
-        journey: { ...journey, origin: submissionOrigin },
+        journey: {
+          ...journey,
+          origin: displayLocation(currentOrigin, [...origins, ...popularCities]),
+          endpoint: endpoint &&
+            displayLocation(endpoint, [...endpoints, ...popularCities]),
+        },
       },
     };
     return {
