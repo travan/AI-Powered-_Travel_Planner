@@ -402,6 +402,23 @@ describe("compact planner submission", () => {
     );
     expect(mock.push.mock.calls[0]![0]).toContain("resumeGenerate");
   });
+  it("uses the saved journey and incoming destination in the first Generate request", async () => {
+    const draft = emptyPlanner();
+    draft.planning.journey.origin.label = "Hà Nội";
+    draft.planning.journey.destinations = ["tokyo"];
+    localStorage.setItem(key, JSON.stringify({ ...draft, cities: undefined }));
+    mock.params.query = "city=country-sg";
+    show();
+    expect(screen.getAllByTestId("web-plan-selected-city")).toHaveLength(2);
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
+    expect(mock.generate.mock.calls[0]![0]).toMatchObject({
+      cities: ["tokyo", "country-sg"],
+      city_names: ["tokyo", "Singapore"],
+      planning: { journey: { destinations: ["tokyo", "country-sg"] } },
+    });
+  });
+
   it("resumes the exact submitted route and key even if the claimed draft is stale", async () => {
     mock.session.mockResolvedValueOnce({ data: { session: null } });
     mock.createDraft.mockResolvedValue({ id: "draft-1" });

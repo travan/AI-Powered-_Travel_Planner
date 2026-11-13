@@ -41,6 +41,7 @@ import {
   routeLabels,
   placeKey,
   countryReference,
+  countryDestinationReference,
   createManualCity,
   validatePlanning,
   type GenerateRequest,
@@ -432,8 +433,6 @@ export function UnifiedPlanner() {
         [key]: { ...(f.planning[key] as object), ...(value as object) },
       },
     }));
-  const requestFor = (f: PlannerDraft) =>
-    preparePlannerSubmission(f, locale, suggestions).request;
   const prepareCurrent = () => {
     const origin =
       plannerFormRef.current?.querySelector<HTMLInputElement>(
@@ -519,34 +518,34 @@ export function UnifiedPlanner() {
       if (stored) {
         const draft = JSON.parse(stored);
         if (draft.planning?.schema_version === 2) {
-          const recovered = {
-            ...emptyPlanner(),
+          const recovered = migratePlannerDraft({
+            ...emptyPlanner(locale),
             ...draft,
+            cities: draft.cities,
             step:
               Number.isInteger(draft.step) && draft.step >= 0 && draft.step <= 4
                 ? draft.step
                 : 0,
-          } as PlannerDraft;
-          // Exercise the same structured contract before rendering restored data.
-          // A partially written/older draft must never crash a later wizard step.
-          requestFor(recovered);
-          validatePlanning(requestFor(recovered));
-          if (
-            !Array.isArray(recovered.planning.experience_preferences.interests)
-          )
-            throw new Error("Invalid interests");
-          setForm(migratePlannerDraft(recovered));
+          } as PlannerDraft);
+          if (Array.isArray(recovered.planning.experience_preferences.interests))
+            setForm(recovered);
         }
       }
-      if (params.get("city")) {
-        const slug = params.get("city")!;
-        setForm((f) => f.cities.length || f.destinationQuery
-          ? f
-          : { ...f, cities: [{ slug, name: slug }] },
-        );
-      }
     } catch {
-      /* Keep an editable clean form when an old draft cannot be decoded. */
+      /* A bad local draft should not block the incoming destination. */
+    }
+    const slug = params.get("city")?.trim();
+    if (slug) {
+      const country = countryDestinationReference(slug);
+      const city = country
+        ? { slug, name: country.names[locale], names: country.names }
+        : { slug, name: slug };
+      setForm((draft) => ({
+        ...draft,
+        cities: draft.cities.some((entry) => entry.slug === slug)
+          ? draft.cities
+          : mergePlannerCity(draft.cities, city),
+      }));
     }
     setReady(true);
   }, []);
@@ -557,7 +556,7 @@ export function UnifiedPlanner() {
     if (explicitlySavedDraft.current === form) return;
     explicitlySavedDraft.current = null;
     // Exact browser coordinates are saved only through explicit Save draft/Generate.
-    const copy = structuredClone(form);
+    const copy = migratePlannerDraft(structuredClone(form));
     if (copy.planning.journey.origin.source === "browser")
       copy.planning.journey.origin = { label: "", source: "manual" };
     else {
@@ -1020,7 +1019,7 @@ export function UnifiedPlanner() {
             void generate();
           }}
         >
-          <fieldset disabled={busy || currencyBusy} className="space-y-5">
+          <fieldset disabled={!ready || busy || currencyBusy} className="space-y-5">
             <legend className="sr-only">{t("Plan your trip")}</legend>
             <div
               className="space-y-5 rounded-3xl border border-outline-variant/30 bg-white p-5 sm:p-8"

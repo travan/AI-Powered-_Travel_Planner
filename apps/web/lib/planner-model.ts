@@ -59,10 +59,23 @@ export function normalizeCafePreference(value: string): string {
     : value;
 }
 export function migratePlannerDraft(draft: PlannerDraft): PlannerDraft {
+  // An explicit empty list represents a user removing all stops. Older drafts
+  // without a selected list may still carry their stops in the journey.
+  const selected = Array.isArray(draft.cities)
+    ? draft.cities
+    : (draft.planning.journey.destinations ?? []).map((slug) => ({ slug, name: slug }));
+  const cities = selected.map((city) => {
+    const country = countryDestinationReference(city.slug);
+    return country
+      ? { ...city, names: country.names, name: city.name === city.slug ? country.names.en : city.name }
+      : city;
+  });
   return {
     ...draft,
+    cities,
     planning: {
       ...draft.planning,
+      journey: { ...draft.planning.journey, destinations: cities.map(({ slug }) => slug) },
       dining_preferences: {
         ...draft.planning.dining_preferences,
         cafe: normalizeCafePreference(draft.planning.dining_preferences.cafe),
