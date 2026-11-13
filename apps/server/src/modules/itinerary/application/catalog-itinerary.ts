@@ -195,13 +195,14 @@ export async function buildCatalogItinerary(
   const vi = input.locale === "vi";
   const progress = job.progress;
   progress.seed ??= job.id;
-  if (!progress.cities) {
+  if (!progress.cities || progress.cities.some((slug) => !cities.some((city) => city.slug === slug))) {
     if (cities.length === 0 || cities.length > count)
       throw new PlanningGenerationError("AI_OUTLINE_INVALID");
     progress.cities = Array.from(
       { length: count },
       (_, i) => cities[Math.floor((i * cities.length) / count)]!.slug,
     );
+    progress.days = [];
     await job.save(progress);
   }
   const templates = await job.templates(progress.cities);
