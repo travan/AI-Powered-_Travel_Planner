@@ -122,7 +122,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("compact planner submission", () => {
-  it("previews the country proposal, replaces it in place, and displays one language", async () => {
+  it("keeps country city suggestions optional and replaces a selected city in place", async () => {
     const draft = emptyPlanner();
     draft.planning.journey.origin.label = "Hanoi";
     draft.cities = [
@@ -146,7 +146,7 @@ describe("compact planner submission", () => {
     show();
     const destination = screen.getByTestId("web-plan-city-input");
     fireEvent.change(destination, { target: { value: "Russia" } });
-    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    fireEvent.click(await screen.findByRole("button", { name: "Moskva (Nga)" }));
     await waitFor(() =>
       expect(screen.getByTestId("web-plan-route").textContent).toBe(
         "Hà Nội → Bắc Kinh → Moskva → Hà Nội",
@@ -169,6 +169,30 @@ describe("compact planner submission", () => {
       locale: "en",
     });
   });
+
+  it.each(["submit", "choose", "enter"])(
+    "uses Singapore without city suggestions via %s",
+    async (action) => {
+      show();
+      fireEvent.change(screen.getByLabelText("Đi từ đâu?"), {
+        target: { value: "Hà Nội" },
+      });
+      const destination = screen.getByTestId("web-plan-city-input");
+      fireEvent.change(destination, { target: { value: "Singapore" } });
+      const choose = screen.getByRole("button", {
+        name: "Chọn Singapore làm điểm đến",
+      });
+      if (action === "choose") fireEvent.click(choose);
+      if (action === "enter") fireEvent.keyDown(destination, { key: "Enter" });
+      fireEvent.click(screen.getByTestId("web-plan-generate"));
+      await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
+      expect(mock.generate.mock.calls[0]![0]).toMatchObject({
+        cities: ["country-sg"],
+        city_names: ["Singapore"],
+        planning: { journey: { destinations: ["country-sg"] } },
+      });
+    },
+  );
 
   it("initially shows two text fields with all options collapsed and no cache control", () => {
     show();

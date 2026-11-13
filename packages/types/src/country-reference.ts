@@ -30,3 +30,7 @@ export function countryReference(query: string) {
     },
   };
 }
+
+export function countryDestinationSlug(countryCode: string) {
+  return `country-${countryCode.toLowerCase()}`;
+}

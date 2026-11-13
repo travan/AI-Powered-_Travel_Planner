@@ -398,7 +398,7 @@ describe("unified bilingual planner", () => {
     fireEvent.change(await screen.findByLabelText("Đi từ đâu?"), {
       target: { value: "Hà Nội" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Thành phố muốn đến"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Bạn muốn đến đâu?" }), {
       target: { value: "Đà Nẵng" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Đà Nẵng" }));
