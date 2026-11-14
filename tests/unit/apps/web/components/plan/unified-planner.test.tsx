@@ -193,6 +193,9 @@ describe("compact planner submission", () => {
       expect(mock.generate.mock.calls[0]![0]).toMatchObject({
         cities: ["country-sg"],
         city_names: ["Singapore"],
+        destination_refs: [
+          { id: "country-sg", name: "Singapore", country: "SG", kind: "country" },
+        ],
         planning: { journey: { destinations: ["country-sg"] } },
       });
     },
@@ -415,6 +418,10 @@ describe("compact planner submission", () => {
     expect(mock.generate.mock.calls[0]![0]).toMatchObject({
       cities: ["tokyo", "country-sg"],
       city_names: ["tokyo", "Singapore"],
+      destination_refs: [
+        { id: "tokyo", name: "tokyo", kind: "city" },
+        { id: "country-sg", name: "Singapore", country: "SG", kind: "country" },
+      ],
       planning: { journey: { destinations: ["tokyo", "country-sg"] } },
     });
   });

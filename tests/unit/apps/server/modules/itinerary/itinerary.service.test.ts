@@ -98,6 +98,9 @@ it("sends an explicit country destination to itinerary generation without a city
     userId: "user-1",
     dto: {
       cities: ["country-sg"], city_names: ["Singapore"], num_days: 3, planning,
+      destination_refs: [
+        { id: "country-sg", name: "Singapore", country: "SG", kind: "country" },
+      ],
       currency: "VND", trip_style: "mixed", num_travelers: 2,
     },
     catalogJob: {
