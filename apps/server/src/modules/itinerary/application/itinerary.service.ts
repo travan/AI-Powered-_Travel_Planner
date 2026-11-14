@@ -35,8 +35,7 @@ import {
 } from "@travel/ai";
 import * as travelTypes from "@travel/types";
 const {
-  countryDestinationSlug,
-  countryReference,
+  countryDestinationReference,
   upgradeJourneyPlan,
   validatePlanning,
   tripDayCount,
@@ -203,8 +202,9 @@ export class ItineraryService {
     }[] = [];
     for (const [index, slug] of input.dto.cities.entries()) {
       const name = input.dto.city_names?.[index]?.trim() || slug;
-      const country = countryReference(name);
-      if (country && slug === countryDestinationSlug(country.country)) {
+      const country = countryDestinationReference(slug);
+      if (country) {
+        const label = country.names[request.locale === "vi" ? "vi" : "en"];
         rememberedCities.push({
           city: {
             slug, name: country.names, country: country.country, timezone: "",
@@ -213,7 +213,7 @@ export class ItineraryService {
           },
           catalogReference: null,
           planningData: {
-            ...toMinimalCityData(name, request.currency),
+            ...toMinimalCityData(label, request.currency),
             country: country.names.en,
           },
         });
@@ -627,10 +627,18 @@ export class ItineraryService {
     ];
     const known = new Map(
       await Promise.all(
-        values.map(
-          async (value) =>
-            [value, await this.cities.findForPlanning(value)] as const,
-        ),
+        values.map(async (value) => {
+          const country = countryDestinationReference(value);
+          if (country) {
+            const destination: CityPlanningData = {
+              slug: value, name: country.names, country: country.country,
+              timezone: "", currency: "", lat: null, lon: null, popular: false,
+              places: [], activities: [],
+            };
+            return [value, destination] as const;
+          }
+          return [value, await this.cities.findForPlanning(value)] as const;
+        }),
       ),
     );
     const cities = [...known.values()].filter(

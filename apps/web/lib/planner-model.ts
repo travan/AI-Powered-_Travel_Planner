@@ -1,5 +1,6 @@
 import {
   countryDestinationSlug,
+  countryDestinationReference,
   countryReference,
   createPlanningCriteria,
   createManualCity,
@@ -14,6 +15,7 @@ export type PlannerDraft = {
   planning: PlanningCriteria;
   cities: SelectedCity[];
   destinationQuery?: string;
+  replacingDestination?: string;
   start: string;
   end: string;
   days: number;
@@ -57,10 +59,23 @@ export function normalizeCafePreference(value: string): string {
     : value;
 }
 export function migratePlannerDraft(draft: PlannerDraft): PlannerDraft {
+  // An explicit empty list represents a user removing all stops. Older drafts
+  // without a selected list may still carry their stops in the journey.
+  const selected = Array.isArray(draft.cities)
+    ? draft.cities
+    : (draft.planning.journey.destinations ?? []).map((slug) => ({ slug, name: slug }));
+  const cities = selected.map((city) => {
+    const country = countryDestinationReference(city.slug);
+    return country
+      ? { ...city, names: country.names, name: city.name === city.slug ? country.names.en : city.name }
+      : city;
+  });
   return {
     ...draft,
+    cities,
     planning: {
       ...draft.planning,
+      journey: { ...draft.planning.journey, destinations: cities.map(({ slug }) => slug) },
       dining_preferences: {
         ...draft.planning.dining_preferences,
         cafe: normalizeCafePreference(draft.planning.dining_preferences.cafe),
@@ -203,10 +218,14 @@ export function restorePlannerRequest(request: GenerateRequest): PlannerDraft {
   return migratePlannerDraft({
     ...form,
     planning,
-    cities: request.cities.map((slug, i) => ({
-      slug,
-      name: request.city_names?.[i] ?? slug,
-    })),
+    cities: request.cities.map((slug, i) => {
+      const country = countryDestinationReference(slug);
+      return {
+        slug,
+        name: request.city_names?.[i] ?? country?.names[request.locale === "vi" ? "vi" : "en"] ?? slug,
+        ...(country ? { names: country.names } : {}),
+      };
+    }),
     start: request.start_date ?? "",
     end: request.end_date ?? "",
     dated: !request.flexible_month && !!request.start_date,
@@ -273,7 +292,7 @@ export function preparePlannerSubmission(
   form: PlannerDraft,
   locale: "en" | "vi",
   suggestions: CitySuggestion[] = [],
-  replacing?: string,
+  replacing = form.replacingDestination,
 ): { draft: PlannerDraft; request: GenerateRequest } {
   const pending = form.destinationQuery?.trim() ?? "";
   let cities = form.cities.reduce<SelectedCity[]>(
@@ -304,6 +323,7 @@ export function preparePlannerSubmission(
     ...form,
     cities,
     destinationQuery: "",
+    replacingDestination: undefined,
     forceRefresh: false,
     planning: {
       ...form.planning,

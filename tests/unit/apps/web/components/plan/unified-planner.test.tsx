@@ -17,10 +17,12 @@ const mock = vi.hoisted(() => ({
   createDraft: vi.fn(),
   quote: vi.fn(),
   lookup: vi.fn(),
+  claimDraft: vi.fn(),
+  params: { query: "" },
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mock.push }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(mock.params.query),
 }));
 vi.mock("@travel/hooks", () => ({
   useCitySearch: () => ({ suggestions: [] }),
@@ -47,6 +49,7 @@ vi.mock("../../../../../../apps/web/lib/api", async (original) => ({
   ...(await original<typeof import("../../../../../../apps/web/lib/api")>()),
   generateItinerary: mock.generate,
   createSearchDraft: mock.createDraft,
+  claimSearchDraft: mock.claimDraft,
 }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   validateJourney: mock.validate,
@@ -103,6 +106,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.clearAllMocks();
+  mock.params.query = "";
   mock.quote
     .mockReset()
     .mockImplementation(async (from: string, to: string) => ({
@@ -398,6 +402,73 @@ describe("compact planner submission", () => {
     );
     expect(mock.push.mock.calls[0]![0]).toContain("resumeGenerate");
   });
+  it("uses the saved journey and incoming destination in the first Generate request", async () => {
+    const draft = emptyPlanner();
+    draft.planning.journey.origin.label = "Hà Nội";
+    draft.planning.journey.destinations = ["tokyo"];
+    localStorage.setItem(key, JSON.stringify({ ...draft, cities: undefined }));
+    mock.params.query = "city=country-sg";
+    show();
+    expect(screen.getAllByTestId("web-plan-selected-city")).toHaveLength(2);
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
+    expect(mock.generate.mock.calls[0]![0]).toMatchObject({
+      cities: ["tokyo", "country-sg"],
+      city_names: ["tokyo", "Singapore"],
+      planning: { journey: { destinations: ["tokyo", "country-sg"] } },
+    });
+  });
+
+  it("resumes the exact submitted route and key even if the claimed draft is stale", async () => {
+    mock.session.mockResolvedValueOnce({ data: { session: null } });
+    mock.createDraft.mockResolvedValue({ id: "draft-1" });
+    show();
+    fillRoute();
+    fireEvent.change(screen.getByTestId("web-plan-city-input"), {
+      target: { value: "Singapore" },
+    });
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.push).toHaveBeenCalledOnce());
+    const intent = JSON.parse(sessionStorage.getItem("horizon.search.intent")!);
+    cleanup();
+    mock.params.query = "resumeGenerate=1&draftId=draft-1";
+    mock.claimDraft.mockResolvedValue({
+      search_payload: { ...intent.request, cities: ["tokyo"], city_names: ["Tokyo"] },
+    });
+    show();
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
+    expect(mock.generate).toHaveBeenCalledWith(intent.request, "test-token", intent.submissionKey);
+    expect(intent.request.cities).toEqual(["country-sg"]);
+  });
+
+  it("restores the selected route and reuses the admission key after a reload with an unknown response", async () => {
+    show();
+    fillRoute();
+    const destination = screen.getByTestId("web-plan-city-input");
+    fireEvent.change(destination, { target: { value: "Singapore" } });
+    fireEvent.click(screen.getByRole("button", { name: "Chọn Singapore làm điểm đến" }));
+    fireEvent.change(destination, { target: { value: "Tây An" } });
+    fireEvent.keyDown(destination, { key: "Enter" });
+    mock.generate.mockRejectedValueOnce(new Error("Connection lost"));
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(screen.getByTestId("web-plan-error")).toBeTruthy());
+    const [firstRequest, , firstKey] = mock.generate.mock.calls[0]!;
+    expect(firstRequest).toMatchObject({
+      cities: ["country-sg", "tây-an"],
+      city_names: ["Singapore", "Tây An"],
+      planning: { journey: { destinations: ["country-sg", "tây-an"] } },
+    });
+    cleanup();
+    show();
+    expect(screen.getByTestId("web-plan-route").textContent).toBe(
+      "Hà Nội → Singapore → Tây An → Hà Nội",
+    );
+    fireEvent.click(screen.getByTestId("web-plan-generate"));
+    await waitFor(() => expect(mock.generate).toHaveBeenCalledTimes(2));
+    expect(mock.generate.mock.calls[1]![0]).toEqual(firstRequest);
+    expect(mock.generate.mock.calls[1]![2]).toBe(firstKey);
+  });
+
   it("keeps the prepared route and idempotency key when generation service fails", async () => {
     mock.generate.mockRejectedValueOnce(new Error("Service unavailable"));
     show();

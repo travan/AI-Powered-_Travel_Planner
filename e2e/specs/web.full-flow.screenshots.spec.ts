@@ -22,10 +22,14 @@ function captureDir() {
 }
 
 async function capture(page: Page, fileName: string) {
+  await page.evaluate(() => document.fonts.ready);
   await page.screenshot({
     path: path.join(captureDir(), fileName),
-    fullPage: true,
+    // Workspace tabs can include long virtualized lists. Capturing the visible
+    // surface keeps this visual regression flow bounded on CI runners.
+    fullPage: false,
     animations: "disabled",
+    timeout: 15_000,
   });
 }
 
@@ -129,6 +133,7 @@ async function seedWorkspace(request: APIRequestContext) {
 }
 
 test("captures the complete web full-flow surfaces", async ({ page, request }) => {
+  test.setTimeout(180_000);
   await request.post(`${API_BASE_URL}/__e2e/reset-business-fixtures`);
 
   await page.goto("/login?redirectTo=/plan");
