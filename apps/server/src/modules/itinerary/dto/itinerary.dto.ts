@@ -28,6 +28,24 @@ export class ItineraryIdParamsDto {
   id!: string;
 }
 
+class DestinationReferenceDto {
+  @IsString()
+  @MinLength(1)
+  id!: string;
+
+  @Transform(trimString)
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsOptional()
+  @Matches(/^[A-Z]{2}$/)
+  country?: string;
+
+  @IsIn(["city", "country"])
+  kind!: "city" | "country";
+}
+
 export class GenerateItineraryDto {
   @IsOptional()
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
@@ -47,6 +65,13 @@ export class GenerateItineraryDto {
   @IsArray()
   @IsString({ each: true })
   city_names?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => DestinationReferenceDto)
+  destination_refs?: DestinationReferenceDto[];
 
   @IsOptional()
   @IsString()

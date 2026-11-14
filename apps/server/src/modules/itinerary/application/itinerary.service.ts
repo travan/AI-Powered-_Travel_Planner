@@ -201,7 +201,8 @@ export class ItineraryService {
       planningData: PreFetchedCityData;
     }[] = [];
     for (const [index, slug] of input.dto.cities.entries()) {
-      const name = input.dto.city_names?.[index]?.trim() || slug;
+      const reference = input.dto.destination_refs?.find((entry) => entry.id === slug);
+      const name = reference?.name.trim() || input.dto.city_names?.[index]?.trim() || slug;
       const country = countryDestinationReference(slug);
       if (country) {
         const label = country.names[request.locale === "vi" ? "vi" : "en"];

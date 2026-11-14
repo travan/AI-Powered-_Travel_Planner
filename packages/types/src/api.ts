@@ -14,6 +14,13 @@ import type { TripStyleKey } from "./constants";
 export interface GenerateRequest extends Omit<ItineraryInput, "trip_style"> {
   trip_style: TripStyle | TripStyleKey;
   city_names?: string[];
+  /** Human-readable destinations paired with the stable IDs in `cities`. */
+  destination_refs?: Array<{
+    id: string;
+    name: string;
+    country?: string;
+    kind: "city" | "country";
+  }>;
   prompt_text?: string;
   force_refresh?: boolean;
 }
