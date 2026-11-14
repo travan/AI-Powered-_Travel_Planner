@@ -76,6 +76,9 @@ describe("shared planner model", () => {
     expect(preparePlannerSubmission(restored, "vi").request).toMatchObject({
       cities: ["country-sg"],
       city_names: ["Singapore"],
+      destination_refs: [
+        { id: "country-sg", name: "Singapore", country: "SG", kind: "country" },
+      ],
       planning: { journey: { destinations: ["country-sg"] } },
     });
   });

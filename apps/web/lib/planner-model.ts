@@ -128,6 +128,15 @@ export const buildPlannerRequest = (
 ): GenerateRequest => ({
   cities: f.cities.map((c) => c.slug),
   city_names: f.cities.map((c) => c.name),
+  destination_refs: f.cities.map((c) => {
+    const country = countryDestinationReference(c.slug);
+    return {
+      id: c.slug,
+      name: c.name,
+      ...(country ? { country: country.country } : {}),
+      kind: country ? "country" : "city",
+    };
+  }),
   ...(f.dated
     ? { start_date: f.start, end_date: f.end }
     : {

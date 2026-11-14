@@ -1,5 +1,6 @@
 import type { GenerateRequest, GenerateResponse } from "./api";
 import type { CitySuggestion, TripStyleKey } from "./constants";
+import { countryDestinationReference } from "./country-reference";
 
 export interface SelectedCity {
   names?: Record<string, string>;
@@ -82,6 +83,15 @@ export function buildGenerateRequest(
   return {
     cities: input.cities.map((city) => city.slug),
     city_names: input.cities.map((city) => city.name),
+    destination_refs: input.cities.map((city) => {
+      const country = countryDestinationReference(city.slug);
+      return {
+        id: city.slug,
+        name: city.name,
+        ...(country ? { country: country.country } : {}),
+        kind: country ? "country" : "city",
+      };
+    }),
     ...(input.use_date_range && input.start_date
       ? {
           start_date: input.start_date,
