@@ -69,20 +69,23 @@ export class GenerationStore {
       if (!quotas.rows[0]?.allowed)
         throw new HttpException({ code: "TOO_MANY_JOBS" }, 429);
       const generation = randomUUID();
-      await client.query(
-        "insert into planning_generations(id,user_id,request_hash) values($1,$2,$3)",
-        [generation, user, hash],
-      );
+      // Finish all dependent writes in one round trip. The admission counter is
+      // locked by the job trigger until commit, so no extra query belongs after it.
       const inserted = await client.query<{ id: string }>(
-        `insert into itinerary_jobs(user_id,kind,payload,idempotency_key,pipeline_version,generation_id,request_hash,deadline_at)
-        values($1,'generate',$2,$3,2,$4,$5,now()+interval '30 minutes') returning id::text`,
+        `with generation as (
+          insert into planning_generations(id,user_id,request_hash)
+          values($4,$1,$5) returning id
+        ), admitted as (
+          insert into itinerary_jobs(user_id,kind,payload,idempotency_key,pipeline_version,generation_id,request_hash,deadline_at)
+          select $1,'generate',$2,$3,2,generation.id,$5,now()+interval '30 minutes' from generation
+          returning id
+        ), submission as (
+          insert into planning_submission_keys(user_id,key,job_id,payload)
+          select $1,$3,admitted.id,$2 from admitted where $3::text is not null
+          returning job_id
+        ) select id::text from admitted`,
         [user, { dto }, key ?? null, generation, hash],
       );
-      if (key)
-        await client.query(
-          "insert into planning_submission_keys(user_id,key,job_id,payload) values($1,$2,$3,$4)",
-          [user, key, inserted.rows[0]!.id, { dto }],
-        );
       await client.query("commit");
       return inserted.rows[0]!.id;
     } catch (error) {

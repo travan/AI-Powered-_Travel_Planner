@@ -214,6 +214,21 @@ try {
     store.resume(users[99]!, submitted[99]!),
     (e: unknown) => e instanceof HttpException && e.getStatus() === 429,
   );
+  const withoutKey = await store.admit(users[98]!, malaysiaSingaporeRequest());
+  assert.equal(
+    await store.admit(users[98]!, malaysiaSingaporeRequest()),
+    withoutKey,
+  );
+  assert.equal(
+    (
+      await pool.query(
+        "select count(*)::int as count from planning_submission_keys where job_id=$1",
+        [withoutKey],
+      )
+    ).rows[0].count,
+    0,
+    "Requests without an idempotency key must not create a null alias",
+  );
   durations.sort((a, b) => a - b);
   const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
   console.log(
