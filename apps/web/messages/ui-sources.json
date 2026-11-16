@@ -1,4 +1,5 @@
 {
+  "0": "tb6589fc6ab0d",
   "Dashboard": "td87f47b47e4d",
   "Traveler dashboard": "td78b6db173bf",
   "Explore with CoHorizon": "t0c70a7783569",
@@ -557,7 +558,6 @@
   "Expense title": "t751c7bc4b640",
   "Amount": "t43dc8532f7e5",
   "Description": "t55f8ebc805e6",
-  "0": "tb6589fc6ab0d",
   "Merchant": "t0ed527aeba16",
   "Total": "tb25928c69902",
   "Raw OCR text": "t7dae2192d341",
@@ -1544,5 +1544,9 @@
   "Move city earlier": "t8168a4114aea",
   "Đưa thành phố lên trước": "t8168a4114aea",
   "Remove city": "tfce470059d0b",
-  "Xóa thành phố": "tfce470059d0b"
+  "Xóa thành phố": "tfce470059d0b",
+  "Đang kiểm tra lịch trình đã có": "t6cf692c35ef9",
+  "Đang bổ sung dữ liệu còn thiếu": "td677295a4777",
+  "Đang sắp xếp lịch trình": "te57c451559a4",
+  "Đang lưu lịch trình": "t95da61519ac7"
 }

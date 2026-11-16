@@ -12,9 +12,9 @@ STAGING_HYPERDRIVE_ID=<staging-binding-id> STAGING_WEB_ORIGIN=https://<staging-w
 pnpm dlx wrangler@4.155.0 deploy --dry-run --config apps/server/wrangler.generated.json
 ```
 
-Deploy with `--var DEPLOY_COMMIT:<commit-sha>`. The staging config uses the existing mock AI provider, a 30-second job delay and up to 20 consumer invocations. It exposes a load-test marker in `/health`. The test harness checks the marker and exact deployed commit before issuing requests.
+Deploy with `--var DEPLOY_COMMIT:<commit-sha>`. The staging config defaults to pipeline v2 at 100%, four consumers, four global inference slots and synthetic inference lasting 30 seconds. Seed destination cities and venue fixtures satisfying required dietary/independence restrictions first; leave selected prices missing to exercise inference. Synthetic venues with unverified required restrictions are rejected. Synthetic inference is restricted to `PLANNING_STAGING=true` and `AI_PROVIDER=mock`. Use `STAGING_AI_PROVIDER=cloudflare` for the separate real-model run. `/health` exposes the rollout percentage, Queue producer binding, inference limit and staging marker. Verify deployed producer/consumer/DLQ settings with `node scripts/check-planning-bindings.mjs`, using `WRANGLER_CONFIG` and `CLOUDFLARE_API_TOKEN`.
 
-Prepare 1,000 synthetic test users with distinct access tokens. For mixed mode, give each user access to a staging test trip. Keep the fixture file outside the repository. Use freshly issued native API sessions with refresh tokens. The harness rotates them during the test. Keep staging accessible only to the test team.
+Prepare 100 synthetic test users with distinct access tokens. For mixed mode, give each user access to a staging test trip. Keep the fixture file outside the repository. Use freshly issued native API sessions with refresh tokens. The harness rotates them during the test. Keep staging accessible only to the test team.
 
 The fixture is a JSON array of `{ "token": "...", "refreshToken": "...", "tripId": "..." }` objects. The planning fixture is a valid request body for `POST /api/itinerary/generate` with a `planning` object and a catalog destination.
 
@@ -24,13 +24,36 @@ LOAD_MODE=burst STAGING_API_ORIGIN=https://<staging-api-origin> \
   STAGING_PLANNER_INPUT=/tmp/cohorizon-job.json k6 run tests/load/journey-capacity.js
 ```
 
-Repeat with `LOAD_MODE=mixed`. Pass `BASELINE_STATUS_READS` from the corresponding baseline to enforce the polling reduction. Run only on isolated staging and clean up the fixture accounts afterwards. Track DB pool wait, queue age, attempts, and notifications alongside the load summary. Confirm all submitted IDs are unique in the database and each job has the expected notification history.
+Repeat with `LOAD_MODE=mixed`. Pass `LOAD_AI_MODE=real` for model quality/capacity runs. Measure concurrency at 1, 2, 4, 8 and 16; select the smallest level meeting admission p95 ≤1 second, status/history p95 ≤500 ms, infrastructure 5xx <0.5%, no lost jobs and terminal p95 ≤30 minutes for 100 simultaneous users. At least 95% of feasible real-model fixtures must complete, and every success must satisfy mandatory constraints. Mock throughput is not real-model certification. Track quota consumption, inference time, DB pool wait, queue age, attempts, tokens and notifications. Clean up fixture accounts afterwards.
 
 ## Production
 
-Apply migrations ahead of the application rollout. Provision `travel-planner-journey-production` and `travel-planner-journey-production-dead` and set the production environment variable `JOURNEY_QUEUE_CONCURRENCY` using measured AI and database capacity. The existing Cloudflare deployment job uses the generated config when this variable is present. The base config retains cron processing until queues are provisioned.
+Apply migrations ahead of the application rollout. Provision `travel-planner-journey-production` and `travel-planner-journey-production-dead`. Set `JOURNEY_QUEUE_CONCURRENCY` and `PLANNING_AI_CONCURRENCY` from measured capacity. Set `PLANNING_V2_CERTIFIED_COMMIT` to the exact tested commit only after the gates above pass; CI refuses enabled v2 without this certification or Queue config. Increase `PLANNING_V2_PERCENT` from 10 to 50 to 100, verifying metrics at each step. The checked-in default is 0. Cron can generate legacy work only while v2 is disabled; with v2 enabled it dispatches/reclaims jobs and never substitutes direct generation for missing Queue bindings.
 
-Job states, notifications and dispatch records are durable in Postgres. Consumer messages carry only job IDs. Cron reserves due dispatch records in batches and retries reservations that did not produce a claim. Queue deliveries use job leases, and expired final attempts become terminal failures with a notification. User submissions are limited to five outstanding jobs and 20 new jobs per minute. The global outstanding limit is 1,500 jobs. The generated Worker config applies separate distributed limits for public search, journey admission and status/inbox reads. These limits protect the ingress. Postgres enforces the strict per-account and global admission quotas.
+Job states, notifications and dispatch records are durable in Postgres. Consumer messages carry only job IDs. Every generate input, including legacy requests, returns `queued`. Legacy input without `planning` describes travel within its selected destinations; missing dates default to today, with a visible scope warning rather than an invented external origin/fare. Send `planning.journey.origin` for a trip that includes outbound/return travel from home. The API commits the job/outbox before sending immediately; cron repairs deferred dispatch. Queue deliveries use job leases, and expired final attempts become terminal failures with a notification. Each account is limited to five outstanding jobs and 20 admissions/minute; v2 has an atomic 100-job global cap within the existing 1,500 total-job cap. A short per-user admission transaction replaces the global advisory lock. AI waits hold no DB connection or transaction. Global inference slots are independent of each invocation's connection pool.
+
+## Generation durability and data rules
+
+Jobs pin `pipeline_version`; v2 jobs keep their `generation_id` through `/retry`. Identical active criteria for the same account coalesce, while all submitted idempotency keys keep pointing to the original job. `force_refresh` creates a deliberate new request. Cache lookup precedes flexible-date selection and remains account scoped, dated and bounded by freshness.
+
+`planning_generations` stores selected dates, DB choices, missing data and completed days. `planning_generation_ai` reserves a unique dispatch ticket before calling the provider and stores the raw response before parsing. Replay resumes this response or checkpoint. A crash after reserving, timeout or failure to persist the response yields `AI_RESULT_UNKNOWN` and consumes the ticket permanently. Retrying the same job cannot invoke AI again. This deliberately trades automatic recovery of an uncertain call for the strict one-dispatch limit. A fresh request is required if the user intentionally chooses another inference.
+
+Backend assembly reserves main journey legs before sightseeing, sets provisional local time allowances, adds check-in/out per city, validates meals, overlap, duplicate venues and complete scoped pricing, and computes 10% contingency. AI only fills missing whole-trip data once: at most 16,000 prompt/schema bytes, 6,000 output tokens and a 180-second inference deadline. Optional repeated context is removed before rejecting oversized mandatory input. City coordinates/timezones come from the resolver; AI venue suggestions remain private to the itinerary. Missing mandatory costs and infeasible budgets cannot become successful plans. A short return-slot description cannot reject a trip.
+
+## Local verification without staging
+
+Use an isolated local PostgreSQL database whose name contains `test`, with migrations and runtime RLS grants applied. These scripts refuse remote databases:
+
+```sh
+PLANNING_V2_TEST_URL='<local-test-url>' ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2.mts
+PLANNING_V2_TEST_URL='<local-test-url>' ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2-pipeline.mts
+```
+
+The first script covers 100 admissions, capacity, aliases, replay, uncertain dispatch and stale checkpoint claims. The second uses actual catalog queries and persistence for 100 accounts, mock inference and duplicate simulated deliveries; it checks ten-day results, budget completeness, no duplicate itineraries and no shared catalog ingestion. CI runs both. Neither exercises Cloudflare Queue delivery or production model quota.
+
+`scripts/check-generation-v2-live.mts` additionally requires `PLANNING_LIVE_MODEL=true`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and a resolver contact URL (`NEXT_PUBLIC_APP_URL`). It uses the exact MY/SG request, one real model call, and local persistence; report/response/checkpoint go to ignored `test-results/generation-v2-live/result.json`. Credentials are never logged.
+
+Current external gate: no isolated staging database/Hyperdrive/web origin is configured. Staging Queue and DLQ exist, but no consumer is deployed. Keep v2 disabled on production until a staging environment and quota/quality measurements exist. Rollback stops new v2 admission by setting its percentage to 0 while retaining Queue, ledger and checkpoints for pinned jobs; do not reroute these jobs through the legacy generator.
 
 Monitor p95 reads, HTTP 429/5xx, DB connection wait, job age, worker concurrency and notification counts. Lower the consumer concurrency when provider quota or DB capacity is under pressure. Inspect failed deliveries alongside dispatch records before replaying anything. A staged rollout should establish actual provider capacity independently of the mock result.
 

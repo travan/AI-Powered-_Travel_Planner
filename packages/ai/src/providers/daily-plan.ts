@@ -1,6 +1,8 @@
 import { PlanningGenerationError } from "./planning-generation-error.js";
+import { dayActivityRows, validateDayOutput } from "./daily-plan-validation.js";
+import { duplicateOutlinePlaces } from "./outline-place-repair.js";
 import * as types from "@travel/types";
-const { referencePlaces } =
+const { referencePlaces, countryDestinationReference } =
   (types as unknown as { default?: typeof types }).default ?? types;
 import type {
   Activity,
@@ -19,6 +21,7 @@ type Generate = (
   system?: string,
 ) => Promise<Json>;
 type DayOutline = {
+  destination_slug?: string;
   day_number: number;
   city: string;
   title: string;
@@ -69,13 +72,16 @@ const outlineSchema = (input: ItineraryInput, count: number) =>
       minItems: count,
       maxItems: count,
       items: objectSchema({
+        ...(input.cities.some((slug) => countryDestinationReference(slug))
+          ? { destination_slug: { type: "string", enum: input.cities } }
+          : {}),
         day_number: { type: "integer", minimum: 1, maximum: count },
         city: stringSchema,
         title: stringSchema,
         places: {
           type: "array",
           minItems: 3,
-          maxItems: 6,
+          maxItems: visitsPerDay(input),
           items: stringSchema,
         },
         all_day: { type: "boolean" },
@@ -159,10 +165,19 @@ export function dailyOutlinePrompt(
 ): string {
   const journey = input.planning?.journey;
   const route = journey
-    ? { origin: journey.origin.label, destinations: cities.map(({ city }) => city),
-        endpoint: (journey.return_to_origin ? journey.origin : journey.endpoint)?.label }
+    ? {
+        origin: journey.origin.label,
+        destinations: cities.map(({ city }) => city),
+        endpoint: (journey.return_to_origin ? journey.origin : journey.endpoint)
+          ?.label,
+      }
     : undefined;
-  return `Plan a geographically clustered, varied ${overview.total_days}-day trip OUTLINE, not the detailed timeline yet. Write all prose in ${language(input)}.\nROUTE (ordered, origin and endpoint are separate from sightseeing destinations): ${JSON.stringify(route ?? null)}\nTRAVELER: ${JSON.stringify(input)}\nCATALOG: ${JSON.stringify(cities.map((c) => ({ city: c.city, places: c.places, hotels: c.hotels, restaurants: c.restaurants })))}\nGive each day a DIFFERENT named area/theme and ${visitsPerDay(input)} DISTINCT real sightseeing places. Do not reuse a place or an evening venue across days. Use general knowledge for proposed named public places when the catalog is empty; keep them as unverified suggestions. For a full-day theme park use all_day=true and 3 specific areas/experiences within that park, with a lunch break between morning and afternoon. Follow requested destinations and exact days. No side trips to other cities unless requested.\n${priceRule(input.currency)}\nIf staying type=none, return hotels=[]; if already_booked, retain the supplied hotel name and room count as the route anchor. Suggest one lodging AREA per overnight city if no verified hotel exists; stars=0, city, rooms, nights, nightly_estimate (per room/night), estimate_basis="planning_estimate", estimate_assumption (room standard, taxes uncertainty, total rooms x nights). Include estimated outbound/return main travel and airport transfers in transport_summary, with price, transport_kind and options=[]; do not include local day passes here (they are budgeted in each day). Unknown departure/arrival times must stay unknown; do not invent flight times.\nReturn JSON: {"title":"trip title","overview":"2 sentences; include conditional arrival/departure assumptions if times unknown","days":[{"day_number":1,"city":"city","title":"unique area/theme","places":["specific morning place","different morning place","afternoon place","different afternoon place","evening place"],"all_day":false}],"hotels":[{"name":"suggested lodging area","city":"city","stars":0,"rooms":1,"nights":${Math.max(0, overview.total_days - 1)},"nightly_estimate":number,"estimate_basis":"planning_estimate","estimate_assumption":"room/night budgeting assumptions","price_per_night":"labelled planning estimate","price_range":"","booking_url":"","airbnb_url":"","address":"","maps_link":"","note":"why this area suits the route"}],"transport_summary":[{"segment":"label","from":"origin","to":"destination","recommended_mode":"flight|train|bus|taxi|walk|other","transport_kind":"flight|airport_transfer|intercity","price":{"amount":number,"currency":"${input.currency}","scope":"person","status":"estimated","basis":"planning_estimate","assumption":"route and budgeting assumptions; not a quote"},"options":[]}]}.`;
+  const countryRoute = input.cities.some((slug) =>
+    countryDestinationReference(slug),
+  )
+    ? `\nCOUNTRY DESTINATIONS: ${JSON.stringify(input.cities.map((slug) => ({ slug, country: countryDestinationReference(slug)?.country })))}. For EVERY day include destination_slug from this list, covering all selected destinations in order. For a country destination choose a concrete city within that country; city must name the city, not the country. Transport legs must connect those concrete cities and the origin/endpoint.`
+    : "";
+  return `Plan a geographically clustered, varied ${overview.total_days}-day trip OUTLINE, not the detailed timeline yet. Write all prose in ${language(input)}.\nROUTE (ordered, origin and endpoint are separate from sightseeing destinations): ${JSON.stringify(route ?? null)}${countryRoute}\nTRAVELER: ${JSON.stringify(input)}\nCATALOG: ${JSON.stringify(cities.map((c) => ({ city: c.city, places: c.places, hotels: c.hotels, restaurants: c.restaurants })))}\nGive each day a DIFFERENT named area/theme and ${visitsPerDay(input)} DISTINCT real sightseeing places. Do not reuse a place or an evening venue across days. Use general knowledge for proposed named public places when the catalog is empty; keep them as unverified suggestions. For a full-day theme park use all_day=true and 3 specific areas/experiences within that park, with a lunch break between morning and afternoon. Follow requested destinations and exact days. No side trips to other cities unless requested.\n${priceRule(input.currency)}\nIf staying type=none, return hotels=[]; if already_booked, retain the supplied hotel name and room count as the route anchor. Suggest one lodging AREA per overnight city if no verified hotel exists; stars=0, city, rooms, nights, nightly_estimate (per room/night), estimate_basis="planning_estimate", estimate_assumption (room standard, taxes uncertainty, total rooms x nights). Include estimated outbound/return main travel and airport transfers in transport_summary, with price, transport_kind and options=[]; do not include local day passes here (they are budgeted in each day). Unknown departure/arrival times must stay unknown; do not invent flight times.\nReturn JSON: {"title":"trip title","overview":"2 sentences; include conditional arrival/departure assumptions if times unknown","days":[{"day_number":1,"city":"city","title":"unique area/theme","places":["specific morning place","different morning place","afternoon place","evening place"],"all_day":false}],"hotels":[{"name":"suggested lodging area","city":"city","stars":0,"rooms":1,"nights":${Math.max(0, overview.total_days - 1)},"nightly_estimate":number,"estimate_basis":"planning_estimate","estimate_assumption":"room/night budgeting assumptions","price_per_night":"labelled planning estimate","price_range":"","booking_url":"","airbnb_url":"","address":"","maps_link":"","note":"why this area suits the route"}],"transport_summary":[{"segment":"label","from":"origin","to":"destination","recommended_mode":"flight|train|bus|taxi|walk|other","transport_kind":"flight|airport_transfer|intercity","price":{"amount":number,"currency":"${input.currency}","scope":"person","status":"estimated","basis":"planning_estimate","assumption":"route and budgeting assumptions; not a quote"},"options":[]}]}.`;
 }
 
 type Slot = {
@@ -359,7 +374,8 @@ export async function generateDailyPlan(
   // A hard enum is useful only when a single destination can supply the whole trip.
   // Otherwise the model may propose unverified places in the correct city.
   const restrictCatalog =
-    cities.length === 1 && catalogNames.length >= overview.total_days * visitsPerDay(input);
+    cities.length === 1 &&
+    catalogNames.length >= overview.total_days * visitsPerDay(input);
   let outline = await generate(
     dailyOutlinePrompt(input, overview, cities),
     5000,
@@ -375,7 +391,16 @@ export async function generateDailyPlan(
     taskSystem(input, true),
   );
   const allocateCatalogPlaces = (candidate: Json) => {
-    if (!restrictCatalog || !Array.isArray(candidate.days)) return;
+    if (!Array.isArray(candidate.days)) return;
+    if (!restrictCatalog) {
+      for (const day of candidate.days)
+        if (Array.isArray(day?.places))
+          day.places = day.places.slice(
+            0,
+            day.all_day ? 3 : visitsPerDay(input),
+          );
+      return;
+    }
     const used = new Set<string>();
     const parkNames = new Set(
       cities.flatMap((city) =>
@@ -441,6 +466,13 @@ export async function generateDailyPlan(
         day.places.length < (day.all_day ? 3 : visitsPerDay(input))
       )
         errors.push(`Day ${i + 1}: missing specific places or day number.`);
+      if (
+        input.cities.some((slug) => countryDestinationReference(slug)) &&
+        (!day.destination_slug || !input.cities.includes(day.destination_slug))
+      )
+        errors.push(
+          `Day ${i + 1}: include destination_slug from the requested destination IDs.`,
+        );
       for (const name of day.places ?? []) {
         if (typeof name !== "string") {
           errors.push("Place names must be strings, not objects.");
@@ -454,10 +486,42 @@ export async function generateDailyPlan(
         seen.add(k);
       }
     }
+    if (input.cities.some((slug) => countryDestinationReference(slug))) {
+      const stops = days
+        .map((day) => day.destination_slug)
+        .filter((slug, i, values) => slug !== values[i - 1]);
+      if (
+        stops.length !== input.cities.length ||
+        stops.some((slug, i) => slug !== input.cities[i])
+      )
+        errors.push(
+          "Cover every requested destination_slug in the selected order.",
+        );
+    }
     return errors;
   };
   let problems = outlineErrors(outline);
-  if (problems.length)
+  if (
+    problems.length &&
+    problems.every((problem) => problem.startsWith("Repeated place:"))
+  ) {
+    const duplicates = duplicateOutlinePlaces(outline.days);
+    const replacement = await generate(
+      `Plan a geographically clustered route: repair ONLY duplicate outline places, in ${language(input)}. Fix these outline problems by returning a replacement name for each requested key. Every replacement must be a DIFFERENT real sightseeing place in that entry's city, never a generic restaurant. Do not repeat any existing name or another replacement. Return only {"replacements":{key:"specific place name"}}.\nDUPLICATE POSITIONS: ${JSON.stringify(duplicates)}\nEXCLUDED NAMES: ${JSON.stringify(outline.days.flatMap((day: DayOutline) => day.places))}`,
+      Math.min(5000, 150 * duplicates.length + 300),
+      objectSchema({
+        replacements: objectSchema(
+          Object.fromEntries(duplicates.map(({ id }) => [id, stringSchema])),
+        ),
+      }),
+      taskSystem(input, true),
+    );
+    for (const entry of duplicates) {
+      const name = replacement.replacements?.[entry.id];
+      if (typeof name === "string" && name.trim())
+        outline.days[entry.dayIndex].places[entry.placeIndex] = name.trim();
+    }
+  } else if (problems.length)
     outline = await generate(
       `${dailyOutlinePrompt(input, overview, cities)}\nFix these outline problems: ${JSON.stringify(problems)}\nPrevious outline: ${JSON.stringify(outline)}`,
       5000,
@@ -474,8 +538,7 @@ export async function generateDailyPlan(
     );
   allocateCatalogPlaces(outline);
   problems = outlineErrors(outline);
-  if (problems.length)
-    throw new PlanningGenerationError("AI_OUTLINE_INVALID");
+  if (problems.length) throw new PlanningGenerationError("AI_OUTLINE_INVALID");
   const days: ItineraryDay[] = [],
     used: string[] = [];
   for (const dayOutline of outline.days as DayOutline[]) {
@@ -499,82 +562,44 @@ export async function generateDailyPlan(
       daySchema(input, slots),
       taskSystem(input),
     );
-    const validate = (r: Json) => {
-      const rows = Array.isArray(r.activities)
-        ? r.activities
-        : Object.entries(r.activities ?? {}).map(([slot_id, row]) => ({
-            ...(row as Json),
-            slot_id,
-          }));
-      return slots.flatMap((slot) => {
-        const matches = rows.filter((a: Json) => a.slot_id === slot.slot_id),
-          a = matches[0];
-        if (
-          matches.length !== 1 ||
-          !a?.name ||
-          typeof a.description !== "string" ||
-          a.description.trim().split(/\s+/).length < 30
-        )
-          return [
-            `${slot.slot_id}: include exactly one specific, detailed entry (at least 30 words).`,
-          ];
-        if (
-          slot.kind === "meal" &&
-          input.planning?.experience_preferences.interests.some((i) =>
-            /ẩm thực địa phương|local food/iu.test(i),
-          ) &&
-          !/món việt|quán việt|Vietnamese food/iu.test(
-            input.prompt_text ?? "",
-          ) &&
-          /phở|cơm tấm|bún bò/iu.test(a.name)
-        )
-          return [
-            `${slot.slot_id}: propose a Japanese local meal, not Vietnamese food.`,
-          ];
-        if (slot.place_name && a.name !== slot.place_name)
-          return [
-            `${slot.slot_id}: name and description must use exactly ${slot.place_name}.`,
-          ];
-        if (
-          !Number.isFinite(a.price?.amount) ||
-          a.price.amount < 0 ||
-          a.price.currency !== input.currency ||
-          !["person", "group"].includes(a.price.scope) ||
-          a.price.basis !== "planning_estimate" ||
-          !a.price.assumption?.trim()
-        )
-          return [
-            `${slot.slot_id}: include a numeric planning allowance, correct currency/scope and an explicit assumption.`,
-          ];
-        if (
-          (["check_in", "check_out", "return"].includes(slot.slot_id) ||
-            (dayOutline.all_day && slot.slot_id === "afternoon_1")) &&
-          a.price.amount !== 0
-        )
-          return [
-            `${slot.slot_id}: cost is already included elsewhere; amount must be 0 and the assumption must identify the existing allowance.`,
-          ];
-        if (
-          slot.kind === "visit" &&
-          used.some((name) => key(name) === key(a.name))
-        )
-          return [
-            `${slot.slot_id}: this place was already visited; use today's planned place.`,
-          ];
-        return [];
-      });
-    };
+    const validate = (candidate: Json) =>
+      validateDayOutput(candidate, slots, input, dayOutline.all_day, (name) =>
+        used.some((previous) => key(previous) === key(name)),
+      );
     let errors = validate(response);
-    if (errors.length)
-      response = await generate(
-        `${prompt}\nRepair ONLY this day; keep every slot. Problems: ${JSON.stringify(errors)}\nPrevious candidate: ${JSON.stringify(response)}`,
-        6500,
-        daySchema(input, slots),
+    if (errors.length) {
+      const repairIds = new Set(errors.map((error) => error.slot));
+      const repairSlots = slots.filter((slot) => repairIds.has(slot.slot_id));
+      const originalRows = dayActivityRows(response);
+      const repairPrompt = prompt.replace(
+        `REQUIRED SLOTS: ${JSON.stringify(slots)}`,
+        `REQUIRED SLOTS: ${JSON.stringify(repairSlots)}`,
+      );
+      const repaired = await generate(
+        `${repairPrompt}\nRepair ONLY this day's invalid slots; return only the required keys. Valid entries are retained by the server. Problems: ${JSON.stringify(errors.map((error) => error.message))}\nPrevious invalid entries: ${JSON.stringify(originalRows.filter((row) => repairIds.has(row.slot_id)))}`,
+        Math.min(6500, 700 * repairSlots.length + 300),
+        daySchema(input, repairSlots),
         taskSystem(input),
       );
+      response = {
+        activities: [
+          ...originalRows.filter((row) => !repairIds.has(row.slot_id)),
+          ...dayActivityRows(repaired).filter((row) =>
+            repairIds.has(row.slot_id),
+          ),
+        ],
+      };
+    }
     errors = validate(response);
     if (errors.length)
-      throw new PlanningGenerationError("AI_DAY_INVALID", `AI model returned incomplete day ${dayOutline.day_number}`);
+      throw new PlanningGenerationError(
+        "AI_DAY_INVALID",
+        `AI model returned incomplete day ${dayOutline.day_number}`,
+        {
+          day: dayOutline.day_number,
+          issues: errors.map(({ code, slot }) => ({ code, slot })),
+        },
+      );
     const activities: Activity[] = slots.map((slot) => {
       const row = Array.isArray(response.activities)
         ? response.activities.find((a: Json) => a.slot_id === slot.slot_id)
@@ -606,6 +631,9 @@ export async function generateDailyPlan(
       ...activities.filter((a) => a.kind === "visit").map((a) => a.name),
     );
     days.push({
+      ...(dayOutline.destination_slug
+        ? { destination_slug: dayOutline.destination_slug }
+        : {}),
       day_number: dayOutline.day_number,
       date,
       city: dayOutline.city,

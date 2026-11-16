@@ -278,6 +278,13 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 404, { message: "Itinerary for job not found" });
     return sendJson(res, 200, itinerary);
   }
+  if(req.method==="GET" && /^\/api\/itinerary\/jobs\/[^/]+$/.test(pathname)){
+    if(!getUserIdFromAuth(req.headers.authorization))return sendJson(res,401,{message:"Sign in to read this planning request"});
+    const id=pathname.split("/").at(-1);
+    const itinerary=getItineraryByJobId(id)?.itineraries?.[0];
+    if(!itinerary)return sendJson(res,404,{message:"Planning job not found"});
+    return sendJson(res,200,{id,kind:"generate",status:"complete",stage:"complete",attempts:1,itinerary_id:itinerary.id,revision_id:null,translation_id:null,error_code:null});
+  }
 
   if (
     req.method === "POST" &&

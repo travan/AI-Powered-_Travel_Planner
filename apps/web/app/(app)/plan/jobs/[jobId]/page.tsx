@@ -17,6 +17,10 @@ import { useLocale, useTranslations } from "next-intl";
 const LABELS: Record<string, string> = {
   queued: "Yêu cầu đang chờ xử lý",
   catalog: "Đang lấy dữ liệu địa điểm",
+  cache: "Đang kiểm tra lịch trình đã có",
+  supplement: "Đang bổ sung dữ liệu còn thiếu",
+  assembly: "Đang sắp xếp lịch trình",
+  persist: "Đang lưu lịch trình",
   overview: "Đang xây dựng khung hành trình",
   detail: "Đang lập lịch, lưu trú và ăn uống",
   validation: "Đang kiểm tra thời gian và chi phí",

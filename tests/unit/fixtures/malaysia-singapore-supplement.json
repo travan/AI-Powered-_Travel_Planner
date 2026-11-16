@@ -1,0 +1,294 @@
+{
+  "items": [
+    {
+      "key": "country-my/meal/breakfast",
+      "name": "Breakfast at a local café",
+      "amount": 20000
+    },
+    {
+      "key": "country-my/local/daily",
+      "name": "Local transportation",
+      "amount": 100000
+    },
+    {
+      "key": "country-my/1/morning_1",
+      "name": "Visit Petronas Twin Towers",
+      "amount": 80000
+    },
+    {
+      "key": "country-my/meal/lunch",
+      "name": "Lunch at a mid-range restaurant",
+      "amount": 50000
+    },
+    {
+      "key": "country-my/1/afternoon_1",
+      "name": "Visit Batu Caves",
+      "amount": 30000
+    },
+    {
+      "key": "country-my/1/afternoon_2",
+      "name": "Explore Central Market",
+      "amount": 0
+    },
+    {
+      "key": "country-my/cafe/daily",
+      "name": "Coffee break",
+      "amount": 20000
+    },
+    {
+      "key": "country-my/meal/dinner",
+      "name": "Dinner at a mid-range restaurant",
+      "amount": 80000
+    },
+    {
+      "key": "country-my/1/evening",
+      "name": "Night walk at KLCC Park",
+      "amount": 0
+    },
+    {
+      "key": "country-my/2/morning_1",
+      "name": "Visit Merdeka Square",
+      "amount": 0
+    },
+    {
+      "key": "country-my/2/afternoon_1",
+      "name": "Explore Chinatown",
+      "amount": 0
+    },
+    {
+      "key": "country-my/2/afternoon_2",
+      "name": "Visit the National Museum",
+      "amount": 20000
+    },
+    {
+      "key": "country-my/2/evening",
+      "name": "Enjoy the nightlife at Bukit Bintang",
+      "amount": 100000
+    },
+    {
+      "key": "country-my/3/morning_1",
+      "name": "Visit the Kuala Lumpur Tower",
+      "amount": 50000
+    },
+    {
+      "key": "country-my/3/afternoon_1",
+      "name": "Take a stroll at the Lake Gardens",
+      "amount": 0
+    },
+    {
+      "key": "country-my/3/afternoon_2",
+      "name": "Visit the Islamic Arts Museum",
+      "amount": 20000
+    },
+    {
+      "key": "country-my/3/evening",
+      "name": "Dinner at a fine dining restaurant",
+      "amount": 200000
+    },
+    {
+      "key": "country-my/4/morning_1",
+      "name": "Visit the Batik Workshop",
+      "amount": 50000
+    },
+    {
+      "key": "country-my/4/afternoon_1",
+      "name": "Explore the Royal Selangor Club",
+      "amount": 0
+    },
+    {
+      "key": "country-my/4/afternoon_2",
+      "name": "Visit the Kuala Lumpur Performing Arts Centre",
+      "amount": 50000
+    },
+    {
+      "key": "country-my/4/evening",
+      "name": "Enjoy a traditional Malay dinner",
+      "amount": 150000
+    },
+    {
+      "key": "country-my/5/morning_1",
+      "name": "Visit the Thean Hou Temple",
+      "amount": 0
+    },
+    {
+      "key": "country-my/5/afternoon_1",
+      "name": "Explore the Little India district",
+      "amount": 0
+    },
+    {
+      "key": "country-my/5/afternoon_2",
+      "name": "Visit the National Textile Museum",
+      "amount": 20000
+    },
+    {
+      "key": "country-my/5/evening",
+      "name": "Farewell dinner at a rooftop restaurant",
+      "amount": 250000
+    },
+    {
+      "key": "country-sg/meal/breakfast",
+      "name": "Breakfast at a local café",
+      "amount": 25000
+    },
+    {
+      "key": "country-sg/local/daily",
+      "name": "Local transportation",
+      "amount": 150000
+    },
+    {
+      "key": "country-sg/6/morning_1",
+      "name": "Visit the Gardens by the Bay",
+      "amount": 30000
+    },
+    {
+      "key": "country-sg/meal/lunch",
+      "name": "Lunch at a mid-range restaurant",
+      "amount": 60000
+    },
+    {
+      "key": "country-sg/6/afternoon_1",
+      "name": "Explore the Marina Bay area",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/6/afternoon_2",
+      "name": "Visit the ArtScience Museum",
+      "amount": 30000
+    },
+    {
+      "key": "country-sg/cafe/daily",
+      "name": "Coffee break",
+      "amount": 25000
+    },
+    {
+      "key": "country-sg/meal/dinner",
+      "name": "Dinner at a mid-range restaurant",
+      "amount": 100000
+    },
+    {
+      "key": "country-sg/6/evening",
+      "name": "Night walk at the Clarke Quay",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/7/morning_1",
+      "name": "Visit the Singapore Zoo",
+      "amount": 50000
+    },
+    {
+      "key": "country-sg/7/afternoon_1",
+      "name": "Explore the Orchard Road",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/7/afternoon_2",
+      "name": "Visit the National Gallery Singapore",
+      "amount": 20000
+    },
+    {
+      "key": "country-sg/7/evening",
+      "name": "Enjoy the nightlife at the Marina Bay Sands",
+      "amount": 200000
+    },
+    {
+      "key": "country-sg/8/morning_1",
+      "name": "Visit the Sentosa Island",
+      "amount": 100000
+    },
+    {
+      "key": "country-sg/8/afternoon_1",
+      "name": "Explore the Universal Studios Singapore",
+      "amount": 150000
+    },
+    {
+      "key": "country-sg/8/afternoon_2",
+      "name": "Visit the S.E.A. Aquarium",
+      "amount": 50000
+    },
+    {
+      "key": "country-sg/8/evening",
+      "name": "Dinner at a fine dining restaurant",
+      "amount": 300000
+    },
+    {
+      "key": "country-sg/9/morning_1",
+      "name": "Visit the Chinatown",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/9/afternoon_1",
+      "name": "Explore the Little India district",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/9/afternoon_2",
+      "name": "Visit the Malay Heritage Centre",
+      "amount": 20000
+    },
+    {
+      "key": "country-sg/9/evening",
+      "name": "Farewell dinner at a rooftop restaurant",
+      "amount": 350000
+    },
+    {
+      "key": "country-sg/10/morning_1",
+      "name": "Visit the Merlion Park",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/10/afternoon_1",
+      "name": "Explore the Bugis Street",
+      "amount": 0
+    },
+    {
+      "key": "country-sg/10/afternoon_2",
+      "name": "Visit the Singapore Flyer",
+      "amount": 50000
+    },
+    {
+      "key": "country-sg/10/evening",
+      "name": "Departure",
+      "amount": 0
+    },
+    {
+      "key": "country-my/stay",
+      "name": "Hotel in Kuala Lumpur",
+      "amount": 1500000
+    },
+    {
+      "key": "country-sg/stay",
+      "name": "Hotel in Singapore",
+      "amount": 2500000
+    },
+    {
+      "key": "leg/1",
+      "name": "Flight from Hà Nội to Kuala Lumpur",
+      "amount": 2000000,
+      "duration_minutes": 240
+    },
+    {
+      "key": "leg/2",
+      "name": "Flight from Kuala Lumpur to Singapore",
+      "amount": 1500000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "leg/3",
+      "name": "Flight from Singapore to Hà Nội",
+      "amount": 2500000,
+      "duration_minutes": 300
+    }
+  ],
+  "cities": [
+    {
+      "name": "Kuala Lumpur",
+      "country": "MY",
+      "destination": "country-my"
+    },
+    {
+      "name": "Singapore",
+      "country": "SG",
+      "destination": "country-sg"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ import { CitiesModule } from "../cities/cities.module.js";
 import { ItineraryService } from "./application/itinerary.service.js";
 import { ITINERARY_REPOSITORY } from "./domain/itinerary.repository.js";
 import { PostgresItineraryRepository } from "./infrastructure/postgres-itinerary.repository.js";
+import { GenerationStore } from "./generation/generation.store.js";
+import { CatalogFirstPlanner } from "./generation/catalog-first-planner.js";
 import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
 
 @Module({
@@ -29,6 +31,8 @@ import { ItineraryController } from "./interfaces/http/itinerary.controller.js";
     WeatherService,
     ItineraryService,
     JourneyService,
+    GenerationStore,
+    CatalogFirstPlanner,
     {
       provide: ITINERARY_REPOSITORY,
       useClass: PostgresItineraryRepository,

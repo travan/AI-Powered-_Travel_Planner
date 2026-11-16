@@ -6,6 +6,9 @@ import {
 } from "../../../../packages/ai/src/providers/daily-plan";
 import { normalizeOllamaItinerary } from "../../../../packages/ai/src/providers/ollama";
 import type { ItineraryInput, ItineraryOverview } from "@travel/types";
+import capturedOutline from "../../fixtures/malaysia-singapore-outline.json";
+import { malaysiaSingaporeRequest } from "../../fixtures/malaysia-singapore-request";
+import { validateDayOutput } from "../../../../packages/ai/src/providers/daily-plan-validation";
 const input: ItineraryInput = {
   cities: ["hanoi"],
   num_days: 3,
@@ -25,6 +28,92 @@ const overview: ItineraryOverview = {
 const description =
   "Walk through the named area and focus on the distinctive buildings and local street life along this route. This fits the day's neighborhood theme without unnecessary backtracking. Take a short break and allow time to reach the following stop comfortably.";
 describe("complete daily planning", () => {
+  it("reproduces the populated 26-word return rejected after real day 8 repair", () => {
+    const description =
+      "Trở về khách sạn sau một ngày khám phá. Hãy nghỉ ngơi và chuẩn bị cho ngày mai. Khách sạn là nơi nghỉ ngơi thoải mái.";
+    const response = {
+      activities: {
+        return: {
+          name: "Trở về khách sạn",
+          description,
+          price: {
+            amount: 0,
+            currency: "VND",
+            scope: "person",
+            basis: "planning_estimate",
+            assumption: "đã bao gồm trong chi phí di chuyển trong ngày",
+          },
+        },
+      },
+    };
+    expect(description.split(/\s+/)).toHaveLength(26);
+    expect(
+      validateDayOutput(
+        response,
+        [{ slot_id: "return", kind: "transfer" }],
+        malaysiaSingaporeRequest(),
+        false,
+        () => false,
+      ),
+    ).toMatchObject([{ slot: "return", code: "DAY_ENTRY_INCOMPLETE" }]);
+  });
+
+  it("repairs only duplicated positions in the outline captured from Workers AI", async () => {
+    const request = malaysiaSingaporeRequest();
+    const generate = vi.fn(
+      async (_prompt: string, _tokens: number, schema: any) => {
+        if (schema.properties.days) return structuredClone(capturedOutline);
+        if (schema.properties.replacements)
+          return {
+            replacements: Object.fromEntries(
+              schema.properties.replacements.required.map((id: string) => [
+                id,
+                `Another Singapore venue ${id}`,
+              ]),
+            ),
+          };
+        return {
+          activities: Object.fromEntries(
+            Object.entries(schema.properties.activities.properties).map(
+              ([id, slot]: [string, any]) => [
+                id,
+                {
+                  name: slot.properties.name.const ?? id,
+                  description,
+                  price: {
+                    amount: slot.properties.price.properties.amount.const ?? 10,
+                    currency: "VND",
+                    scope: "person",
+                    basis: "planning_estimate",
+                    assumption: "Budget estimate, confirm with the venue.",
+                  },
+                },
+              ],
+            ),
+          ),
+        };
+      },
+    );
+    const result = await generateDailyPlan(
+      request,
+      { ...overview, total_days: 10 },
+      [],
+      generate,
+      normalizeOllamaItinerary,
+    );
+    expect(result.days).toHaveLength(10);
+    expect(generate).toHaveBeenCalledTimes(12);
+    expect(Object.keys(generate.mock.calls[1]![2].properties)).toEqual([
+      "replacements",
+    ]);
+    expect(generate.mock.calls[1]![1]).toBeLessThan(5000);
+    const visits = result.days.flatMap((day) =>
+      day.activities.filter((a) => a.kind === "visit"),
+    );
+    expect(visits).toHaveLength(40);
+    expect(new Set(visits.map((entry) => entry.name)).size).toBe(40);
+  });
+
   it("repairs a missing lunch on that day without regenerating the entire week", async () => {
     let missing = true;
     const generate = vi.fn(async (prompt: string) => {

@@ -198,6 +198,8 @@ export interface TransportSegment {
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 export interface Activity extends PlaceLocation {
+  /** Main journey leg reserved by the backend; fare is in transport_summary. */
+  main_transport?: boolean;
   meal_slot?: "breakfast" | "lunch" | "dinner";
   id?: string;
   kind?: TimelineKind;
@@ -225,6 +227,8 @@ export interface Activity extends PlaceLocation {
 // ─── Day ──────────────────────────────────────────────────────────────────────
 
 export interface ItineraryDay {
+  /** Selected country destination containing this day's proposed city. */
+  destination_slug?: string;
   city_slug?: string;
   city_names?: Record<string, string>;
   id?: string;
@@ -357,7 +361,15 @@ export interface AiTokenUsage {
   output_tokens: number | null;
   total_tokens: number | null;
   duration_ms?: number | null;
-  phase?: "overview" | "outline" | "outline_repair" | "day" | "day_repair" | "full_repair" | "detail" | "translate";
+  phase?:
+    | "overview"
+    | "outline"
+    | "outline_repair"
+    | "day"
+    | "day_repair"
+    | "full_repair"
+    | "detail"
+    | "translate";
   day?: number;
   outcome?: "received" | "invalid_output" | "quota_rejected" | "provider_error";
 }

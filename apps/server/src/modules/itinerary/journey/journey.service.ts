@@ -1,16 +1,34 @@
-import type { CatalogJob, DayTemplate, PlanningProgress } from "../application/catalog-itinerary.js";
+import type {
+  CatalogJob,
+  DayTemplate,
+  PlanningProgress,
+} from "../application/catalog-itinerary.js";
 import { logEvent } from "../../../observability/logger.js";
 import { createHash } from "node:crypto";
 import {
   createAIProvider,
   normalizeOllamaItinerary,
   MockAIProvider,
+  PlanningGenerationError,
   type AIProviderName,
   type AIProvider,
 } from "@travel/ai";
 import { workerRequestContext } from "../../../cloudflare/request-context.js";
 import { protectTranslationText } from "./translation-text.js";
-import { classifyJobError, planningErrorParams, publicJobError } from "./planning-job-error.js";
+import { GenerationStore } from "../generation/generation.store.js";
+import { CatalogFirstPlanner } from "../generation/catalog-first-planner.js";
+import type { Snapshot } from "../generation/planning-data.js";
+import { generationKey } from "../generation/generation-input.js";
+import {
+  generationError,
+  generationErrorParams,
+} from "../generation/generation-error.js";
+import {
+  classifyJobError,
+  generationCodes,
+  planningErrorParams,
+  publicJobError,
+} from "./planning-job-error.js";
 import type { ItineraryTranslation } from "@travel/types";
 import type { TranslationDto } from "./journey.dto.js";
 import {
@@ -22,6 +40,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   type OnModuleInit,
   type OnModuleDestroy,
 } from "@nestjs/common";
@@ -77,6 +96,9 @@ type JobRow = PlanningJob & {
   claim_token: string;
   planning_progress?: PlanningProgress;
   planning_reuse?: boolean;
+  pipeline_version?: number;
+  generation_id?: string;
+  deadline_at?: string;
 };
 type TripPlan = {
   current_plan: Itinerary | null;
@@ -95,6 +117,12 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     @Inject(SQL_CLIENT) private readonly sql: SqlClient,
     @Inject(ItineraryService) private readonly itineraries: ItineraryService,
     @Inject(POSTGRES_POOL) private readonly pool: Pool,
+    @Optional()
+    @Inject(GenerationStore)
+    private readonly generations?: GenerationStore,
+    @Optional()
+    @Inject(CatalogFirstPlanner)
+    private readonly catalogFirst?: CatalogFirstPlanner,
   ) {}
   onModuleInit() {
     if (
@@ -103,7 +131,9 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     )
       return;
     this.timer = setInterval(() => {
-      void this.processNextJob().catch(() => logEvent("journey.worker_failed", "error"));
+      void this.processNextJob().catch(() =>
+        logEvent("journey.worker_failed", "error"),
+      );
     }, 1500);
     this.timer.unref?.();
   }
@@ -130,7 +160,39 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       });
     if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
       throw new BadRequestException("Invalid idempotency key");
-    const id = await this.admitJob(userId, "generate", { dto }, key);
+    const percent = Number(process.env.PLANNING_V2_PERCENT ?? 0);
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100)
+      throw new Error("Invalid planning rollout percentage");
+    const selected =
+      percent > 0 &&
+      (parseInt(
+        createHash("sha256")
+          .update(userId + generationKey(dto))
+          .digest("hex")
+          .slice(0, 8),
+        16,
+      ) /
+        0x100000000) *
+        100 <
+        percent;
+    const context = workerRequestContext.getStore();
+    if (
+      selected &&
+      process.env.RUNTIME_TARGET === "cloudflare" &&
+      !context?.queue
+    )
+      throw new HttpException({ code: "PLANNING_QUEUE_UNAVAILABLE" }, 503);
+    if (selected && !this.generations)
+      throw new Error("Generation v2 store unavailable");
+    const id = selected
+      ? await this.generations!.admit(userId, dto, key)
+      : await this.admitJob(userId, "generate", { dto }, key);
+    if (context?.queue)
+      await context.queue
+        .send({ jobId: id })
+        .catch(() =>
+          logEvent("journey.dispatch_deferred", "warn", { jobId: id }),
+        );
     return {
       status: "queued" as const,
       job_id: id,
@@ -138,19 +200,32 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async admitJob(userId: string, kind: string, payload: object, key?: string, progress?: PlanningProgress) {
+  private async admitJob(
+    userId: string,
+    kind: string,
+    payload: object,
+    key?: string,
+    progress?: PlanningProgress,
+  ) {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      await client.query("select pg_advisory_xact_lock(58317291)");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtextextended($1,58317291))",
+        [userId],
+      );
       if (key) {
         const existing = await client.query<{ id: string; matches: boolean }>(
-          "select id::text, payload=$3::jsonb and kind=$4 as matches from itinerary_jobs where user_id=$1 and idempotency_key=$2",
+          `select j.id::text,k.payload=$3::jsonb and j.kind=$4 as matches from planning_submission_keys k join itinerary_jobs j on j.id=k.job_id where k.user_id=$1 and k.key=$2
+           union all select id::text,payload=$3::jsonb and kind=$4 as matches from itinerary_jobs where user_id=$1 and idempotency_key=$2 limit 1`,
           [userId, key, payload, kind],
         );
         if (existing.rows[0]) {
           if (!existing.rows[0].matches)
-            throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "This key belongs to another request." });
+            throw new ConflictException({
+              code: "IDEMPOTENCY_CONFLICT",
+              message: "This key belongs to another request.",
+            });
           await client.query("commit");
           return existing.rows[0].id;
         }
@@ -175,11 +250,20 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         [userId, kind, payload, key ?? null, progress ?? null],
       );
       if (!result.rows[0])
-        throw new HttpException({ code: "TOO_MANY_JOBS", params: {}, message: "Hàng đợi đang bận. Vui lòng thử lại sau." }, 429);
+        throw new HttpException(
+          {
+            code: "TOO_MANY_JOBS",
+            params: {},
+            message: "Hàng đợi đang bận. Vui lòng thử lại sau.",
+          },
+          429,
+        );
       await client.query("commit");
       return result.rows[0].id;
     } catch (error) {
       await client.query("rollback");
+      if ((error as { code?: string }).code === "P0001")
+        throw new HttpException({ code: "TOO_MANY_JOBS" }, 429);
       throw error;
     } finally {
       client.release();
@@ -187,17 +271,23 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async reserveDispatch(limit: number) {
-    return (await this.sql.query<{ job_id: string }>(
-      `with due as (
+    return (
+      await this.sql.query<{ job_id: string }>(
+        `with due as (
         select job_id from journey_job_dispatch where available_at<=now()
         order by available_at,job_id for update skip locked limit $1
       ) update journey_job_dispatch d set available_at=now()+interval '2 minutes'
         from due where d.job_id=due.job_id returning d.job_id::text`,
-      [limit],
-    )).rows;
+        [limit],
+      )
+    ).rows;
   }
 
   async expireJobs() {
+    if (Number(process.env.PLANNING_V2_PERCENT ?? 0) > 0)
+      await this.sql.query(
+        `update itinerary_jobs set status='failed',stage='failed',error_code='GENERATION_DEADLINE_EXCEEDED',error=null,error_params=null,completed_at=now(),locked_until=null,claim_token=null where pipeline_version=2 and status in ('queued','processing') and deadline_at<=now()`,
+      );
     await this.sql.query(
       `update itinerary_jobs set status='failed',stage='failed',
        error_code='PLANNING_FAILED',error_params=null,error=null,locked_until=null,claim_token=null
@@ -206,21 +296,70 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async retryJob(userId: string, id: string, key?: string) {
-    const result = await this.sql.query<{ payload: { dto: GenerateItineraryDto }; error_code: string; error_params?: { retry_at?: string }; planning_progress?: PlanningProgress }>(
-      "select payload,error_code,error_params,planning_progress from itinerary_jobs where id=$1 and user_id=$2 and kind='generate' and status='failed'",
+    if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
+      throw new BadRequestException("Invalid idempotency key");
+    const result = await this.sql.query<{
+      payload: { dto: GenerateItineraryDto };
+      error_code: string;
+      error_params?: { retry_at?: string };
+      planning_progress?: PlanningProgress;
+      pipeline_version?: number;
+      generation_id?: string;
+      deadline_at?: string;
+    }>(
+      "select payload,error_code,error_params,planning_progress,pipeline_version,generation_id,deadline_at from itinerary_jobs where id=$1 and user_id=$2 and kind='generate' and (status='failed' or pipeline_version=2 and status in ('queued','processing'))",
       [id, userId],
     );
     const row = result.rows[0];
     if (!row) throw new NotFoundException("Failed planning job not found.");
+    if (row.pipeline_version === 2) {
+      if (row.deadline_at && Date.parse(row.deadline_at) <= Date.now())
+        generationError("GENERATION_DEADLINE_EXCEEDED");
+      await this.generations!.resume(userId, id);
+      const queue = workerRequestContext.getStore()?.queue;
+      if (queue)
+        await queue
+          .send({ jobId: id })
+          .catch(() =>
+            logEvent("journey.dispatch_deferred", "warn", { jobId: id }),
+          );
+      return {
+        status: "queued" as const,
+        job_id: id,
+        stream_url: `/api/itinerary/jobs/${id}`,
+      };
+    }
     if (row.error_code === "PLANNING_INVALID")
-      throw new ConflictException({ code: "PLANNING_INVALID", message: "Please update the planning form." });
-    if (row.error_code === "AI_QUOTA_EXHAUSTED" && Date.parse(row.error_params?.retry_at ?? "") > Date.now())
-      throw new ConflictException({ code: "AI_QUOTA_EXHAUSTED", params: row.error_params });
-    if (!row.planning_progress) return this.enqueue(userId, row.payload.dto, key);
-    if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
-      throw new BadRequestException("Invalid idempotency key");
-    const jobId = await this.admitJob(userId, "generate", row.payload, key, row.planning_progress);
-    return { status: "queued" as const, job_id: jobId, stream_url: `/api/itinerary/jobs/${jobId}` };
+      throw new ConflictException({
+        code: "PLANNING_INVALID",
+        message: "Please update the planning form.",
+      });
+    if (
+      row.error_code === "AI_QUOTA_EXHAUSTED" &&
+      Date.parse(row.error_params?.retry_at ?? "") > Date.now()
+    )
+      throw new ConflictException({
+        code: "AI_QUOTA_EXHAUSTED",
+        params: row.error_params,
+      });
+    // Legacy retries stay on their pinned strategy even after a v2 canary starts.
+    const jobId = await this.admitJob(
+      userId,
+      "generate",
+      row.payload,
+      key,
+      row.planning_progress,
+    );
+    const queue = workerRequestContext.getStore()?.queue;
+    if (queue)
+      await queue
+        .send({ jobId })
+        .catch(() => logEvent("journey.dispatch_deferred", "warn", { jobId }));
+    return {
+      status: "queued" as const,
+      job_id: jobId,
+      stream_url: `/api/itinerary/jobs/${jobId}`,
+    };
   }
 
   async listJobs(userId: string): Promise<PlanningJobSummary[]> {
@@ -277,19 +416,23 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listStatuses(userId: string, ids: string[]) {
-    return (await this.sql.query<PlanningJob>(
-      `select id::text,status,stage,attempts,itinerary_id::text
+    return (
+      await this.sql.query<PlanningJob>(
+        `select id::text,status,stage,attempts,itinerary_id::text
        from itinerary_jobs where user_id=$1 and id=any($2::uuid[]) and kind='generate'`,
-      [userId, ids],
-    )).rows;
+        [userId, ids],
+      )
+    ).rows;
   }
 
   async getJob(userId: string, id: string) {
-    const result = await this.sql.query<PlanningJob & {
-      source_kind?: TranslationPayload["sourceKind"];
-      source_id?: string;
-      trip_id?: string;
-    }>(
+    const result = await this.sql.query<
+      PlanningJob & {
+        source_kind?: TranslationPayload["sourceKind"];
+        source_id?: string;
+        trip_id?: string;
+      }
+    >(
       `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,
         error_code,error_params,kind,
         case when kind='translate' then payload->>'sourceKind' end as source_kind,
@@ -318,16 +461,20 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       itinerary_id: row.itinerary_id,
       revision_id: row.revision_id,
       translation_id: row.translation_id,
-      error_code: row.status === "failed" ? publicJobError(row.error_code) : null,
+      error_code:
+        row.status === "failed" ? publicJobError(row.error_code) : null,
       ...(row.status === "failed" && row.error_code === "PLANNING_INVALID"
         ? { error_params: planningErrorParams(row.error_params?.reason) }
-        : row.status === "failed" && row.error_code === "AI_QUOTA_EXHAUSTED"
-          ? { error_params: { retry_at: row.error_params?.retry_at } }
-          : {}),
+        : row.status === "failed" && generationCodes.has(row.error_code ?? "")
+          ? { error_params: generationErrorParams(row.error_params?.reason) }
+          : row.status === "failed" && row.error_code === "AI_QUOTA_EXHAUSTED"
+            ? { error_params: { retry_at: row.error_params?.retry_at } }
+            : {}),
     };
   }
   async processNextJob(id?: string) {
-    if ((!id && this.processing) || process.env.JOURNEY_MVP_ENABLED === "false") return;
+    if ((!id && this.processing) || process.env.JOURNEY_MVP_ENABLED === "false")
+      return;
     if (!id) this.processing = true;
     let job: JobRow | undefined;
     let stage = "claim";
@@ -336,18 +483,31 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     let outcome = "failed";
     let cacheHit = false;
     try {
-      const claimed = await this.sql.query<JobRow>(`with candidate as (
+      const claimed = await this.sql.query<JobRow>(
+        `with candidate as (
         select id from itinerary_jobs where ($1::uuid is null or id=$1) and attempts < 3 and ((status='queued' and available_at<=now()) or (status='processing' and locked_until<now()))
         order by created_at for update skip locked limit 1)
         update itinerary_jobs j set status='processing',stage='catalog',attempts=j.attempts+1,
           locked_until=now()+interval '20 minutes',claim_token=gen_random_uuid()
-        from candidate c where j.id=c.id returning j.*`, [id ?? null]);
+        from candidate c where j.id=c.id returning j.*`,
+        [id ?? null],
+      );
       job = claimed.rows[0];
       if (!job) return;
       const current = job;
+      if (
+        job.pipeline_version === 2 &&
+        job.deadline_at &&
+        Date.parse(job.deadline_at) <= Date.now()
+      )
+        generationError("GENERATION_DEADLINE_EXCEEDED");
       stage = "catalog";
       const mockDelay = Number(process.env.JOURNEY_STAGING_DELAY_MS);
-      if (process.env.AI_PROVIDER === "mock" && mockDelay === 30_000)
+      if (
+        job.pipeline_version !== 2 &&
+        process.env.AI_PROVIDER === "mock" &&
+        mockDelay === 30_000
+      )
         await new Promise<void>((resolve) => setTimeout(resolve, mockDelay));
       let itineraryId: string | undefined,
         revisionId: string | undefined,
@@ -374,11 +534,19 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       } else {
         const configured = Number(process.env.PLANNING_CATALOG_PERCENT ?? 0);
         const brief = current.payload.dto?.prompt_text?.trim();
-        const structured = current.payload.dto?.planning &&
+        const structured =
+          current.payload.dto?.planning &&
           (!brief || brief === "Lập hành trình");
-        const selected = process.env.AI_PROVIDER === "cloudflare" && structured &&
-          configured > 0 && parseInt(current.id.slice(0, 8), 16) / 0x100000000 * 100 < configured;
-        if (current.planning_reuse ?? selected) {
+        const selected =
+          process.env.AI_PROVIDER === "cloudflare" &&
+          structured &&
+          configured > 0 &&
+          (parseInt(current.id.slice(0, 8), 16) / 0x100000000) * 100 <
+            configured;
+        if (
+          current.pipeline_version !== 2 &&
+          (current.planning_reuse ?? selected)
+        ) {
           catalogJob = {
             id: current.id,
             claimToken: current.claim_token,
@@ -390,37 +558,62 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
                  where id=$1 and claim_token=$2 and status='processing' returning id`,
                 [current.id, current.claim_token, progress],
               );
-              if (!updated.rows.length) throw new Error("Planning job claim lost");
+              if (!updated.rows.length)
+                throw new Error("Planning job claim lost");
             },
-            templates: async (cities) => (await this.sql.query<DayTemplate>(
-              `select city_slug,place_ids,activity_ids,quality::float,verified_at::text
+            templates: async (cities) =>
+              (
+                await this.sql.query<DayTemplate>(
+                  `select city_slug,place_ids,activity_ids,quality::float,verified_at::text
                  from planning_day_templates where approved and city_slug=any($1::text[])
                  and verified_at >= now()-interval '180 days'
                  order by quality desc,verified_at desc,id limit 200`,
-              [[...new Set(cities)]],
-            )).rows,
-            usage: (entry, day) => usage.push({ ...entry, stage: entry.phase ?? stage, day }),
+                  [[...new Set(cities)]],
+                )
+              ).rows,
+            usage: (entry, day) =>
+              usage.push({ ...entry, stage: entry.phase ?? stage, day }),
           };
         }
-        const result = await this.itineraries.generate({
+        const generateOptions = {
           userId: job.user_id,
           catalogJob,
-          onUsage: (entry) => usage.push({ ...entry, stage: entry.phase ?? entry.operation, day: entry.day }),
+          onUsage: (entry: AiTokenUsage) =>
+            usage.push({
+              ...entry,
+              stage: entry.phase ?? entry.operation,
+              day: entry.day,
+            }),
           dto: {
             ...job.payload.dto!,
             ...(job.attempts > 1 ? { force_refresh: false } : {}),
           },
-          onStage: async (nextStage) => {
+          onStage: async (nextStage: string) => {
             stage = nextStage;
             await this.sql.query(
               `update itinerary_jobs set stage=$3,locked_until=now()+interval '20 minutes' where id=$1 and claim_token=$2 and status='processing'`,
               [current.id, current.claim_token, nextStage],
             );
           },
-        });
+        };
+        const result =
+          job.pipeline_version === 2
+            ? await this.catalogFirst!.generate({
+                ...generateOptions,
+                job: {
+                  id: job.id,
+                  generation_id: job.generation_id!,
+                  claim_token: job.claim_token,
+                },
+              })
+            : await this.itineraries.generate(generateOptions);
         if (result.status === "unsupported") {
-          const status = result.code === "AI_UNAVAILABLE" ? 503
-            : result.code === "UNSUPPORTED_DESTINATION" ? 400 : 422;
+          const status =
+            result.code === "AI_UNAVAILABLE"
+              ? 503
+              : result.code === "UNSUPPORTED_DESTINATION"
+                ? 400
+                : 422;
           throw new HttpException({ code: result.code }, status);
         }
         if (result.status !== "cached" || !result.itinerary_id)
@@ -449,7 +642,29 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     } catch (error) {
-      const failure = classifyJobError(error, stage, job?.kind ?? "");
+      const capacityBusy =
+        error instanceof HttpException &&
+        typeof error.getResponse() === "object" &&
+        (error.getResponse() as { code?: string }).code === "AI_CAPACITY_BUSY";
+      const failure = capacityBusy
+        ? {
+            code: "AI_CAPACITY_BUSY",
+            params: {},
+            status: 503,
+            terminal: false,
+            retrySeconds: 15,
+          }
+        : classifyJobError(error, stage, job?.kind ?? "");
+      if (error instanceof PlanningGenerationError && error.details) {
+        for (const issue of error.details.issues.slice(0, 5))
+          logEvent("journey.ai_validation_failed", "error", {
+            jobId: job?.id,
+            stage,
+            day: error.details.day,
+            slot: issue.slot,
+            code: issue.code,
+          });
+      }
       outcome = failure.code;
       logEvent("journey.job_failed", "error", {
         jobId: job?.id,
@@ -460,37 +675,77 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         willRetry: Boolean(job && job.attempts < 3 && !failure.terminal),
       });
       if (job)
-        await this.sql
-          .query(
-            `update itinerary_jobs set status=case when attempts>=3 or $3 then 'failed' else 'queued' end,
-        stage=case when attempts>=3 or $3 then 'failed' else 'retry' end,available_at=now()+make_interval(secs=>$7),locked_until=null,claim_token=null,
-        error=$4,error_code=$5,error_params=$6 where id=$1 and claim_token=$2`,
-            [
-              job.id,
-              job.claim_token,
-              failure.terminal,
-              null,
-              failure.code,
-              failure.params,
-              failure.retrySeconds,
-            ],
-          );
+        await this.sql.query(
+          `update itinerary_jobs set status=case when ${capacityBusy ? "false" : "attempts>=3 or $3"} then 'failed' else 'queued' end,
+        stage=case when ${capacityBusy ? "false" : "attempts>=3 or $3"} then 'failed' else 'retry' end,available_at=now()+make_interval(secs=>$7),locked_until=null,claim_token=null,
+        error=$4,error_code=$5,error_params=$6${capacityBusy ? ",attempts=greatest(0,attempts-1)" : ""} where id=$1 and claim_token=$2 and status='processing'`,
+          [
+            job.id,
+            job.claim_token,
+            failure.terminal,
+            null,
+            failure.code,
+            failure.params,
+            failure.retrySeconds,
+          ],
+        );
       else throw error;
     } finally {
       if (job?.kind === "generate") {
-        const days = catalogJob?.progress.days ?? [];
-        const aiDays = days.filter((day) => day.activities.some((item) =>
-          item.evidence?.source === "ai_suggestion")).length;
-        await this.sql.query(
-          `insert into planning_ai_attempts(claim_token,job_id,attempt,strategy,outcome,catalog_days,ai_days,calls)
+        const checkpoint =
+          job.pipeline_version === 2
+            ? await this.generations
+                ?.checkpoint<Snapshot>(job.generation_id!)
+                .catch(() => undefined)
+            : undefined;
+        const days = checkpoint?.days ?? catalogJob?.progress.days ?? [];
+        const aiDays = days.filter((day) => {
+          if (checkpoint?.schedule && checkpoint.items) {
+            const scheduled = checkpoint.schedule.find(
+              (s) => s.day === day.day_number,
+            );
+            return (
+              scheduled?.slots.some(
+                (s) =>
+                  checkpoint.items[s.itemKey ?? s.coveredBy ?? ""]?.source ===
+                  "ai_suggestion",
+              ) ||
+              checkpoint.items[`${scheduled?.destination}/stay`]?.source ===
+                "ai_suggestion"
+            );
+          }
+          return day.activities.some(
+            (item) => item.evidence?.source === "ai_suggestion",
+          );
+        }).length;
+        await this.sql
+          .query(
+            `insert into planning_ai_attempts(claim_token,job_id,attempt,strategy,outcome,catalog_days,ai_days,calls)
              values($1,$2,$3,$4,$5,$6,$7,$8::jsonb) on conflict (claim_token) do nothing`,
-          [job.claim_token, job.id, job.attempts, catalogJob ? "catalog" : "legacy", outcome,
-            days.length - aiDays, aiDays, JSON.stringify(usage)],
-        ).catch(() => logEvent("journey.usage_write_failed", "warn", { jobId: job?.id }));
+            [
+              job.claim_token,
+              job.id,
+              job.attempts,
+              job.pipeline_version === 2
+                ? "catalog_v2"
+                : catalogJob
+                  ? "catalog"
+                  : "legacy",
+              outcome,
+              days.length - aiDays,
+              aiDays,
+              JSON.stringify(usage),
+            ],
+          )
+          .catch(() =>
+            logEvent("journey.usage_write_failed", "warn", { jobId: job?.id }),
+          );
       }
       if (!id) {
         this.processing = false;
-        await this.expireJobs().catch(() => logEvent("journey.expire_failed", "error"));
+        await this.expireJobs().catch(() =>
+          logEvent("journey.expire_failed", "error"),
+        );
       }
     }
   }
@@ -1026,7 +1281,10 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         params: {},
         message: "Chọn mục cần tạo lại.",
       });
-    const id = await this.admitJob(userId, "revision", { tripId, revision: dto });
+    const id = await this.admitJob(userId, "revision", {
+      tripId,
+      revision: dto,
+    });
     return { job_id: id, status: "queued" };
   }
   private async buildRevision(

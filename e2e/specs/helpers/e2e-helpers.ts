@@ -320,6 +320,8 @@ export async function verifyQueuedMobileRoute(
   jobId: string,
   expectedTitle: string,
 ) {
+  await page.goto("/");
+  await injectMobileMockAuthSession(page);
   await page.goto(`/itinerary/${jobId}?source=queued`);
   await expect(page.getByTestId("mobile-itinerary-title")).toHaveText(
     expectedTitle,

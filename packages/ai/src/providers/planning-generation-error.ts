@@ -1,3 +1,8 @@
+export type PlanningFailureDetails = {
+  day?: number;
+  issues: { code: string; slot?: string }[];
+};
+
 export class PlanningGenerationError extends Error {
   constructor(
     readonly code:
@@ -5,6 +10,7 @@ export class PlanningGenerationError extends Error {
       | "AI_OUTLINE_INVALID"
       | "AI_DAY_INVALID",
     message?: string,
+    readonly details?: PlanningFailureDetails,
   ) {
     super(message ?? code);
   }
