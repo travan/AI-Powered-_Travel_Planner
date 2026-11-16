@@ -192,7 +192,14 @@ export default function TripsScreen() {
       const job = (await res.json()) as PlanningJob;
       if (cancelled) return;
       if (job.status === "failed")
-        throw new Error(planningErrorMessage(job.error_code));
+        throw new Error(
+          planningErrorMessage(
+            job.error_code,
+            undefined,
+            job.error_params,
+            job.pipeline_version,
+          ),
+        );
 
       if (job.status === "queued" || job.status === "processing") {
         pollCountRef.current += 1;

@@ -1,0 +1,246 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  classifyCanaryResult,
+  runProductionCanary,
+  validateCanaryPlan,
+} from "../../scripts/check-production-generation.mjs";
+import { canarySession } from "../../scripts/production-canary-auth.mjs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+afterEach(() => vi.unstubAllEnvs());
+describe("production generation gate", () => {
+  it("runs exactly six fresh jobs, verifies V2 first, and records a failed V1 baseline without inventing V1 success", async () => {
+    vi.stubEnv("PLANNING_CANARY_EMAIL", "ci@example.test");
+    vi.stubEnv("PLANNING_CANARY_PASSWORD", "test-password");
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "planning-canary-test-"),
+    );
+    const jobs = new Map();
+    const submitted = [];
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const request = vi.fn(async (url, init = {}) => {
+      const pathname = new URL(url).pathname;
+      let result;
+      if (pathname === "/health")
+        result = {
+          deploy_commit: "candidate",
+          planning_pipeline: { v2_percent: 0, queue_bound: true },
+        };
+      else if (pathname === "/api/auth/session")
+        result = {
+          user: { id: "ci-user" },
+          session: { access_token: "never-report-this-token" },
+        };
+      else if (pathname === "/api/itinerary/generate") {
+        const pipeline = Number(init.headers["X-Planning-Pipeline"].slice(1));
+        const input = JSON.parse(init.body);
+        expect(input.force_refresh).toBe(true);
+        const id = `job-${submitted.length}`;
+        jobs.set(id, { pipeline, input });
+        submitted.push({ pipeline, key: init.headers["Idempotency-Key"] });
+        result = { job_id: id };
+      } else if (pathname.startsWith("/api/itinerary/jobs/")) {
+        const id = pathname.split("/").at(-1);
+        const { pipeline } = jobs.get(id);
+        result = {
+          id,
+          status: pipeline === 2 ? "complete" : "failed",
+          error_code: pipeline === 1 ? "AI_DAY_INVALID" : null,
+          itinerary_id: id,
+          pipeline_version: pipeline,
+          usage_recorded: true,
+          provider: "cloudflare",
+          model: "test",
+          ai_usage: [
+            {
+              provider: "cloudflare",
+              model: "test",
+              input_tokens: 10,
+              output_tokens: 20,
+            },
+          ],
+        };
+      } else {
+        const { input } = jobs.get(pathname.split("/").at(-1));
+        const catalog = {
+          kl: { country: "MY" },
+          sg: { country: "SG" },
+          dn: { country: "VN" },
+        };
+        const days = Array.from({ length: input.num_days }, (_, index) => {
+          const stop =
+            input.cities[
+              Math.floor((index * input.cities.length) / input.num_days)
+            ];
+          const slug =
+            stop === "country-my" ? "kl" : stop === "country-sg" ? "sg" : "dn";
+          return {
+            day_number: index + 1,
+            date: `2027-01-${String(index + 1).padStart(2, "0")}`,
+            destination_slug: stop,
+            city_slug: slug,
+            city: slug,
+            activities: [
+              {
+                kind: "meal",
+                meal_slot: "breakfast",
+                name: "Breakfast",
+                description: "A proposed meal",
+                time: "08:00",
+                duration_minutes: 30,
+                price: { amount: 10000 },
+              },
+              {
+                kind: "visit",
+                name: `Venue ${index}`,
+                description: "A proposed visit",
+                time: "10:00",
+                duration_minutes: 60,
+                price: { amount: 10000 },
+              },
+              {
+                kind: "meal",
+                meal_slot: "lunch",
+                name: "Lunch",
+                description: "A proposed meal",
+                time: "12:00",
+                duration_minutes: 30,
+                price: { amount: 10000 },
+              },
+              {
+                kind: "meal",
+                meal_slot: "dinner",
+                name: "Dinner",
+                description: "A proposed meal",
+                time: "18:00",
+                duration_minutes: 30,
+                price: { amount: 10000 },
+              },
+            ],
+          };
+        });
+        const stops = [
+          "Hà Nội",
+          ...input.cities.map(
+            (stop) => days.find((day) => day.destination_slug === stop).city,
+          ),
+          "Hà Nội",
+        ];
+        result = {
+          itineraries: [
+            {
+              days,
+              city_catalog: catalog,
+              currency: "VND",
+              total_cost: 1000000,
+              budget_breakdown: {
+                complete: true,
+                total: 1000000,
+                accommodation: 500000,
+                food: 300000,
+                activities: 100000,
+                transport: 100000,
+                contingency: 0,
+              },
+              transport_summary: stops.slice(1).map((to, index) => ({
+                from: stops[index],
+                to,
+                price: { amount: 50000 },
+              })),
+            },
+          ],
+        };
+      }
+      return new Response(JSON.stringify(result));
+    });
+    try {
+      const rows = await runProductionCanary({
+        base: "https://example.test",
+        commit: "candidate",
+        runId: "unit-run",
+        request,
+        output: directory,
+        sleep: async () => {},
+      });
+      expect(submitted.map(({ pipeline }) => pipeline)).toEqual([
+        2, 2, 2, 1, 1, 1,
+      ]);
+      expect(new Set(submitted.map(({ key }) => key)).size).toBe(6);
+      expect(
+        rows
+          .filter((row) => row.pipeline === 2)
+          .every((row) => row.status === "complete"),
+      ).toBe(true);
+      expect(
+        rows
+          .filter((row) => row.pipeline === 1)
+          .every((row) => row.status === "failed"),
+      ).toBe(true);
+      expect(
+        await fs.readFile(path.join(directory, "compare.json"), "utf8"),
+      ).not.toContain("never-report-this-token");
+    } finally {
+      log.mockRestore();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("never accepts AI/system failure or malformed success as business rejection", () => {
+    const test = { allowConstraintFailure: true };
+    expect(
+      classifyCanaryResult(test, {
+        status: "failed",
+        error_code: "AI_DAY_INVALID",
+      }),
+    ).toBe("failed");
+    expect(
+      classifyCanaryResult(test, { status: "complete" }, "wrong country"),
+    ).toBe("invalid_success");
+    expect(
+      classifyCanaryResult(test, {
+        status: "failed",
+        error_code: "PLANNING_BUDGET_UNSATISFIABLE",
+        error_params: { reason: "group_total_exceeds_budget" },
+      }),
+    ).toBe("constraint_rejected");
+    expect(
+      classifyCanaryResult(
+        { allowConstraintFailure: false },
+        {
+          status: "failed",
+          error_code: "PLANNING_BUDGET_UNSATISFIABLE",
+          error_params: { reason: "group_total_exceeds_budget" },
+        },
+      ),
+    ).toBe("failed");
+    expect(() => validateCanaryPlan({ days: [] }, { num_days: 10 })).toThrow();
+  });
+  it("uses the actual nested native session contract without leaking the token", async () => {
+    vi.stubEnv("PLANNING_CANARY_EMAIL", "ci@example.test");
+    vi.stubEnv("PLANNING_CANARY_PASSWORD", "test-password");
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: "ci-user" },
+            session: {
+              access_token: "private-token",
+              refresh_token: "private-refresh",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "job" })));
+    const session = await canarySession("https://example.test", { request });
+    expect(session.userId).toBe("ci-user");
+    expect(await session.json("/api/itinerary/jobs/job")).toEqual({
+      id: "job",
+    });
+    expect(request.mock.calls[1][1].headers.Authorization).toBe(
+      "Bearer private-token",
+    );
+    expect(JSON.stringify(session)).not.toContain("private-token");
+  });
+});

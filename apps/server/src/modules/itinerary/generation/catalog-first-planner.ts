@@ -4,7 +4,12 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
-import { CloudflareAIProvider } from "@travel/ai";
+import {
+  createSupplementProvider,
+  destinationContext,
+  supplementConfig,
+  type SupplementProvider,
+} from "@travel/ai";
 import type { AiTokenUsage, Itinerary, ItineraryInput } from "@travel/types";
 import * as types from "@travel/types";
 import { CitiesService } from "../../cities/application/cities.service.js";
@@ -140,7 +145,10 @@ export class CatalogFirstPlanner {
             )
           : [await this.cities.findForPlanning(selected, 300)];
         const ranked = candidates
-          .filter((c) => !!c)
+          .filter(
+            (c): c is NonNullable<typeof c> =>
+              !!c && (!country || c.country === country.country),
+          )
           .sort(
             (a, b) =>
               b.places.length - a.places.length || a.slug.localeCompare(b.slug),
@@ -180,7 +188,7 @@ export class CatalogFirstPlanner {
       await options.onStage?.("supplement");
       const instruction =
         "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the requested ISO country. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. If impossible, return no fabricated cheap prices.\n` +
+        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. If impossible, return no fabricated cheap prices.\n` +
         "";
       const context = {
         currency: state.input.currency,
@@ -188,6 +196,19 @@ export class CatalogFirstPlanner {
         people: state.input.num_travelers,
         days: state.input.num_days,
         rooms: state.input.planning!.stay_preferences.rooms,
+        destination_context: destinationContext(
+          state.input,
+          state.destinations.map((d) => ({
+            id: d.selected,
+            city: d.city?.name.en,
+            country: d.country,
+          })),
+        ),
+        journey: state.input.planning!.journey,
+        selected_dates: {
+          start: state.input.start_date,
+          end: state.input.end_date,
+        },
         destinations: state.destinations.map((d) => ({
           destination: d.selected,
           country: d.country,
@@ -225,13 +246,14 @@ export class CatalogFirstPlanner {
         generationError("PLANNING_DATA_INSUFFICIENT", "context_limit");
       const workerContext = workerRequestContext.getStore();
       const binding = workerContext?.rawAi ?? workerContext?.ai;
+      let provider: SupplementProvider | undefined;
       const raw = await this.store.once(
         job.generation_id,
         async () => {
-          const provider = new CloudflareAIProvider(
-            binding!,
-            process.env.CLOUDFLARE_AI_MODEL,
-          );
+          provider ??= createSupplementProvider({
+            workersAI: binding,
+            config: state.ai_config,
+          });
           try {
             return await provider.supplementRaw(
               prompt,
@@ -246,8 +268,11 @@ export class CatalogFirstPlanner {
           }
         },
         () => {
-          if (!binding)
-            throw new HttpException({ code: "AI_UNAVAILABLE" }, 503);
+          state.ai_config ??= supplementConfig();
+          provider = createSupplementProvider({
+            workersAI: binding,
+            config: state.ai_config,
+          });
         },
       );
       let response: unknown;

@@ -4,7 +4,11 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 export async function verifyPlanningBindings(config, api) {
-  if (Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0) return;
+  if (
+    Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0 &&
+    !config.vars?.PLANNING_CANARY_USER_IDS?.trim()
+  )
+    return;
   const producer = config.queues?.producers?.find(
     (p) => p.binding === "JOURNEY_QUEUE",
   );

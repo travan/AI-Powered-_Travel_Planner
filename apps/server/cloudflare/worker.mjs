@@ -44,7 +44,7 @@ async function inRequest(env, ctx, work, rateLimitedAtEdge = false) {
         ? stagingAi
         : env.AI;
     const ai =
-      Number(env.PLANNING_V2_PERCENT ?? 0) > 0 || env.JOURNEY_QUEUE
+      rawAi && (Number(env.PLANNING_V2_PERCENT ?? 0) > 0 || env.JOURNEY_QUEUE)
         ? {
             run: (model, input) =>
               withAiPermit(sql, () => rawAi.run(model, input)),

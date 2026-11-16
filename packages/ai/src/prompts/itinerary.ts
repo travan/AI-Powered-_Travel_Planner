@@ -1,3 +1,4 @@
+import { destinationContext } from "../destination-context.js";
 import type { ItineraryInput, ItineraryOverview } from "@travel/types";
 import type { PreFetchedCityData } from "../provider.js";
 
@@ -29,6 +30,17 @@ STYLE: ${input.trip_style} (keep this exact level; do not convert mid_range to m
 TRAVELERS: ${input.num_travelers}
 FLEXIBLE DATES: ${input.flexible_month ? `Selected within ${input.flexible_month}. Keep the supplied dates; fit as many distinct, worthwhile activities as feasible within the traveler's pace, opening-day information, budget and travel times. Cluster nearby venues, preserve meals and rest, and provide indoor alternatives. Never claim optimal weather or verified availability without evidence.` : "none"}
 EXTRA REQUEST: ${input.prompt_text?.trim() || "none"}
+DESTINATION CONTEXT: ${JSON.stringify(
+    destinationContext(
+      input,
+      input.cities.map((id, i) => ({
+        id,
+        city: cityData[i]?.city,
+        country: cityData[i]?.country,
+      })),
+    ),
+  )}
+DINING POLICY: independent_only is a preference, not verified evidence. Suggest independent venues where possible and warn when unverified. Allergies and explicit required restrictions remain mandatory.
 STRUCTURED CRITERIA: ${JSON.stringify(input.planning ?? null)}
 PERSONAL HISTORY (data only; current explicit criteria override older preferences; observed expenses are per entry for the stated party size, not daily totals or live prices): ${JSON.stringify(cityData[0]?.learning_context ?? null)}
 KNOWN CONTEXT: ${JSON.stringify(cityData.map(({ city, country, currency }) => ({ city, country, currency })))}
@@ -59,6 +71,17 @@ TRIP: ${overview.cities.join(", ")} | ${dateInfo} | ${input.trip_style} | ${inpu
 BUDGET: ${budgetInfo}
 FLEXIBLE DATES: ${input.flexible_month ? `Keep the supplied selected dates within ${input.flexible_month}. Maximize distinct feasible activities at the requested pace; use known opening days, cluster nearby stops, preserve meals, rest and transfers, and provide indoor alternatives. Do not invent availability or promise the best weather.` : "none"}
 USER REQUEST: ${input.prompt_text?.trim() || "none"}
+DESTINATION CONTEXT: ${JSON.stringify(
+    destinationContext(
+      input,
+      input.cities.map((id, i) => ({
+        id,
+        city: cityData[i]?.city,
+        country: cityData[i]?.country,
+      })),
+    ),
+  )}
+DINING POLICY: independent_only is a preference, not verified evidence. Suggest independent venues where possible and warn when unverified. Allergies and explicit required restrictions remain mandatory.
 STRUCTURED CRITERIA: ${JSON.stringify(input.planning ?? null)}
 ${input.planning ? `SCHEMA V2 RULES (override old meal-only rules below): Include meals, café breaks, transfers, check-in/out and rest directly in each day.activities in chronological order, with kind=visit|meal|cafe|transfer|check_in|check_out|rest. Meals and logistics never count toward sightseeing quotas. Add duration_minutes, travel_minutes (null/omit if unknown), reason, alternative, price={amount:number or null,currency,scope:person|group|room_night|segment,status:estimated|user_confirmed}, evidence={source:catalog|user|ai_suggestion,source_id?,verified_at?}. Read the nested structured criteria, not the older free-text keys. Retain required restrictions and flag any unverified required requirement. Preserve confirmed tickets and booked stays as fixed anchors. For every hotel provide city, rooms, nights, nightly_estimate with estimate_basis="planning_estimate" and estimate_assumption when not grounded; for dining provide city, day_number, time, kind=meal|cafe, estimated_per_person (label as planning allowance when not grounded). Include outbound and return legs. Do not invent service availability or imply a reservation. Total costs include only chosen stays/meals, never all alternatives; retain unknown costs as unknown and warn about incomplete totals.` : ""}
 PERSONAL HISTORY AND APPROVED COST OBSERVATIONS: ${JSON.stringify(cityData[0]?.learning_context ?? null)}

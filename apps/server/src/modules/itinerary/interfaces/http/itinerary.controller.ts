@@ -44,10 +44,11 @@ export class ItineraryController {
     @Body() dto: GenerateItineraryDto,
     @CurrentUser() user: CurrentUserValue,
     @Headers("idempotency-key") key: string | undefined,
+    @Headers("x-planning-pipeline") pipeline: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
-      return await this.journey.enqueue(user.sub, dto, key);
+      return await this.journey.enqueue(user.sub, dto, key, pipeline);
     } catch (error) {
       if (error instanceof HttpException && error.getStatus() === 429)
         response.setHeader("Retry-After", "30");
@@ -80,7 +81,10 @@ export class ItineraryController {
     }
     return {
       itinerary: detail.result
-        ? { id: detail.id, ...(await this.itineraries.presentStored(detail.result)) }
+        ? {
+            id: detail.id,
+            ...(await this.itineraries.presentStored(detail.result)),
+          }
         : null,
     };
   }
@@ -114,7 +118,12 @@ export class ItineraryController {
     const detail = result.value;
     return {
       itineraries: detail.result
-        ? [{ id: detail.id, ...(await this.itineraries.presentStored(detail.result)) }]
+        ? [
+            {
+              id: detail.id,
+              ...(await this.itineraries.presentStored(detail.result)),
+            },
+          ]
         : [],
     };
   }

@@ -66,6 +66,7 @@ export type Snapshot = {
   days: ItineraryDay[];
   legs: Need[];
   version: 2;
+  ai_config?: import("@travel/ai").SupplementConfig;
   legacy_destination_only?: boolean;
   travel_scheduled?: boolean;
 };
@@ -254,7 +255,14 @@ export function prepareSnapshot(
               "Catalog allowance for all local rides for the group this day.",
           };
       }
-      const pool = catalogs.get(dest.selected)!.places;
+      const pool =
+        kind === "meal" && criteria.dining_preferences.independent_only
+          ? [...catalogs.get(dest.selected)!.places].sort(
+              (a, b) =>
+                Number(b.tags.includes("independent")) -
+                Number(a.tags.includes("independent")),
+            )
+          : catalogs.get(dest.selected)!.places;
       if (!snapshot.items[key] && !item) {
         const picked = pool.find((p) => {
           const category = p.category ?? p.type;
@@ -303,12 +311,7 @@ export function prepareSnapshot(
             )
           )
             return false;
-          if (
-            kind === "meal" &&
-            (criteria.dining_preferences.allergies.length ||
-              (criteria.dining_preferences.independent_only &&
-                !p.tags.includes("independent")))
-          )
+          if (kind === "meal" && criteria.dining_preferences.allergies.length)
             return false;
           return true;
         });
@@ -574,8 +577,7 @@ export function validateSupplementRequirements(snapshot: Snapshot) {
       "required_experience_unverified",
     );
   if (
-    (snapshot.input.planning!.dining_preferences.independent_only ||
-      snapshot.input.planning!.dining_preferences.allergies.length ||
+    (snapshot.input.planning!.dining_preferences.allergies.length ||
       snapshot.input.planning!.dining_preferences.requirements.some(
         (r) => r.priority === "required",
       )) &&

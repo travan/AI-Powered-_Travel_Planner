@@ -28,6 +28,7 @@ describe('createAIProvider', () => {
     vi.clearAllMocks();
     delete process.env.NODE_ENV;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_MODEL;
     delete process.env.GEMINI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OLLAMA_BASE_URL;
@@ -108,6 +109,7 @@ describe('createAIProvider', () => {
 
     it('should return provider when key is set', () => {
       process.env.OPENAI_API_KEY = 'sk-prod123';
+      process.env.OPENAI_MODEL = 'test-model';
       const provider = createAIProvider('openai');
       expect(provider).toEqual({ type: 'openai', key: 'sk-prod123' });
     });

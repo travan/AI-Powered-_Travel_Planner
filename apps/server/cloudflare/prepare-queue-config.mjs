@@ -17,7 +17,7 @@ if (error) throw new Error("Invalid Wrangler configuration.");
 
 const queue = `travel-planner-journey-${target}`;
 const concurrency = Number(
-  process.env.JOURNEY_QUEUE_CONCURRENCY ?? (target === "staging" ? 4 : 0),
+  process.env.JOURNEY_QUEUE_CONCURRENCY ?? (target === "staging" ? 4 : 1),
 );
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 250)
   throw new Error(
@@ -40,6 +40,39 @@ if (
   );
 config.vars.PLANNING_V2_PERCENT = String(percent);
 config.vars.PLANNING_AI_CONCURRENCY = String(aiConcurrency);
+config.vars.PLANNING_CANARY_USER_IDS =
+  process.env.PLANNING_CANARY_USER_IDS ?? "";
+const provider =
+  target === "staging"
+    ? (process.env.STAGING_AI_PROVIDER ?? "mock")
+    : (process.env.DEPLOY_AI_PROVIDER ??
+      config.vars.AI_PROVIDER ??
+      "cloudflare");
+if (
+  ![
+    "cloudflare",
+    "claude",
+    "openai",
+    "gemini",
+    ...(target === "staging" ? ["mock"] : []),
+  ].includes(provider)
+)
+  throw new Error("Unsupported deployment AI provider");
+config.vars.AI_PROVIDER = provider;
+for (const key of [
+  "CLOUDFLARE_AI_MODEL",
+  "ANTHROPIC_MODEL",
+  "OPENAI_MODEL",
+  "GEMINI_MODEL",
+])
+  if (process.env[key]?.trim()) config.vars[key] = process.env[key].trim();
+const modelKey = {
+  claude: "ANTHROPIC_MODEL",
+  openai: "OPENAI_MODEL",
+  gemini: "GEMINI_MODEL",
+}[provider];
+if (modelKey && !config.vars[modelKey])
+  throw new Error(`Set ${modelKey} for the selected provider`);
 
 if (target === "staging") {
   const database = process.env.STAGING_HYPERDRIVE_ID;
@@ -57,10 +90,12 @@ if (target === "staging") {
   config.name = "travel-planner-api-staging";
   config.hyperdrive[0].id = database;
   Object.assign(config.vars, {
-    AI_PROVIDER:
-      process.env.STAGING_AI_PROVIDER === "cloudflare" ? "cloudflare" : "mock",
+    AI_PROVIDER: process.env.STAGING_AI_PROVIDER ?? "mock",
     JOURNEY_STAGING_DELAY_MS:
-      process.env.STAGING_AI_PROVIDER === "cloudflare" ? "0" : "30000",
+      process.env.STAGING_AI_PROVIDER &&
+      process.env.STAGING_AI_PROVIDER !== "mock"
+        ? "0"
+        : "30000",
     PLANNING_STAGING: "true",
     NEXT_PUBLIC_APP_URL: origin.origin,
     CORS_ORIGINS: origin.origin,

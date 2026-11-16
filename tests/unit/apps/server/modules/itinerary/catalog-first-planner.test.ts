@@ -4,6 +4,7 @@ import {
   prepareSnapshot,
   applySupplement,
   ensureMandatoryBudget,
+  validateSupplementRequirements,
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-data";
 import {
   completePlan,
@@ -14,14 +15,38 @@ import { catalogScenario } from "../../../../fixtures/catalog-scenario";
 import realSupplement from "../../../../fixtures/malaysia-singapore-supplement.json";
 import { generationInput } from "../../../../../../apps/server/src/modules/itinerary/generation/generation-input";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 function fixture() {
+  vi.stubEnv("AI_PROVIDER", "cloudflare");
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-15T00:00:00Z"));
   return catalogScenario();
 }
 
 describe("catalog-first generation v2", () => {
+  it("softens independent dining without softening allergy requirements", () => {
+    const { input } = fixture();
+    input.planning!.dining_preferences.independent_only = true;
+    const snapshot = prepareSnapshot(
+      input,
+      input.cities.map((selected) => ({ selected, country: "MY" })),
+    );
+    const meal = snapshot.needs.find((need) => need.kind === "meal")!;
+    snapshot.needs = [meal];
+    snapshot.items[meal.key] = {
+      name: "Suggested dining area",
+      amount: 100000,
+      source: "ai_suggestion",
+      scope: "person",
+      assumption: "Unverified allowance",
+    };
+    expect(() => validateSupplementRequirements(snapshot)).not.toThrow();
+    input.planning!.dining_preferences.allergies = ["peanut"];
+    expect(() => validateSupplementRequirements(snapshot)).toThrow();
+  });
   it("supports a legacy destination-only day without inventing an external origin or fare", async () => {
     const { dto, cities } = fixture();
     delete dto.planning;

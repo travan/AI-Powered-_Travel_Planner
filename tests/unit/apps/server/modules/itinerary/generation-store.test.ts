@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GenerationStore } from "../../../../../../apps/server/src/modules/itinerary/generation/generation.store";
 import { JourneyService } from "../../../../../../apps/server/src/modules/itinerary/journey/journey.service";
+import { PlanningGenerationError } from "../../../../../../packages/ai/src/providers/planning-generation-error";
 
 // A durable ledger and a single global slot across independently constructed workers.
 function database() {
@@ -53,6 +54,37 @@ function database() {
 }
 afterEach(() => vi.useRealTimers());
 describe("generation dispatch durability", () => {
+  it("does not reserve a ticket or inference slot when provider preflight fails", async () => {
+    const db = database();
+    const store = new GenerationStore({} as never, db.sql);
+    const work = vi.fn();
+    await expect(
+      store.once("g", work, () => {
+        throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
+      }),
+    ).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(db.row).toBeUndefined();
+    expect(db.occupied).toBe(false);
+    expect(work).not.toHaveBeenCalled();
+  });
+  it("retains an explicit quota rejection without dispatching again", async () => {
+    const db = database();
+    const store = new GenerationStore({} as never, db.sql);
+    const work = vi.fn(async () => {
+      throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED");
+    });
+    await expect(store.once("g", work)).rejects.toMatchObject({
+      code: "AI_QUOTA_EXHAUSTED",
+    });
+    await expect(store.once("g", work)).rejects.toMatchObject({
+      code: "AI_QUOTA_EXHAUSTED",
+    });
+    expect(work).toHaveBeenCalledOnce();
+    expect(db.row).toEqual({
+      state: "failed",
+      error_code: "AI_QUOTA_EXHAUSTED",
+    });
+  });
   it("keeps legacy retries on their original pipeline rather than selecting a new rollout cohort", async () => {
     const client = {
       query: vi.fn(async (sql: string) => ({
@@ -64,17 +96,15 @@ describe("generation dispatch durability", () => {
     };
     const service = new JourneyService(
       {
-        query: vi
-          .fn()
-          .mockResolvedValue({
-            rows: [
-              {
-                payload: { dto: {} },
-                pipeline_version: 1,
-                error_code: "PLANNING_FAILED",
-              },
-            ],
-          }),
+        query: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              payload: { dto: {} },
+              pipeline_version: 1,
+              error_code: "PLANNING_FAILED",
+            },
+          ],
+        }),
       },
       {} as never,
       { connect: async () => client } as never,

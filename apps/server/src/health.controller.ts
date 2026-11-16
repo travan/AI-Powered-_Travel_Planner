@@ -30,6 +30,8 @@ export class HealthController {
         ...(this.mongo ? { mongo: "ok" } : { documents: "postgres" }),
       },
       planning_pipeline: {
+        canary_enabled: Boolean(process.env.PLANNING_CANARY_USER_IDS?.trim()),
+        provider: process.env.AI_PROVIDER ?? "cloudflare",
         v2_percent: Number(process.env.PLANNING_V2_PERCENT ?? 0),
         queue_bound: !!workerRequestContext.getStore()?.queue,
         ai_concurrency: Number(process.env.PLANNING_AI_CONCURRENCY ?? 1),

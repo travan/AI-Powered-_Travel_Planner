@@ -1,5 +1,6 @@
 import {
   isWorkersAiQuota,
+  isWorkersAiCapacity,
   PlanningGenerationError,
 } from "./planning-generation-error.js";
 import { generateDailyPlan } from "./daily-plan.js";
@@ -220,7 +221,34 @@ export class CloudflareAIProvider implements AIProvider {
               : "provider_error",
           });
         if (isWorkersAiQuota(error))
-          throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED");
+          throw new PlanningGenerationError(
+            "AI_QUOTA_EXHAUSTED",
+            undefined,
+            undefined,
+            "cloudflare",
+          );
+        if (isWorkersAiCapacity(error))
+          throw new PlanningGenerationError(
+            "AI_RATE_LIMITED",
+            undefined,
+            undefined,
+            "cloudflare",
+          );
+        const code = String((error as { code?: unknown })?.code ?? "");
+        if (["5007", "3042", "5028", "5035", "5016"].includes(code))
+          throw new PlanningGenerationError(
+            "AI_PROVIDER_CONFIGURATION_INVALID",
+            undefined,
+            undefined,
+            "cloudflare",
+          );
+        if (["3023", "5018", "3041"].includes(code))
+          throw new PlanningGenerationError(
+            "AI_AUTH_INVALID",
+            undefined,
+            undefined,
+            "cloudflare",
+          );
         throw error;
       })) as {
       response?: string | object;

@@ -21,7 +21,10 @@ const destinations = [
   ["auckland", "Auckland", "NZ", "Pacific/Auckland"],
   ["singapore", "Singapore", "SG", "Asia/Singapore"],
 ] as const;
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 function scenario(
   target: (typeof destinations)[number],
@@ -29,6 +32,7 @@ function scenario(
   mode: "catalog" | "prices" | "empty",
   independent = false,
 ) {
+  vi.stubEnv("AI_PROVIDER", "cloudflare");
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-16T00:00:00Z"));
   const { dto, cities } = catalogScenario();
@@ -206,17 +210,19 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
     },
   );
   it.each(destinations)(
-    "%s fails explicitly if required independent dining cannot be verified",
+    "%s completes with an explicit warning for unverified independent dining",
     async (...target) => {
       const s = scenario(target, kind, "empty", true);
-      await expect(s.run()).rejects.toMatchObject({
-        response: {
-          code: "PLANNING_DATA_INSUFFICIENT",
-          params: { reason: "required_dining_unverified" },
-        },
-      });
+      const generated = await s.run();
+      expect(generated.result.days).toHaveLength(3);
+      expect(generated.result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "INDEPENDENT_DINING_UNVERIFIED",
+          severity: "warning",
+        }),
+      );
       expect(s.binding.run).toHaveBeenCalledOnce();
-      expect(s.repository.createComplete).not.toHaveBeenCalled();
+      expect(s.repository.createComplete).toHaveBeenCalledOnce();
     },
   );
 });

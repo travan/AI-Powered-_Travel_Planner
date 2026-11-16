@@ -116,6 +116,11 @@ export interface AccommodationBooking {
   version: number;
 }
 export interface PlanningJob {
+  pipeline_version?: number;
+  provider?: string;
+  model?: string;
+  ai_usage?: import("./itinerary").AiTokenUsage[];
+  usage_recorded?: boolean;
   kind?: "generate" | "translate" | "revision";
   translation_id?: string;
   error_code?: string;

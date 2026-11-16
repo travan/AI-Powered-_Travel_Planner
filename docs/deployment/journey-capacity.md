@@ -1,6 +1,8 @@
 # Journey queue and notification rollout
 
-## Staging
+Production now uses the [bounded production canary](planning-production-canary.md); staging is optional. The staging load procedure below remains available for separate capacity work and is not a release prerequisite.
+
+## Optional staging
 
 Use a separate Postgres database, Hyperdrive binding and web origin. Apply the server migrations with the same migration runner and runtime grants as the target deployment. The runtime role needs RLS policies for `itinerary_jobs`, `journey_job_dispatch` and `product_notifications`. Run the Security Gate before rollout.
 
@@ -28,7 +30,7 @@ Repeat with `LOAD_MODE=mixed`. Pass `LOAD_AI_MODE=real` for model quality/capaci
 
 ## Production
 
-Apply migrations ahead of the application rollout. Provision `travel-planner-journey-production` and `travel-planner-journey-production-dead`. Set `JOURNEY_QUEUE_CONCURRENCY` and `PLANNING_AI_CONCURRENCY` from measured capacity. Set `PLANNING_V2_CERTIFIED_COMMIT` to the exact tested commit only after the gates above pass; CI refuses enabled v2 without this certification or Queue config. Increase `PLANNING_V2_PERCENT` from 10 to 50 to 100, verifying metrics at each step. The checked-in default is 0. Cron can generate legacy work only while v2 is disabled; with v2 enabled it dispatches/reclaims jobs and never substitutes direct generation for missing Queue bindings.
+Apply pending migrations with the existing runner. Provision `travel-planner-journey-production` and `travel-planner-journey-production-dead`. The workflow starts at one consumer and one global inference slot, with rollout 0% and an authenticated canary allowlist. It runs three exact/control cases on V1 and V2 through production, then promotes new requests directly to 100% only after the V2 controls pass. This replaces the staging-only and `PLANNING_V2_CERTIFIED_COMMIT` gates. Keep Queues available for pinned jobs at every rollout percentage. See [the production canary runbook](planning-production-canary.md) for credentials, provider selection, evidence and failure recovery.
 
 Job states, notifications and dispatch records are durable in Postgres. Consumer messages carry only job IDs. Every generate input, including legacy requests, returns `queued`. Legacy input without `planning` describes travel within its selected destinations; missing dates default to today, with a visible scope warning rather than an invented external origin/fare. Send `planning.journey.origin` for a trip that includes outbound/return travel from home. The API commits the job/outbox before sending immediately; cron repairs deferred dispatch. Queue deliveries use job leases, and expired final attempts become terminal failures with a notification. Each account is limited to five outstanding jobs and 20 admissions/minute; v2 has an atomic 100-job global cap within the existing 1,500 total-job cap. A short per-user admission transaction replaces the global advisory lock. AI waits hold no DB connection or transaction. Global inference slots are independent of each invocation's connection pool.
 
@@ -53,7 +55,7 @@ The first script covers 100 admissions, capacity, aliases, replay, uncertain dis
 
 `scripts/check-generation-v2-live.mts` additionally requires `PLANNING_LIVE_MODEL=true`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and a resolver contact URL (`NEXT_PUBLIC_APP_URL`). It uses the exact MY/SG request, one real model call, and local persistence; report/response/checkpoint go to ignored `test-results/generation-v2-live/result.json`. Credentials are never logged.
 
-Current external gate: no isolated staging database/Hyperdrive/web origin is configured. Staging Queue and DLQ exist, but no consumer is deployed. Keep v2 disabled on production until a staging environment and quota/quality measurements exist. Rollback stops new v2 admission by setting its percentage to 0 while retaining Queue, ledger and checkpoints for pinned jobs; do not reroute these jobs through the legacy generator.
+No isolated staging environment is required for the bounded production canary. Technical and real-model candidate checks run against an isolated local database before deployment; synthetic staging fixtures never run in production. After deployment, dedicated authenticated accounts run the same cases against the actual production API and Queue. Quota, invalid output, resolver failure or invalid successful plans block promotion. Setting rollout to zero retains Queue, ledger and checkpoints for already pinned V2 jobs; it does not convert them to legacy jobs.
 
 Monitor p95 reads, HTTP 429/5xx, DB connection wait, job age, worker concurrency and notification counts. Lower the consumer concurrency when provider quota or DB capacity is under pressure. Inspect failed deliveries alongside dispatch records before replaying anything. A staged rollout should establish actual provider capacity independently of the mock result.
 

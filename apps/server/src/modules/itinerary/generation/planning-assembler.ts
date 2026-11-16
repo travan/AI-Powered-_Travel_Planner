@@ -289,6 +289,15 @@ export function completePlan(snapshot: Snapshot): Itinerary {
       "PLANNING_DATA_INSUFFICIENT",
       "schedule_constraints_unsatisfied",
     );
+  if (p.dining_preferences.independent_only)
+    enriched.issues.push({
+      code: "INDEPENDENT_DINING_UNVERIFIED",
+      severity: "warning",
+      message:
+        input.locale === "vi"
+          ? "Ưu tiên quán ăn độc lập; cần xác nhận trực tiếp, các gợi ý chưa được bảo đảm là quán độc lập."
+          : "Independent dining is preferred; confirm directly, suggested venues are not guaranteed independent.",
+    });
   const visits = new Set<string>();
   for (const day of enriched.days)
     for (const a of day.activities.filter((a) => a.kind === "visit")) {

@@ -369,7 +369,8 @@ export interface AiTokenUsage {
     | "day_repair"
     | "full_repair"
     | "detail"
-    | "translate";
+    | "translate"
+    | "supplement";
   day?: number;
   outcome?: "received" | "invalid_output" | "quota_rejected" | "provider_error";
 }

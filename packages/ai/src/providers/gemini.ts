@@ -37,7 +37,8 @@ export class GeminiProvider implements AIProvider {
     return [...this.usage];
   }
 
-  constructor(apiKey: string, model = "gemini-1.5-pro") {
+  constructor(apiKey: string, model?: string) {
+    if (!model?.trim()) throw new Error("GEMINI_MODEL is required");
     this.client = new GoogleGenerativeAI(apiKey);
     this.model = model;
   }
