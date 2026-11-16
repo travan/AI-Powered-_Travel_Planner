@@ -990,7 +990,11 @@
     "t8168a4114aea": "Đưa thành phố lên trước",
     "tfce470059d0b": "Xóa thành phố",
     "cancel_editing": "Hủy chỉnh sửa",
-    "discard_unsaved_changes": "Bỏ thay đổi chưa lưu"
+    "discard_unsaved_changes": "Bỏ thay đổi chưa lưu",
+    "t6cf692c35ef9": "Đang kiểm tra lịch trình đã có",
+    "td677295a4777": "Đang bổ sung dữ liệu còn thiếu",
+    "te57c451559a4": "Đang sắp xếp lịch trình",
+    "t95da61519ac7": "Đang lưu lịch trình"
   },
   "issues": {
     "JOURNEY_DAY_ORDER": "Lịch từng ngày chưa đi qua đủ điểm đến theo đúng thứ tự. Vui lòng tạo lại.",
@@ -1079,7 +1083,14 @@
     "MONTH_BOOKING_CONFLICT": "Hãy chọn ngày cụ thể khi đã có vé hoặc phòng đặt trước.",
     "PLANNER_API_UNAVAILABLE": "Chưa kết nối được dịch vụ tạo lịch trình. Thông tin của bạn vẫn được giữ lại.",
     "GENERATION_FAILED": "Chưa tạo được lịch trình. Thông tin của bạn vẫn được giữ lại; hãy thử lại.",
-    "CURRENCY_RATE_UNAVAILABLE": "Chưa lấy được tỷ giá. Các khoản tiền đã nhập vẫn được giữ nguyên."
+    "CURRENCY_RATE_UNAVAILABLE": "Chưa lấy được tỷ giá. Các khoản tiền đã nhập vẫn được giữ nguyên.",
+    "PLANNING_DATA_INSUFFICIENT": "Chưa đủ dữ liệu để tạo lịch trình đáp ứng yêu cầu. Hãy chọn thành phố cụ thể hoặc điều chỉnh tiêu chí.",
+    "PLANNING_BUDGET_UNSATISFIABLE": "Dự toán đầy đủ vượt ngân sách cả nhóm. Hãy điều chỉnh ngân sách, số ngày hoặc điểm đến.",
+    "AI_RESPONSE_INVALID": "Dữ liệu AI bổ sung chưa hợp lệ. Hệ thống đã giữ phần dữ liệu hợp lệ và không tự gọi AI thêm.",
+    "AI_RESULT_UNKNOWN": "Lần gọi AI chưa xác định được kết quả. Hệ thống không tự gọi lại để tránh phát sinh chi phí trùng.",
+    "GENERATION_DEADLINE_EXCEEDED": "Yêu cầu đã vượt thời gian xử lý. Tiến độ được giữ; hãy tạo yêu cầu mới nếu cần.",
+    "AI_SUGGESTIONS_UNVERIFIED": "Một số địa điểm và giá là gợi ý AI chưa kiểm chứng; cần xác nhận trước khi đặt.",
+    "PLANNING_QUEUE_UNAVAILABLE": "Hàng đợi lập lịch trình chưa sẵn sàng. Vui lòng thử lại sau."
   },
   "translations": {
     "panel": "Bản dịch lịch trình",

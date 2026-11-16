@@ -6,6 +6,11 @@ import {
 import type { ItineraryDetail } from "../domain/itinerary.entity.js";
 import type { ItineraryRepository } from "../domain/itinerary.repository.js";
 import type { Itinerary, ItineraryInput, AiTokenUsage } from "@travel/types";
+import * as travelTypes from "@travel/types";
+const { countryDestinationReference } =
+  (travelTypes as unknown as { default?: typeof travelTypes }).default ??
+  travelTypes;
+import { logEvent } from "../../../observability/logger.js";
 
 type ItineraryRow = {
   id: string;
@@ -107,21 +112,27 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     userId: string;
     request: ItineraryInput;
     result: Itinerary;
-    jobClaim?: { id: string; token: string };
+    jobClaim?: { id: string; token: string; completeAtomically?: boolean };
     catalogCities: Array<{ slug: string; name: string }>;
   }): Promise<string> {
     const saved = await this.sql.query<{ id: string }>(
-      `with ${input.jobClaim ? `claim as (
+      `with ${
+        input.jobClaim
+          ? `claim as (
          select id from itinerary_jobs where id=$12 and claim_token=$13
            and user_id::text=$1 and status='processing' and itinerary_id is null for update
-       ),` : ""} saved as (
+       ),`
+          : ""
+      } saved as (
          insert into itineraries (
            user_id, cities, countries, start_date, end_date, num_days,
            budget, currency, trip_style, status, result
          )
-         ${input.jobClaim
-           ? "select $1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10 from claim"
-           : "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)"}
+         ${
+           input.jobClaim
+             ? "select $1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10 from claim"
+             : "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'complete', $10)"
+         }
          returning id
        ),
        queued as (
@@ -129,19 +140,36 @@ export class PostgresItineraryRepository implements ItineraryRepository {
          select saved.id, jsonb_build_object('cities', $11::jsonb)
          from saved where jsonb_array_length($11::jsonb) > 0
          returning itinerary_id
-       ) ${input.jobClaim ? `, linked as (
-         update itinerary_jobs set itinerary_id=saved.id from saved where itinerary_jobs.id=$12
+       ) ${
+         input.jobClaim
+           ? `, linked as (
+         update itinerary_jobs set itinerary_id=saved.id${input.jobClaim?.completeAtomically ? ",status='complete',stage='complete',completed_at=now(),locked_until=null,error=null,error_code=null,error_params=null" : ""} from saved where itinerary_jobs.id=$12
          returning itinerary_jobs.id
-       )` : ""}
+       )`
+           : ""
+       }
        select saved.id::text
        from saved`,
       [
         input.userId,
         input.request.cities,
-        [...new Set(input.request.cities.flatMap((slug) => {
-          const country = input.result.city_catalog?.[slug]?.country;
-          return country ? [country] : [];
-        }))],
+        [
+          ...new Set(
+            input.request.cities.flatMap((slug) => {
+              const country =
+                countryDestinationReference(slug)?.country ??
+                input.result.city_catalog?.[slug]?.country ??
+                (input.result.days ?? [])
+                  .filter((d) => d.destination_slug === slug)
+                  .map(
+                    (d) =>
+                      input.result.city_catalog?.[d.city_slug ?? ""]?.country,
+                  )
+                  .find(Boolean);
+              return country ? [country] : [];
+            }),
+          ),
+        ],
         input.request.start_date ?? null,
         input.request.end_date ?? null,
         input.request.num_days ?? input.result.num_days,
@@ -155,10 +183,15 @@ export class PostgresItineraryRepository implements ItineraryRepository {
     );
     if (!saved.rows[0]) throw new Error("Planning job claim lost");
     if (process.env.DOCUMENT_STORE === "postgres") {
-      await this.sql.query(
-        `insert into user_prompt_history (user_id, prompt_text, normalized_query) values ($1, $2, $3)`,
-        [input.userId, input.request.prompt_text ?? "", input.request],
-      );
+      await this.sql
+        .query(
+          `insert into user_prompt_history (user_id, prompt_text, normalized_query) values ($1, $2, $3)`,
+          [input.userId, input.request.prompt_text ?? "", input.request],
+        )
+        .catch((error) => {
+          if (!input.jobClaim?.completeAtomically) throw error;
+          logEvent("journey.history_write_failed", "warn");
+        });
     }
     return saved.rows[0]!.id;
   }

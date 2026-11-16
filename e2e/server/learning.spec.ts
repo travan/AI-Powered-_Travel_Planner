@@ -1,3 +1,4 @@
+import { resolveQueuedGeneration } from "./queued-generation";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { expect, test } from "@playwright/test";
@@ -5,6 +6,8 @@ const { Client } = createRequire(`${process.cwd()}/apps/server/package.json`)(
   "pg",
 );
 let db: any;
+const resolveGeneration = (body: any) => resolveQueuedGeneration(db, body);
+test.setTimeout(90_000);
 const users: string[] = [];
 test.beforeAll(async () => {
   db = new Client({ connectionString: process.env.E2E_POSTGRES_URL });
@@ -123,13 +126,13 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
     data: input,
   });
   expect(generated.ok(), await generated.text()).toBeTruthy();
-  const first = await generated.json();
+  const first = await resolveGeneration(await generated.json());
   expect(first.result.days[0].city_slug).toBe("tokyo");
   const repeat = await request.post("/api/itinerary/generate", {
     headers: a.headers,
     data: input,
   });
-  expect((await repeat.json()).cache_hit).toBe(true);
+  expect((await resolveGeneration(await repeat.json())).cache_hit).toBe(true);
   const events = await db.query(
     "select event_type,count(*)::int as n from planner_learning_events where user_id=$1 group by event_type",
     [a.id],
@@ -256,7 +259,7 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
     },
   });
   expect(next.ok(), await next.text()).toBeTruthy();
-  const learned = await next.json();
+  const learned = await resolveGeneration(await next.json());
   expect(learned.result.learning_summary).toMatchObject({
     approved_expense_samples: 3,
   });
@@ -268,7 +271,9 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
     headers: b.headers,
     data: { ...input, prompt_text: "Another owner" },
   });
-  expect((await isolated.json()).result.learning_summary).toEqual({
+  expect(
+    (await resolveGeneration(await isolated.json())).result.learning_summary,
+  ).toEqual({
     past_plans: 0,
     approved_expense_samples: 0,
   });
@@ -306,7 +311,9 @@ test("bilingual identity, transactional memory, approved costs, feedback privacy
     headers: a.headers,
     data: { ...input, prompt_text: "Memory disabled" },
   });
-  expect((await disabled.json()).result.learning_summary).toEqual({
+  expect(
+    (await resolveGeneration(await disabled.json())).result.learning_summary,
+  ).toEqual({
     past_plans: 0,
     approved_expense_samples: 0,
   });

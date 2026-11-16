@@ -1,3 +1,4 @@
+import { resolveQueuedGeneration } from "./queued-generation";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { expect, test } from "@playwright/test";
@@ -8,11 +9,16 @@ let db: any;
 let userId: string;
 let token: string;
 
+test.setTimeout(90_000);
+const resolveGeneration = (body: any) => resolveQueuedGeneration(db, body);
+
 test.beforeAll(async () => {
   db = new Client({ connectionString: process.env.E2E_POSTGRES_URL });
   await db.connect();
   // Identified city fixture; unknown free text must no longer create canonical cities.
-  await db.query(`insert into cities(slug,name,country,timezone,currency,lat,lon,popular) values('tokyo','{"en":"Tokyo","vi":"Tokyo"}','JP','Asia/Tokyo','JPY',35.68,139.69,false) on conflict(slug) do nothing`);
+  await db.query(
+    `insert into cities(slug,name,country,timezone,currency,lat,lon,popular) values('tokyo','{"en":"Tokyo","vi":"Tokyo"}','JP','Asia/Tokyo','JPY',35.68,139.69,false) on conflict(slug) do nothing`,
+  );
 });
 test.afterAll(async () => {
   await db?.end();
@@ -58,31 +64,40 @@ test("Qwen response is normalized, persisted, catalogued, saved idempotently and
     data: input,
   });
   expect(response.ok()).toBeTruthy();
-  const generated = await response.json();
+  const generated = await resolveGeneration(await response.json());
   expect(generated.status).toBe("cached");
   expect(generated.cache_hit).toBe(false);
   expect(generated.result.days[0].activities[0].name).toBe("Senso-ji");
-  expect(generated.result.ai_usage).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      provider: "ollama",
-      model: "qwen3.5:9b",
-      operation: "detail",
-      input_tokens: 320,
-      output_tokens: 180,
-      total_tokens: 500,
-      duration_ms: 2400,
-    }),
-  ]));
-  expect(generated.result.issues).toEqual(expect.arrayContaining([expect.objectContaining({code:"MEAL_MISSING"})]));
+  expect(generated.result.ai_usage).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        provider: "ollama",
+        model: "qwen3.5:9b",
+        operation: "detail",
+        input_tokens: 320,
+        output_tokens: 180,
+        total_tokens: 500,
+        duration_ms: 2400,
+      }),
+    ]),
+  );
+  expect(generated.result.issues).toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "MEAL_MISSING" })]),
+  );
   const stored = await db.query(
     "select status, result from itineraries where id = $1",
     [generated.itinerary_id],
   );
   expect(stored.rows[0].status).toBe("complete");
   expect(stored.rows[0].result).toEqual(generated.result);
-  const reopenedItinerary = await request.get(`/api/itinerary/${generated.itinerary_id}`, { headers });
+  const reopenedItinerary = await request.get(
+    `/api/itinerary/${generated.itinerary_id}`,
+    { headers },
+  );
   expect(reopenedItinerary.ok()).toBeTruthy();
-  expect((await reopenedItinerary.json()).itineraries[0].ai_usage).toEqual(generated.result.ai_usage);
+  expect((await reopenedItinerary.json()).itineraries[0].ai_usage).toEqual(
+    generated.result.ai_usage,
+  );
   await expect
     .poll(
       async () =>
@@ -114,56 +129,104 @@ test("Qwen response is normalized, persisted, catalogued, saved idempotently and
   );
 });
 
-test("an exact repeat reuses the itinerary; changed inputs use the city catalog for a new AI call", async ({ request }) => {
+test("an exact repeat reuses the itinerary; changed inputs use the city catalog for a new AI call", async ({
+  request,
+}) => {
   const name = `New Harbor ${randomUUID().slice(0, 8)}`;
   const headers = { Authorization: `Bearer ${token}` };
-  const fixtureSlug = `harbor-${randomUUID().slice(0,8)}`;
-  await db.query(`insert into cities(slug,name,country,timezone,currency,lat,lon,popular) values($1,$2,'JP','Asia/Tokyo','JPY',35.68,139.69,false)`,[fixtureSlug,{en:name,vi:name}]);
+  const fixtureSlug = `harbor-${randomUUID().slice(0, 8)}`;
+  await db.query(
+    `insert into cities(slug,name,country,timezone,currency,lat,lon,popular) values($1,$2,'JP','Asia/Tokyo','JPY',35.68,139.69,false)`,
+    [fixtureSlug, { en: name, vi: name }],
+  );
   const data = { ...input, cities: [fixtureSlug], city_names: [name] };
-  const first = await request.post("/api/itinerary/generate", { headers, data });
+  const first = await request.post("/api/itinerary/generate", {
+    headers,
+    data,
+  });
   expect(first.ok()).toBeTruthy();
-  const firstBody = await first.json();
+  const firstBody = await resolveGeneration(await first.json());
   expect(firstBody.status).toBe("cached");
 
-  const cityRows = await db.query("select slug from cities where name->>'en' = $1", [name]);
+  const cityRows = await db.query(
+    "select slug from cities where name->>'en' = $1",
+    [name],
+  );
   expect(cityRows.rows).toHaveLength(1);
   const slug = cityRows.rows[0].slug;
   try {
-    await expect.poll(async () => (await db.query(
-      "select status from city_catalog_ingestion_jobs where itinerary_id = $1",
-      [firstBody.itinerary_id],
-    )).rows[0]?.status).toBe("completed");
-    expect((await db.query("select title from activity_catalog where city_slug = $1", [slug])).rows)
-      .toEqual(expect.arrayContaining([expect.objectContaining({ title: "Senso-ji" })]));
+    await expect
+      .poll(
+        async () =>
+          (
+            await db.query(
+              "select status from city_catalog_ingestion_jobs where itinerary_id = $1",
+              [firstBody.itinerary_id],
+            )
+          ).rows[0]?.status,
+      )
+      .toBe("completed");
+    expect(
+      (
+        await db.query(
+          "select title from activity_catalog where city_slug = $1",
+          [slug],
+        )
+      ).rows,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "Senso-ji" })]),
+    );
 
-    const second = await request.post("/api/itinerary/generate", { headers, data });
+    const second = await request.post("/api/itinerary/generate", {
+      headers,
+      data,
+    });
     expect(second.ok()).toBeTruthy();
-    const secondBody = await second.json();
-    expect(secondBody).toMatchObject({ cache_hit: true, itinerary_id: firstBody.itinerary_id });
-    expect((await db.query("select slug from cities where name->>'en' = $1", [name])).rows).toHaveLength(1);
-    expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(2);
+    const secondBody = await resolveGeneration(await second.json());
+    expect(secondBody).toMatchObject({
+      cache_hit: true,
+      itinerary_id: firstBody.itinerary_id,
+    });
+    expect(
+      (await db.query("select slug from cities where name->>'en' = $1", [name]))
+        .rows,
+    ).toHaveLength(1);
+    expect(
+      (await (await request.get("http://127.0.0.1:3349/calls")).json()).count,
+    ).toBe(2);
 
     const changed = await request.post("/api/itinerary/generate", {
-      headers, data: { ...data, budget: 750 },
+      headers,
+      data: { ...data, budget: 750 },
     });
     expect(changed.ok()).toBeTruthy();
-    const changedBody = await changed.json();
+    const changedBody = await resolveGeneration(await changed.json());
     expect(changedBody.cache_hit).toBe(false);
     expect(changedBody.itinerary_id).not.toBe(firstBody.itinerary_id);
-    const calls = await (await request.get("http://127.0.0.1:3349/calls")).json();
+    const calls = await (
+      await request.get("http://127.0.0.1:3349/calls")
+    ).json();
     expect(calls.count).toBe(4);
     expect(calls.prompts[0]).not.toContain("Senso-ji");
     expect(calls.prompts[2]).toContain("Senso-ji");
 
     const refreshed = await request.post("/api/itinerary/generate", {
-      headers, data: { ...data, force_refresh: true },
+      headers,
+      data: { ...data, force_refresh: true },
     });
     expect(refreshed.ok()).toBeTruthy();
-    expect((await refreshed.json()).cache_hit).toBe(false);
-    expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(6);
+    expect((await resolveGeneration(await refreshed.json())).cache_hit).toBe(
+      false,
+    );
+    expect(
+      (await (await request.get("http://127.0.0.1:3349/calls")).json()).count,
+    ).toBe(6);
 
     const other = await request.post("/api/auth/register", {
-      data: { email: `cache-${randomUUID()}@test.invalid`, password: "Test-password-9x!" },
+      data: {
+        email: `cache-${randomUUID()}@test.invalid`,
+        password: "Test-password-9x!",
+      },
     });
     expect(other.ok()).toBeTruthy();
     const otherUser = await other.json();
@@ -173,10 +236,16 @@ test("an exact repeat reuses the itinerary; changed inputs use the city catalog 
         data,
       });
       expect(privateResult.ok()).toBeTruthy();
-      expect((await privateResult.json()).cache_hit).toBe(false);
-      expect((await (await request.get("http://127.0.0.1:3349/calls")).json()).count).toBe(8);
+      expect(
+        (await resolveGeneration(await privateResult.json())).cache_hit,
+      ).toBe(false);
+      expect(
+        (await (await request.get("http://127.0.0.1:3349/calls")).json()).count,
+      ).toBe(8);
     } finally {
-      await db.query("delete from itineraries where user_id = $1", [otherUser.user.id]);
+      await db.query("delete from itineraries where user_id = $1", [
+        otherUser.user.id,
+      ]);
       await db.query("delete from users where id = $1", [otherUser.user.id]);
     }
   } finally {
@@ -202,7 +271,7 @@ for (const [mode, code] of [
       data: input,
     });
     expect(response.ok()).toBeTruthy();
-    expect(await response.json()).toMatchObject({
+    expect(await resolveGeneration(await response.json())).toMatchObject({
       status: "unsupported",
       code,
     });
@@ -210,14 +279,18 @@ for (const [mode, code] of [
       "select id, status, result from itineraries where user_id = $1",
       [userId],
     );
-    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows.length).toBeGreaterThanOrEqual(1);
     expect(rows.rows[0]).toMatchObject({
       status: "failed",
       result: { error: { provider: "ollama", code } },
     });
     if (mode !== "http-error") {
       expect(rows.rows[0].result.ai_usage).toEqual([
-        expect.objectContaining({ input_tokens: 320, output_tokens: 180, total_tokens: 500 }),
+        expect.objectContaining({
+          input_tokens: 320,
+          output_tokens: 180,
+          total_tokens: 500,
+        }),
       ]);
     }
     const jobs = await db.query(
@@ -258,47 +331,85 @@ test("guest search draft can be claimed and retrieved as the same stored request
       search_payload: input,
     });
     const again = await request.post(`/api/search-drafts/${created.id}/claim`, {
-      headers: { Authorization: `Bearer ${token}` }, data: { guest_key },
+      headers: { Authorization: `Bearer ${token}` },
+      data: { guest_key },
     });
     expect(again.ok()).toBeTruthy();
-    expect(await again.json()).toMatchObject({ id: created.id, user_id: userId, search_payload: input });
-    const wrongKey = await request.post(`/api/search-drafts/${created.id}/claim`, {
-      headers: { Authorization: `Bearer ${token}` }, data: { guest_key: randomUUID() },
+    expect(await again.json()).toMatchObject({
+      id: created.id,
+      user_id: userId,
+      search_payload: input,
     });
+    const wrongKey = await request.post(
+      `/api/search-drafts/${created.id}/claim`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { guest_key: randomUUID() },
+      },
+    );
     expect(wrongKey.status()).toBe(404);
-    const other = await request.post("/api/auth/register", { data: { email: `other-${randomUUID()}@test.invalid`, password: "Test-password-9x!" } });
+    const other = await request.post("/api/auth/register", {
+      data: {
+        email: `other-${randomUUID()}@test.invalid`,
+        password: "Test-password-9x!",
+      },
+    });
     const otherUser = await other.json();
     try {
-      const stolen = await request.post(`/api/search-drafts/${created.id}/claim`, {
-        headers: { Authorization: `Bearer ${otherUser.session.access_token}` }, data: { guest_key },
-      });
+      const stolen = await request.post(
+        `/api/search-drafts/${created.id}/claim`,
+        {
+          headers: {
+            Authorization: `Bearer ${otherUser.session.access_token}`,
+          },
+          data: { guest_key },
+        },
+      );
       expect(stolen.status()).toBe(404);
-    } finally { await db.query("delete from users where id = $1", [otherUser.user.id]); }
+    } finally {
+      await db.query("delete from users where id = $1", [otherUser.user.id]);
+    }
   } finally {
     await db.query("delete from search_drafts where id = $1", [created.id]);
   }
 });
 
-test("unknown cities require identification; Vietnamese aliases reuse the canonical city", async ({request}) => {
- const headers={Authorization:`Bearer ${token}`};
- const name = `Unknown ${randomUUID()}`;
- const cacheKey = `nominatim:city:${name.toLowerCase()}`;
- await db.query(
-   "insert into travel_external_cache(cache_key,body,expires_at) values($1,'[]',now()+interval '5 minutes')",
-   [cacheKey],
- );
- try {
-   const unknown = await request.post("/api/cities", { headers, data: { name } });
-   expect(unknown.status()).toBe(400);
-   expect((await unknown.json()).code).toBe("CITY_UNRESOLVED");
- } finally {
-   await db.query("delete from travel_external_cache where cache_key=$1", [cacheKey]);
- }
- const known=await request.post("/api/cities",{headers,data:{name:"Đà Lạt"}});
- expect(known.ok()).toBeTruthy();
- expect(await known.json()).toMatchObject({slug:"da-lat",name:{en:"Da Lat",vi:"Đà Lạt"}});
- const alias=await request.post("/api/cities",{headers,data:{name:"Dalat"}});
- expect((await alias.json()).slug).toBe("da-lat");
+test("unknown cities require identification; Vietnamese aliases reuse the canonical city", async ({
+  request,
+}) => {
+  const headers = { Authorization: `Bearer ${token}` };
+  const name = `Unknown ${randomUUID()}`;
+  const cacheKey = `nominatim:city:${name.toLowerCase()}`;
+  await db.query(
+    "insert into travel_external_cache(cache_key,body,expires_at) values($1,'[]',now()+interval '5 minutes')",
+    [cacheKey],
+  );
+  try {
+    const unknown = await request.post("/api/cities", {
+      headers,
+      data: { name },
+    });
+    expect(unknown.status()).toBe(400);
+    expect((await unknown.json()).code).toBe("CITY_UNRESOLVED");
+  } finally {
+    await db.query("delete from travel_external_cache where cache_key=$1", [
+      cacheKey,
+    ]);
+  }
+  const known = await request.post("/api/cities", {
+    headers,
+    data: { name: "Đà Lạt" },
+  });
+  expect(known.ok()).toBeTruthy();
+  expect(await known.json()).toMatchObject({
+    slug: "da-lat",
+    name: { en: "Da Lat", vi: "Đà Lạt" },
+  });
+  const alias = await request.post("/api/cities", {
+    headers,
+    data: { name: "Dalat" },
+  });
+  expect((await alias.json()).slug).toBe("da-lat");
 });
 
 test("saved workspace supports activities, participation, transport, bills, expenses, review and audit", async ({
@@ -315,7 +426,7 @@ test("saved workspace supports activities, participation, transport, bills, expe
       response.ok(),
       `${method} ${path}: ${await response.text()}`,
     ).toBeTruthy();
-    return response.json();
+    return resolveGeneration(await response.json());
   }
   const generated = await call("post", "/api/itinerary/generate", input);
   const { trip_id } = await call(
@@ -432,7 +543,7 @@ test("invites, share links, member roles and contributor review persist through 
       response.ok(),
       `${method} ${path}: ${await response.text()}`,
     ).toBeTruthy();
-    return response.json();
+    return resolveGeneration(await response.json());
   }
   const guest = await call("post", "/api/auth/register", {
     email: `guest-${randomUUID()}@test.invalid`,

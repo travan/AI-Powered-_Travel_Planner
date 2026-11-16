@@ -11,6 +11,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("bounded private logging", () => {
+  it("allows day/slot diagnostics but rejects invalid or injected values", () => {
+    vi.stubEnv("LOG_SINK", "cloudflare");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    logEvent("journey.ai_validation_failed", "error", {
+      day: 4,
+      slot: "lunch",
+      code: "DAY_PRICE_INVALID",
+    });
+    expect(JSON.parse(error.mock.calls[0]![0])).toMatchObject({
+      day: 4,
+      slot: "lunch",
+    });
+    logEvent("journey.ai_validation_failed", "error", {
+      day: NaN,
+      slot: "lunch\nprivate@example.com",
+    });
+    const record = JSON.parse(error.mock.calls[1]![0]);
+    expect(record).not.toHaveProperty("day");
+    expect(record).not.toHaveProperty("slot");
+  });
+
   it("never serializes arbitrary error messages, PII, query strings or payloads", () => {
     vi.stubEnv("LOG_SINK", "cloudflare");
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

@@ -990,7 +990,11 @@
     "t8168a4114aea": "Move city earlier",
     "tfce470059d0b": "Remove city",
     "cancel_editing": "Cancel editing",
-    "discard_unsaved_changes": "Discard unsaved changes"
+    "discard_unsaved_changes": "Discard unsaved changes",
+    "t6cf692c35ef9": "Checking saved itineraries",
+    "td677295a4777": "Filling missing planning data",
+    "te57c451559a4": "Assembling your itinerary",
+    "t95da61519ac7": "Saving your itinerary"
   },
   "issues": {
     "JOURNEY_DAY_ORDER": "The daily schedule does not cover the requested stops in order. Generate it again.",
@@ -1079,7 +1083,14 @@
     "MONTH_BOOKING_CONFLICT": "Choose specific dates when you already have booked tickets or accommodation.",
     "PLANNER_API_UNAVAILABLE": "The planning service is unavailable. Your details have been kept.",
     "GENERATION_FAILED": "The itinerary could not be created. Your details have been kept; please retry.",
-    "CURRENCY_RATE_UNAVAILABLE": "Exchange rates are unavailable. Your original amounts have been kept."
+    "CURRENCY_RATE_UNAVAILABLE": "Exchange rates are unavailable. Your original amounts have been kept.",
+    "PLANNING_DATA_INSUFFICIENT": "There is not enough data to satisfy this trip. Choose specific cities or adjust the requirements.",
+    "PLANNING_BUDGET_UNSATISFIABLE": "The complete group estimate exceeds the budget. Adjust the budget, duration or destinations.",
+    "AI_RESPONSE_INVALID": "The AI supplement was invalid. Valid progress was retained and no additional AI call was made.",
+    "AI_RESULT_UNKNOWN": "The AI call outcome is unknown. It will not be called again automatically to avoid duplicate charges.",
+    "GENERATION_DEADLINE_EXCEEDED": "The processing deadline was exceeded. Progress was retained; submit a new request if needed.",
+    "AI_SUGGESTIONS_UNVERIFIED": "Some places and prices are unverified AI suggestions; confirm before booking.",
+    "PLANNING_QUEUE_UNAVAILABLE": "The planning queue is unavailable. Please try again later."
   },
   "translations": {
     "panel": "Itinerary translations",

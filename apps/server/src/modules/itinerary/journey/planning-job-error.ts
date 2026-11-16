@@ -1,5 +1,13 @@
 import { PlanningGenerationError } from "@travel/ai";
 import { HttpException } from "@nestjs/common";
+import { generationErrorParams } from "../generation/generation-error.js";
+export const generationCodes = new Set([
+  "PLANNING_DATA_INSUFFICIENT",
+  "PLANNING_BUDGET_UNSATISFIABLE",
+  "AI_RESPONSE_INVALID",
+  "AI_RESULT_UNKNOWN",
+  "GENERATION_DEADLINE_EXCEEDED",
+]);
 
 const inputFields = new Map([
   ["CITY_UNRESOLVED", "journey.destinations"],
@@ -31,6 +39,7 @@ export function planningErrorParams(reason: unknown): Record<string, string> {
 }
 
 export function publicJobError(code?: string) {
+  if (code && generationCodes.has(code)) return code;
   switch (code) {
     case "PLANNING_INVALID":
     case "AI_UNAVAILABLE":
@@ -74,6 +83,7 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
     ? (error.getResponse() as {
         code?: string;
         issues?: { code: string; severity: string }[];
+        params?: { reason?: unknown };
       })
     : undefined;
   const reason =
@@ -81,13 +91,21 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
       ? body.issues.find((issue) => issue.severity === "error")?.code
       : body?.code;
   const params = planningErrorParams(reason);
+  if (kind === "generate" && body?.code && generationCodes.has(body.code))
+    return {
+      code: body.code,
+      params: generationErrorParams(body.params?.reason),
+      status,
+      terminal: true,
+      retrySeconds: 15,
+    };
   const invalid =
     kind === "generate" &&
     status === 400 &&
     (body?.code === "PLANNING_INVALID" || Boolean(params.reason));
   const locationUnavailable =
     kind === "generate" &&
-    stage === "catalog" &&
+    (stage === "catalog" || body?.code === "LOCATION_LOOKUP_UNAVAILABLE") &&
     (status === 429 || status === 503);
   const aiUnavailable =
     kind === "generate" &&

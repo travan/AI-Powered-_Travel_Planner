@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { CitiesService } from "../../../../../../apps/server/src/modules/cities/application/cities.service";
 import { JourneyService } from "../../../../../../apps/server/src/modules/itinerary/journey/journey.service";
+import { PlanningGenerationError } from "../../../../../../packages/ai/src/providers/planning-generation-error";
 
 const { BadRequestException, HttpException, ServiceUnavailableException } =
   createRequire(
@@ -30,11 +31,65 @@ function worker(generate: ReturnType<typeof vi.fn>, attempts = 1) {
 }
 
 function jobUpdate(query: ReturnType<typeof vi.fn>) {
-  return query.mock.calls.findLast(([sql]) =>
-    typeof sql === "string" && sql.includes("update itinerary_jobs set status="));
+  return query.mock.calls.findLast(
+    ([sql]) =>
+      typeof sql === "string" &&
+      sql.includes("update itinerary_jobs set status="),
+  );
 }
 
 describe("generation job failures", () => {
+  it("keeps resolver failures explicit during the one-call supplement stage", async () => {
+    const { service, query } = worker(
+      vi.fn(async ({ onStage }) => {
+        await onStage("supplement");
+        throw new ServiceUnavailableException({
+          code: "LOCATION_LOOKUP_UNAVAILABLE",
+        });
+      }),
+    );
+    await service.processNextJob("job-id");
+    expect(jobUpdate(query)?.[1]?.[4]).toBe("LOCATION_LOOKUP_UNAVAILABLE");
+    expect(jobUpdate(query)?.[1]?.[2]).toBe(false);
+  });
+  it("logs safe day validation diagnostics without exposing raw model output", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = new PlanningGenerationError(
+      "AI_DAY_INVALID",
+      "private model content",
+      {
+        day: 4,
+        issues: [{ code: "DAY_PRICE_INVALID", slot: "lunch" }],
+      },
+    );
+    try {
+      const { service, query } = worker(vi.fn().mockRejectedValue(failure));
+      await service.processNextJob("job-id");
+      const records = log.mock.calls.map(([line]) => JSON.parse(line));
+      expect(records).toContainEqual(
+        expect.objectContaining({
+          event: "journey.ai_validation_failed",
+          jobId: "job-id",
+          day: 4,
+          code: "DAY_PRICE_INVALID",
+          slot: "lunch",
+        }),
+      );
+      expect(JSON.stringify(records)).not.toContain("private model content");
+      expect(jobUpdate(query)?.[1]).toEqual([
+        "job-id",
+        "claim",
+        true,
+        null,
+        "AI_DAY_INVALID",
+        {},
+        15,
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it.each([
     ["CITY_AMBIGUOUS", "journey.destinations", "catalog"],
     ["MONTH_UNAVAILABLE", "flexible_month", "criteria"],

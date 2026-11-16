@@ -21,6 +21,7 @@ if (!["all", "web", "mobile"].includes(E2E_TARGET)) {
 }
 
 export default defineConfig({
+  outputDir: path.join(ROOT,"test-results/browser"),
   globalSetup: path.join(ROOT, "e2e/global-setup.ts"),
   testDir: path.join(ROOT, "e2e/specs"),
   fullyParallel: false,

@@ -123,6 +123,14 @@ jobs:
           POSTGRES_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
       - name: Install Chromium for browser session security checks
         run: pnpm exec playwright install --with-deps chromium
+      - name: Test generation admission, single dispatch and checkpoint recovery
+        run: ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2.mts
+        env:
+          PLANNING_V2_TEST_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
+      - name: Test catalog-first pipeline with 100 local mock generations
+        run: ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2-pipeline.mts
+        env:
+          PLANNING_V2_TEST_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
       - name: Test API persistence, private memory and approved spending
         run: pnpm exec playwright test --config playwright.server.config.ts
         env:
@@ -274,7 +282,18 @@ jobs:
       - name: Select measured queue configuration
         env:
           JOURNEY_QUEUE_CONCURRENCY: ${{ vars.JOURNEY_QUEUE_CONCURRENCY }}
+          PLANNING_V2_PERCENT: ${{ vars.PLANNING_V2_PERCENT }}
+          PLANNING_AI_CONCURRENCY: ${{ vars.PLANNING_AI_CONCURRENCY }}
+          PLANNING_V2_CERTIFIED_COMMIT: ${{ vars.PLANNING_V2_CERTIFIED_COMMIT }}
         run: |
+          if [ "${PLANNING_V2_PERCENT:-0}" != "0" ] && [ -z "$JOURNEY_QUEUE_CONCURRENCY" ]; then
+            echo '::error::Planning v2 requires provisioned Queues and measured concurrency'
+            exit 1
+          fi
+          if [ "${PLANNING_V2_PERCENT:-0}" != "0" ] && [ "$PLANNING_V2_CERTIFIED_COMMIT" != "$GITHUB_SHA" ]; then
+            echo '::error::Planning v2 requires real-model/load certification for this exact commit'
+            exit 1
+          fi
           if [ -n "$JOURNEY_QUEUE_CONCURRENCY" ]; then
             node apps/server/cloudflare/prepare-queue-config.mjs production
             echo 'WRANGLER_CONFIG=apps/server/wrangler.generated.json' >> "$GITHUB_ENV"
@@ -305,7 +324,12 @@ jobs:
         env:
           API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
           EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
+          EXPECTED_PLANNING_V2_PERCENT: ${{ vars.PLANNING_V2_PERCENT }}
         run: node scripts/smoke-cloudflare.mjs
+      - name: Verify deployed producer, consumer and dead-letter queue
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/check-planning-bindings.mjs
 
   deploy:
     name: Deploy to Vercel

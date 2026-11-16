@@ -9,7 +9,12 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { GenerateResponse, Itinerary, ItineraryOutput } from "@travel/types";
+import type {
+  GenerateResponse,
+  Itinerary,
+  ItineraryOutput,
+  PlanningJob,
+} from "@travel/types";
 import { resolveGenerateNavigationTarget } from "@travel/types";
 import { mobileTheme } from "../lib/theme";
 import {
@@ -19,11 +24,18 @@ import {
 } from "../lib/pending-search-intent";
 import { getAuthSession } from "../lib/auth-provider";
 import { mobileApiUrl } from "../lib/api";
+import { planningErrorMessage } from "../lib/planning-errors";
 
-const MAX_POLL_ATTEMPTS = 90;
+const MAX_POLL_ATTEMPTS = 900;
 const POLL_INTERVAL_MS = 2000;
 
-type LoadState = "idle" | "generating" | "polling" | "loading" | "ready" | "error";
+type LoadState =
+  | "idle"
+  | "generating"
+  | "polling"
+  | "loading"
+  | "ready"
+  | "error";
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -73,7 +85,7 @@ export default function TripsScreen() {
           setError(
             pendingIntent.status === "stale"
               ? "Your saved request expired. Please plan your trip again."
-              : "No saved request found. Please start a new trip plan."
+              : "No saved request found. Please start a new trip plan.",
           );
           setState("error");
           return;
@@ -111,7 +123,7 @@ export default function TripsScreen() {
           throw new Error("Unable to resume generation");
         }
 
-        const payload = await response.json() as GenerateResponse;
+        const payload = (await response.json()) as GenerateResponse;
         if (payload.status === "unsupported") {
           setError(payload.message);
           setState("error");
@@ -120,7 +132,9 @@ export default function TripsScreen() {
         const target = resolveGenerateNavigationTarget(payload);
         if (!target) {
           await restorePendingRequest();
-          throw new Error("Generation response is missing the next route target.");
+          throw new Error(
+            "Generation response is missing the next route target.",
+          );
         }
 
         if (cancelled) return;
@@ -164,45 +178,66 @@ export default function TripsScreen() {
     if (!queuedJobId) return;
 
     let cancelled = false;
+    const pollingStartedAt = Date.now();
 
     async function pollJob() {
-      const res = await fetch(mobileApiUrl(`/api/itinerary/job/${queuedJobId}`));
+      const session = await getAuthSession();
+      if (!session?.access_token)
+        throw new Error("Sign in to view this planning request.");
+      const res = await fetch(
+        mobileApiUrl(`/api/itinerary/jobs/${queuedJobId}`),
+        { headers: { Authorization: `Bearer ${session.access_token}` } },
+      );
+      if (!res.ok) throw new Error("Unable to read planning status.");
+      const job = (await res.json()) as PlanningJob;
+      if (cancelled) return;
+      if (job.status === "failed")
+        throw new Error(planningErrorMessage(job.error_code));
 
-      if (res.status === 404 || res.status === 202) {
+      if (job.status === "queued" || job.status === "processing") {
         pollCountRef.current += 1;
-        if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
+        if (
+          pollCountRef.current >= MAX_POLL_ATTEMPTS ||
+          Date.now() - pollingStartedAt >= 30 * 60_000
+        ) {
           setError("Still generating — check back soon.");
           setState("error");
           return;
         }
 
         setState("polling");
-        pollTimerRef.current = setTimeout(() => {
-          void pollJob();
-        }, POLL_INTERVAL_MS);
+        pollTimerRef.current = setTimeout(
+          () => {
+            void pollJob().catch((e: unknown) => {
+              if (!cancelled) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : "Unable to fetch planning status.",
+                );
+                setState("error");
+              }
+            });
+          },
+          Math.min(
+            30_000,
+            POLL_INTERVAL_MS * 2 ** Math.min(pollCountRef.current, 4),
+          ),
+        );
         return;
       }
 
-      if (!res.ok) {
-        throw new Error("Failed to load queued itinerary");
-      }
-
-      const data = await res.json() as ItineraryOutput;
-      if (cancelled) return;
-
-      const first = data.itineraries?.[0];
-      if (!first) {
-        throw new Error("No itinerary data available.");
-      }
-
-      setItinerary(first);
-      setItineraryId(first.id ?? null);
-      setState("ready");
+      if (!job.itinerary_id)
+        throw new Error("The completed request has no itinerary.");
+      setItineraryId(job.itinerary_id);
+      setQueuedJobId(null);
     }
 
     void pollJob().catch((e: unknown) => {
       if (cancelled) return;
-      setError(e instanceof Error ? e.message : "Unable to fetch queued itinerary.");
+      setError(
+        e instanceof Error ? e.message : "Unable to fetch queued itinerary.",
+      );
       setState("error");
     });
 
@@ -219,10 +254,15 @@ export default function TripsScreen() {
     setState("loading");
 
     void (async () => {
-      const res = await fetch(mobileApiUrl(`/api/itinerary/${itineraryId}`));
+      const session = await getAuthSession();
+      const res = await fetch(mobileApiUrl(`/api/itinerary/${itineraryId}`), {
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {},
+      });
       if (!res.ok) throw new Error("Failed to fetch itinerary");
 
-      const data = await res.json() as ItineraryOutput;
+      const data = (await res.json()) as ItineraryOutput;
       if (cancelled) return;
 
       const first = data.itineraries?.[0];
@@ -260,17 +300,24 @@ export default function TripsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.kicker}>Generated Results</Text>
       <Text style={styles.title}>Choose your itinerary</Text>
-      <Text style={styles.subtitle}>Overview first, then open the full day-by-day schedule.</Text>
+      <Text style={styles.subtitle}>
+        Overview first, then open the full day-by-day schedule.
+      </Text>
 
-      {(state === "generating" || state === "polling" || state === "loading") && (
+      {(state === "generating" ||
+        state === "polling" ||
+        state === "loading") && (
         <View style={styles.panel}>
-          <ActivityIndicator size="large" color={mobileTheme.colors.primaryStrong} />
+          <ActivityIndicator
+            size="large"
+            color={mobileTheme.colors.primaryStrong}
+          />
           <Text style={styles.panelTitle}>
             {state === "generating"
               ? "Resuming your saved request..."
               : state === "polling"
-              ? "Generating your itinerary..."
-              : "Loading your itinerary..."}
+                ? "Generating your itinerary..."
+                : "Loading your itinerary..."}
           </Text>
         </View>
       )}
@@ -278,7 +325,10 @@ export default function TripsScreen() {
       {state === "idle" && (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>No result is ready yet.</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push("/plan")}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.push("/plan")}
+          >
             <Text style={styles.primaryBtnText}>Plan a trip</Text>
           </TouchableOpacity>
         </View>
@@ -286,8 +336,13 @@ export default function TripsScreen() {
 
       {state === "error" && (
         <View style={styles.panel}>
-          <Text style={styles.errorText}>{error ?? "Something went wrong."}</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push("/plan")}>
+          <Text style={styles.errorText}>
+            {error ?? "Something went wrong."}
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.push("/plan")}
+          >
             <Text style={styles.primaryBtnText}>Back to planner</Text>
           </TouchableOpacity>
         </View>
@@ -304,12 +359,18 @@ export default function TripsScreen() {
           <View style={styles.chips}>
             {itinerary.days.map((day) => (
               <View key={`${day.day_number}-${day.city}`} style={styles.chip}>
-                <Text style={styles.chipText}>Day {day.day_number} · {day.city}</Text>
+                <Text style={styles.chipText}>
+                  Day {day.day_number} · {day.city}
+                </Text>
               </View>
             ))}
           </View>
 
-          <TouchableOpacity style={styles.primaryBtn} onPress={openDetail} testID="mobile-trips-detail-link">
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={openDetail}
+            testID="mobile-trips-detail-link"
+          >
             <Text style={styles.primaryBtnText}>Open full itinerary</Text>
           </TouchableOpacity>
         </View>

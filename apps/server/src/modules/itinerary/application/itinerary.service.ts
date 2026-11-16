@@ -737,7 +737,7 @@ function generationCacheKey(
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: 10,
+        version: 11,
         planning: request.planning ?? null,
         catalog_version: process.env["CITY_CATALOG_VERSION"] ?? "1",
         catalogFingerprint,

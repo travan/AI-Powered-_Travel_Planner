@@ -13,6 +13,8 @@ type RecordFields = {
   stage?: string;
   attempts?: number;
   willRetry?: boolean;
+  day?: number;
+  slot?: string;
 };
 type LogScope = { records: string[]; fields: RecordFields; queryCount?: number };
 export const logContext = new AsyncLocalStorage<LogScope>();
@@ -31,7 +33,7 @@ export function logEvent(
     severity,
     time: new Date().toISOString(),
   };
-  for (const key of ["requestId", "jobId", "code", "stage"] as const) {
+  for (const key of ["requestId", "jobId", "code", "stage", "slot"] as const) {
     const value = merged[key];
     if (typeof value === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value))
       record[key] = value;
@@ -43,7 +45,7 @@ export function logEvent(
     record.durationMs = Math.max(0, Math.round(merged.durationMs));
   if (merged.route && /^[a-zA-Z0-9_/:.-]{1,100}$/.test(merged.route))
     record.route = merged.route;
-  for (const key of ["status", "dbQueries", "attempts"] as const) {
+  for (const key of ["status", "dbQueries", "attempts", "day"] as const) {
     const value = merged[key];
     if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
       record[key] = value;

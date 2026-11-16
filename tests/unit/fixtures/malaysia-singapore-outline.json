@@ -1,0 +1,215 @@
+{
+  "title": "Chuyến đi 10 ngày khám phá Malaysia và Singapore",
+  "overview": "Chuyến đi này sẽ bắt đầu và kết thúc tại Hà Nội, với các điểm đến tại Malaysia và Singapore. Chúng tôi sẽ khám phá các thành phố Kuala Lumpur và Singapore trong 10 ngày, với các hoạt động và trải nghiệm đa dạng.",
+  "days": [
+    {
+      "destination_slug": "country-my",
+      "day_number": 1,
+      "city": "Kuala Lumpur",
+      "title": "Khám phá thành phố Kuala Lumpur",
+      "places": [
+        "Tháp Petronas",
+        "Đền thờ Batu",
+        "Chợ đêm Petaling",
+        "Bảo tàng quốc gia Malaysia",
+        "Khu phố Tsim Sha Tsui"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-my",
+      "day_number": 2,
+      "city": "Kuala Lumpur",
+      "title": "Thăm quan công viên và vườn thực vật",
+      "places": [
+        "Công viên Lake Gardens",
+        "Vườn thực vật Perdana",
+        "Thảo cầm viên Kuala Lumpur",
+        "Khu vui chơi Sunway Lagoon",
+        "Khu phố Bukit Bintang"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-my",
+      "day_number": 3,
+      "city": "Kuala Lumpur",
+      "title": "Khám phá ẩm thực và mua sắm",
+      "places": [
+        "Chợ Central Market",
+        "Khu phố ẩm thực Jalan Alor",
+        "Trung tâm mua sắm Pavilion",
+        "Khu phố mua sắm Bukit Bintang",
+        "Nhà hàng nổi tiếng tại Kuala Lumpur"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 4,
+      "city": "Singapore",
+      "title": "Khám phá thành phố Singapore",
+      "places": [
+        "Tháp Marina Bay Sands",
+        "Vườn thực vật Singapore",
+        "Khu phố Chinatown",
+        "Bảo tàng quốc gia Singapore",
+        "Khu phố Clarke Quay"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 5,
+      "city": "Singapore",
+      "title": "Thăm quan công viên và vườn thực vật",
+      "places": [
+        "Công viên Gardens by the Bay",
+        "Vườn thực vật Singapore",
+        "Thảo cầm viên Singapore",
+        "Khu vui chơi Universal Studios Singapore",
+        "Khu phố Sentosa"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 6,
+      "city": "Singapore",
+      "title": "Khám phá ẩm thực và mua sắm",
+      "places": [
+        "Chợ ẩm thực Maxwell",
+        "Khu phố ẩm thực Haw Par Villa",
+        "Trung tâm mua sắm Orchard Central",
+        "Khu phố mua sắm Marina Bay",
+        "Nhà hàng nổi tiếng tại Singapore"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 7,
+      "city": "Singapore",
+      "title": "Thăm quan khu vui chơi và giải trí",
+      "places": [
+        "Khu vui chơi Universal Studios Singapore",
+        "Khu vui chơi Adventure Cove Waterpark",
+        "Khu vui chơi S.E.A. Aquarium",
+        "Khu phố Clarke Quay",
+        "Khu phố Boat Quay"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 8,
+      "city": "Singapore",
+      "title": "Khám phá nghệ thuật và văn hóa",
+      "places": [
+        "Bảo tàng quốc gia Singapore",
+        "Bảo tàng nghệ thuật Singapore",
+        "Khu phố nghệ thuật Bras Basah",
+        "Khu phố văn hóa Little India",
+        "Nhà hát Esplanade"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 9,
+      "city": "Singapore",
+      "title": "Thăm quan khu vực tự nhiên",
+      "places": [
+        "Công viên MacRitchie Reservoir",
+        "Vườn thực vật Singapore",
+        "Khu bảo tồn thiên nhiên Bukit Timah",
+        "Khu vực tự nhiên Pulau Ubin",
+        "Khu phố Labrador"
+      ],
+      "all_day": false
+    },
+    {
+      "destination_slug": "country-sg",
+      "day_number": 10,
+      "city": "Singapore",
+      "title": "Khám phá khu vực mua sắm và giải trí",
+      "places": [
+        "Trung tâm mua sắm ION Orchard",
+        "Khu phố mua sắm Marina Bay",
+        "Khu vui chơi Marina Bay Sands",
+        "Khu phố Clarke Quay",
+        "Khu phố Boat Quay"
+      ],
+      "all_day": false
+    }
+  ],
+  "hotels": [
+    {
+      "name": "Khu vực Bukit Bintang",
+      "city": "Kuala Lumpur",
+      "stars": 0,
+      "rooms": 1,
+      "nights": 3,
+      "nightly_estimate": 2000000,
+      "estimate_basis": "planning_estimate",
+      "estimate_assumption": "giá phòng trung bình tại Kuala Lumpur",
+      "price_per_night": "2.000.000 VND",
+      "price_range": "",
+      "booking_url": "",
+      "airbnb_url": "",
+      "address": "",
+      "maps_link": "",
+      "note": "Khu vực Bukit Bintang là một trong những khu vực trung tâm của Kuala Lumpur, gần với nhiều điểm du lịch và ẩm thực"
+    }
+  ],
+  "transport_summary": [
+    {
+      "segment": "chuyến bay từ Hà Nội đến Kuala Lumpur",
+      "from": "Hà Nội",
+      "to": "Kuala Lumpur",
+      "recommended_mode": "flight",
+      "transport_kind": "flight",
+      "price": {
+        "amount": 5000000,
+        "currency": "VND",
+        "scope": "person",
+        "status": "estimated",
+        "basis": "planning_estimate",
+        "assumption": "giá vé máy bay trung bình từ Hà Nội đến Kuala Lumpur"
+      },
+      "options": []
+    },
+    {
+      "segment": "chuyến bay từ Kuala Lumpur đến Singapore",
+      "from": "Kuala Lumpur",
+      "to": "Singapore",
+      "recommended_mode": "flight",
+      "transport_kind": "flight",
+      "price": {
+        "amount": 3000000,
+        "currency": "VND",
+        "scope": "person",
+        "status": "estimated",
+        "basis": "planning_estimate",
+        "assumption": "giá vé máy bay trung bình từ Kuala Lumpur đến Singapore"
+      },
+      "options": []
+    },
+    {
+      "segment": "chuyến bay từ Singapore đến Hà Nội",
+      "from": "Singapore",
+      "to": "Hà Nội",
+      "recommended_mode": "flight",
+      "transport_kind": "flight",
+      "price": {
+        "amount": 6000000,
+        "currency": "VND",
+        "scope": "person",
+        "status": "estimated",
+        "basis": "planning_estimate",
+        "assumption": "giá vé máy bay trung bình từ Singapore đến Hà Nội"
+      },
+      "options": []
+    }
+  ]
+}

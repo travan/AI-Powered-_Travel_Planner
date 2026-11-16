@@ -23,6 +23,15 @@ export async function checkCloudflare(
   if (!expectedCommit || health.deploy_commit !== expectedCommit) {
     throw new Error("Production is not serving the expected commit");
   }
+  const expectedPercent = Number(process.env.EXPECTED_PLANNING_V2_PERCENT || 0);
+  if (
+    expectedPercent > 0 &&
+    (health.planning_pipeline?.v2_percent !== expectedPercent ||
+      health.planning_pipeline?.queue_bound !== true)
+  )
+    throw new Error(
+      "Production planning pipeline/Queue binding does not match the rollout configuration",
+    );
   const config = await json("/api/planning/config");
   if (config.schema_version !== 2 || config.enabled !== true) {
     throw new Error("Journey planner configuration is unavailable");

@@ -496,7 +496,7 @@ it("builds a seven-day itinerary through an outline and complete daily contracts
           .filter((a) => a.kind === "visit")
           .map((a) => a.name),
       ).size,
-    ).toBe(35);
+    ).toBe(28); // Four visits per day for the requested default balanced pace.
     expect(result.days[0]?.activities[0]?.price).toMatchObject({
       basis: "planning_estimate",
       amount: 10,

@@ -47,9 +47,7 @@ export class ItineraryController {
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
-      return dto.planning
-        ? await this.journey.enqueue(user.sub, dto, key)
-        : await this.itineraries.generate({ userId: user.sub, dto });
+      return await this.journey.enqueue(user.sub, dto, key);
     } catch (error) {
       if (error instanceof HttpException && error.getStatus() === 429)
         response.setHeader("Retry-After", "30");

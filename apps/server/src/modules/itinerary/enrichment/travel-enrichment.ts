@@ -9,8 +9,14 @@ import type {
 } from "@travel/types";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
 import * as types from "@travel/types";
-const { mapUrl, timelineMinutes, activityMinutes, mealSlot, placeKey } =
-  (types as unknown as { default?: typeof types }).default ?? types;
+const {
+  mapUrl,
+  timelineMinutes,
+  activityMinutes,
+  mealSlot,
+  placeKey,
+  countryDestinationReference,
+} = (types as unknown as { default?: typeof types }).default ?? types;
 const norm = (s: string) =>
   s
     .normalize("NFD")
@@ -128,7 +134,9 @@ export function enrichTravel(
       !["ai_generated", "user_submission", "user_added"].includes(
         match.source,
       ) &&
-      !!match.last_verified_at;
+      !!match.last_verified_at &&
+      Date.parse(match.last_verified_at) <= Date.now() &&
+      Date.now() - Date.parse(match.last_verified_at) <= 180 * 86400000;
     item.lat = verified ? match.lat : undefined;
     item.lon = verified ? match.lon : undefined;
     item.google_place_id = verified ? match.google_place_id : undefined;
@@ -168,6 +176,8 @@ export function enrichTravel(
         (entry) =>
           norm(entry.title) === norm(a.name) &&
           !!entry.last_verified_at &&
+          Date.parse(entry.last_verified_at) <= Date.now() &&
+          Date.now() - Date.parse(entry.last_verified_at) <= 180 * 86400000 &&
           !["ai_generated", "user_submission", "user_added"].includes(
             entry.source,
           ) &&
@@ -177,12 +187,17 @@ export function enrichTravel(
       );
       if (!input && a.price?.status === "user_confirmed") {
         a.cost = a.price.amount;
+      } else if (
+        (a.kind === "check_in" || a.kind === "check_out") &&
+        isAllowance(a.price)
+      ) {
+        a.cost = a.price!.amount;
       } else if (catalogCost) {
         a.cost = catalogCost.estimated_cost;
         a.price = {
           amount: catalogCost.estimated_cost,
           currency: a.currency,
-          scope: "person",
+          scope: a.kind === "transfer" ? (a.price?.scope ?? "group") : "person",
           status: "estimated",
           basis: "catalog",
         };
@@ -366,7 +381,24 @@ export function itineraryRouteIssues(
 ): PlanningIssue[] {
   const journey = input.planning?.journey;
   if (!journey) return [];
+  const countryStops = new Map<string, string>();
+  for (const day of plan.days ?? []) {
+    const destination = day.destination_slug;
+    if (!destination || !journey.destinations.includes(destination)) continue;
+    const country = countryDestinationReference(destination);
+    if (!country) continue;
+    const city =
+      resolveCity(cities, day.city_slug) ?? resolveCity(cities, day.city);
+    // A proposed association cannot override a known city's actual country.
+    if (city?.country && city.country !== country.country) continue;
+    for (const value of [day.city, day.city_slug].filter(
+      (value): value is string => !!value,
+    ))
+      countryStops.set(placeKey(value), destination);
+  }
   const identity = (label: string, slug?: string) =>
+    countryStops.get(placeKey(label)) ??
+    (slug ? countryStops.get(placeKey(slug)) : undefined) ??
     resolveCity(cities, label)?.slug ??
     resolveCity(cities, slug)?.slug ??
     placeKey(label);
@@ -515,13 +547,21 @@ export function itineraryQuality(
           (!a.kind &&
             ["attraction", "leisure", "shopping"].includes(a.category))),
     );
-    const minimum =
+    const mainTravel = day.activities.filter(
+      (a) => a.main_transport && a.kind === "transfer",
+    );
+    const mainMinutes = mainTravel.reduce(
+      (sum, a) => sum + activityMinutes(a),
+      0,
+    );
+    const paceMinimum =
       input?.planning?.experience_preferences.pace === "relaxed" ||
       input?.trip_style === "relax"
         ? 3
         : input?.planning?.experience_preferences.pace === "packed"
           ? 6
           : 4;
+    const minimum = Math.max(1, paceMinimum - Math.ceil(mainMinutes / 90));
     if (
       availableEnd - availableStart >= 720 &&
       visits.length < minimum &&
@@ -538,7 +578,13 @@ export function itineraryQuality(
     const dinnerStart = dinner ? minutes(dinner.time) : null;
     if (availableEnd >= 1320 && dinnerStart != null) {
       const dinnerEnd = dinnerStart + activityMinutes(dinner!);
-      if (!visits.some((a) => (minutes(a.time) ?? -1) >= dinnerEnd))
+      const departing = mainTravel.some(
+        (a) => (minutes(a.time) ?? -1) >= dinnerEnd,
+      );
+      if (
+        !departing &&
+        !visits.some((a) => (minutes(a.time) ?? -1) >= dinnerEnd)
+      )
         add(
           "EVENING_MISSING",
           vi
@@ -547,6 +593,7 @@ export function itineraryQuality(
           day.id,
         );
       if (
+        !departing &&
         input?.planning?.stay_preferences.type !== "none" &&
         !day.activities.some(
           (a) =>
@@ -576,10 +623,12 @@ export function itineraryQuality(
         );
       if (time != null) {
         if (
-          time <
-            previousEnd +
-              (a.kind === "transfer" ? 0 : (a.travel_minutes ?? 0)) ||
-          time + duration > availableEnd
+          (a.main_transport
+            ? time < (day.activities.indexOf(a) > 0 ? previousEnd : 0)
+            : time <
+              previousEnd +
+                (a.kind === "transfer" ? 0 : (a.travel_minutes ?? 0))) ||
+          (!a.main_transport && time + duration > availableEnd)
         )
           add(
             "SCHEDULE_CONFLICT",
@@ -750,7 +799,11 @@ export function reconcileBudget(
   // Transfers with no standalone estimate remain covered by those legs and are not double counted.
   for (const [dayIndex, day] of plan.days.entries())
     for (const [index, a] of day.activities.entries())
-      if (a.kind === "transfer" && isAllowance(a.price) && a.price!.amount! > 0)
+      if (
+        a.kind === "transfer" &&
+        (isAllowance(a.price) || a.price?.basis === "catalog") &&
+        a.price!.amount! > 0
+      )
         items.push({
           id: a.id ?? `local:${dayIndex}:${index}`,
           category: "transport",

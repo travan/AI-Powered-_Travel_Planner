@@ -17,12 +17,29 @@ if (error) throw new Error("Invalid Wrangler configuration.");
 
 const queue = `travel-planner-journey-${target}`;
 const concurrency = Number(
-  process.env.JOURNEY_QUEUE_CONCURRENCY ?? (target === "staging" ? 20 : 0),
+  process.env.JOURNEY_QUEUE_CONCURRENCY ?? (target === "staging" ? 4 : 0),
 );
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 250)
   throw new Error(
     "Set JOURNEY_QUEUE_CONCURRENCY to the measured concurrency limit.",
   );
+const percent = Number(
+  process.env.PLANNING_V2_PERCENT || (target === "staging" ? 100 : 0),
+);
+const aiConcurrency = Number(
+  process.env.PLANNING_AI_CONCURRENCY || concurrency,
+);
+if (
+  !Number.isInteger(percent) ||
+  percent < 0 ||
+  percent > 100 ||
+  ![1, 2, 4, 8, 16].includes(aiConcurrency)
+)
+  throw new Error(
+    "Use a valid rollout percentage and measured AI concurrency (1,2,4,8,16)",
+  );
+config.vars.PLANNING_V2_PERCENT = String(percent);
+config.vars.PLANNING_AI_CONCURRENCY = String(aiConcurrency);
 
 if (target === "staging") {
   const database = process.env.STAGING_HYPERDRIVE_ID;
@@ -40,15 +57,18 @@ if (target === "staging") {
   config.name = "travel-planner-api-staging";
   config.hyperdrive[0].id = database;
   Object.assign(config.vars, {
-    AI_PROVIDER: "mock",
-    JOURNEY_STAGING_DELAY_MS: "30000",
+    AI_PROVIDER:
+      process.env.STAGING_AI_PROVIDER === "cloudflare" ? "cloudflare" : "mock",
+    JOURNEY_STAGING_DELAY_MS:
+      process.env.STAGING_AI_PROVIDER === "cloudflare" ? "0" : "30000",
+    PLANNING_STAGING: "true",
     NEXT_PUBLIC_APP_URL: origin.origin,
     CORS_ORIGINS: origin.origin,
     GOOGLE_AUTH_ENABLED: "false",
     RATE_LIMIT_MAX: "120000",
   });
   delete config.vars.GOOGLE_REDIRECT_URI;
-  delete config.ai;
+  if (config.vars.AI_PROVIDER === "mock") delete config.ai;
 }
 
 config.queues = {

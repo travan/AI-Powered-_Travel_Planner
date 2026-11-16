@@ -55,6 +55,10 @@ export class CitiesService {
     return this.cities.popular();
   }
 
+  byCountry(country: string): Promise<City[]> {
+    return this.cities.byCountry(country);
+  }
+
   async getDetail(slug: string): Promise<ServiceResult<CityPlanningData>> {
     const city = await this.cities.findForPlanning(slug);
     return city ? ok(city) : notFound("City not found");
@@ -105,7 +109,12 @@ export class CitiesService {
     }
   }
 
-  findForPlanning(value: string, catalogLimit?: number): Promise<CityPlanningData | null> {
-    return catalogLimit === undefined ? this.cities.findForPlanning(value) : this.cities.findForPlanning(value, catalogLimit);
+  findForPlanning(
+    value: string,
+    catalogLimit?: number,
+  ): Promise<CityPlanningData | null> {
+    return catalogLimit === undefined
+      ? this.cities.findForPlanning(value)
+      : this.cities.findForPlanning(value, catalogLimit);
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "@travel/types";
 import { itineraryRouteIssues } from "../../../../../../apps/server/src/modules/itinerary/enrichment/travel-enrichment";
 import type { CityPlanningData } from "../../../../../../apps/server/src/modules/cities/domain/city.entity";
+import { malaysiaSingaporeRequest } from "../../../../fixtures/malaysia-singapore-request";
 
 const cities = [
   { slug: "ha-noi", name: { en: "Hanoi", vi: "Hà Nội" } },
@@ -54,6 +55,47 @@ function fixture() {
 }
 
 describe("confirmed journey route", () => {
+  it("accepts concrete cities inside selected countries without a whole-trip repair", () => {
+    const input = malaysiaSingaporeRequest();
+    const plan = {
+      days: [
+        { ...day("Kuala Lumpur"), destination_slug: "country-my" },
+        { ...day("Singapore"), destination_slug: "country-sg" },
+      ],
+      transport_summary: [
+        leg("Hà Nội", "Kuala Lumpur"),
+        leg("Kuala Lumpur", "Singapore"),
+        leg("Singapore", "Hà Nội"),
+      ],
+    } as unknown as Itinerary;
+    expect(itineraryRouteIssues(plan, input, [])).toEqual([]);
+    plan.days.reverse();
+    expect(
+      itineraryRouteIssues(plan, input, []).map((issue) => issue.code),
+    ).toContain("JOURNEY_DAY_ORDER");
+    plan.days.reverse();
+    plan.transport_summary.pop();
+    expect(
+      itineraryRouteIssues(plan, input, []).map((issue) => issue.code),
+    ).toContain("JOURNEY_LEG_MISSING");
+  });
+
+  it("rejects a country association that conflicts with a known city", () => {
+    const input = malaysiaSingaporeRequest();
+    const plan = {
+      days: [
+        { ...day("Hanoi"), destination_slug: "country-my" },
+        { ...day("Singapore"), destination_slug: "country-sg" },
+      ],
+      transport_summary: [],
+    } as unknown as Itinerary;
+    expect(
+      itineraryRouteIssues(plan, input, [{ ...cities[0]!, country: "VN" }]).map(
+        (issue) => issue.code,
+      ),
+    ).toContain("JOURNEY_DAY_ORDER");
+  });
+
   it("uses the requested stops and localizes city aliases without adding extra returns", () => {
     const { plan } = fixture();
     plan.days.push({ ...plan.days[0]!, city: "Hà Nội" });

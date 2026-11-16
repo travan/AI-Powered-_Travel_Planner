@@ -4,6 +4,10 @@ import {
 } from "./planning-generation-error.js";
 import { generateDailyPlan } from "./daily-plan.js";
 import { normalizeItinerary } from "../normalize-itinerary.js";
+import * as travelTypes from "@travel/types";
+const { tripDayCount, countryDestinationReference } =
+  (travelTypes as unknown as { default?: typeof travelTypes }).default ??
+  travelTypes;
 import {
   translationPrompt,
   TRANSLATION_SYSTEM,
@@ -47,6 +51,31 @@ export class CloudflareAIProvider implements AIProvider {
   }
 
   generateOverview(input: ItineraryInput, cities: PreFetchedCityData[]) {
+    // The daily planner generates its own outline. Structured requests already
+    // specify the duration and route, so a separate model overview adds no input.
+    const days = tripDayCount(input);
+    if (input.planning && days >= 3 && !input.prompt_text?.trim()) {
+      const names = cities.length
+        ? cities.map((city) => city.city)
+        : input.cities.map(
+            (slug) =>
+              countryDestinationReference(slug)?.names[
+                input.locale === "vi" ? "vi" : "en"
+              ] ?? slug,
+          );
+      return Promise.resolve<ItineraryOverview>({
+        title: names.join(" → "),
+        overview: "",
+        cities: names,
+        total_days: days,
+        day_plan: [],
+        estimated_budget: {
+          min: 0,
+          max: input.budget ?? 0,
+          currency: input.currency,
+        },
+      });
+    }
     return this.generate<ItineraryOverview>(
       buildOverviewPrompt(input, cities),
       input.locale,
@@ -110,6 +139,23 @@ export class CloudflareAIProvider implements AIProvider {
     );
   }
 
+  // The generation ledger must persist the provider response before JSON validation.
+  supplementRaw(
+    prompt: string,
+    locale: string,
+    schema: Record<string, unknown>,
+  ) {
+    return this.generate<{ response?: string | object }>(
+      prompt,
+      locale,
+      "detail",
+      6000,
+      "Supply compact missing travel data. Follow the user's locale and constraints.",
+      schema,
+      true,
+    );
+  }
+
   private async generate<T>(
     prompt: string,
     locale: string,
@@ -117,6 +163,7 @@ export class CloudflareAIProvider implements AIProvider {
     maxTokens = 2000,
     system?: string,
     schema?: Record<string, unknown>,
+    rawResponse = false,
   ): Promise<T> {
     const started = Date.now();
     const day = prompt.match(
@@ -195,6 +242,7 @@ export class CloudflareAIProvider implements AIProvider {
         duration_ms: Date.now() - started,
         outcome: "received",
       });
+    if (rawResponse) return output as T;
     try {
       if (!output?.response)
         throw new Error("Workers AI returned an empty response");
