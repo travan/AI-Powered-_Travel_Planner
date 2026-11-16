@@ -19,6 +19,13 @@ if (
 const cloud = new URL(url);
 cloud.pathname = "/cohorizon_cloud_security_test";
 let cloudCreated = false;
+const generationTables = [
+  "planning_generations",
+  "planning_generation_ai",
+  "planning_admission_capacity",
+  "planning_ai_slots",
+  "planning_submission_keys",
+];
 try {
   await setup.query(`do $$ begin
     if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
@@ -43,13 +50,23 @@ try {
         await migratePostgres(db, undefined, { schema });
         await db.query(`grant usage on schema travel_cloud,journey_internal to travel_worker_app;
           grant select,insert,update,delete on all tables in schema travel_cloud to travel_worker_app;
-          grant execute on all functions in schema journey_internal to travel_worker_app;
-          create policy backend_access on travel_cloud.product_notifications to travel_worker_app using (true);
-          create policy backend_access on travel_cloud.itinerary_jobs to travel_worker_app using (true);
-          create policy backend_access on travel_cloud.journey_job_dispatch to travel_worker_app using (true)`);
+          grant execute on all functions in schema journey_internal to travel_worker_app;`);
+        for (const table of [
+          "product_notifications",
+          "itinerary_jobs",
+          "journey_job_dispatch",
+          ...generationTables,
+        ])
+          await db.query(
+            `create policy backend_access on travel_cloud.${table} to travel_worker_app using (true) with check (true)`,
+          );
       }
       for (const browserRole of ["anon", "authenticated"]) {
-        for (const table of ["product_notifications", "journey_job_dispatch"]) {
+        for (const table of [
+          "product_notifications",
+          "journey_job_dispatch",
+          ...generationTables,
+        ]) {
           const {
             rows: [result],
           } = await db.query(
