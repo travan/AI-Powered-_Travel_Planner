@@ -128,6 +128,27 @@ describe("catalog-first generation v2", () => {
     dto.start_date = "2027-02-30";
     expect(() => generationInput(dto)).toThrow();
   });
+  it("rejects the production model's zero international fares rather than inventing affordability", () => {
+    const { input } = fixture();
+    const snapshot = prepareSnapshot(
+      input,
+      input.cities.map((selected) => ({
+        selected,
+        country: selected.endsWith("my") ? "MY" : "SG",
+      })),
+    );
+    snapshot.needs = snapshot.legs;
+    expect(() =>
+      applySupplement(snapshot, {
+        items: snapshot.legs.map((leg) => ({
+          key: leg.key,
+          name: `${leg.from} to ${leg.to}`,
+          amount: 0,
+          duration_minutes: 240,
+        })),
+      }),
+    ).toThrow("missing mandatory cost");
+  });
   it("rejects the recorded real-model estimate because mandatory group travel/stay exceeds 20m VND", () => {
     const { input } = fixture();
     const snapshot = prepareSnapshot(

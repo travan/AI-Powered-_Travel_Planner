@@ -195,6 +195,46 @@ export class CatalogFirstPlanner {
     if (state.needs.length || state.destinations.some((d) => !d.city)) {
       await options.onStage?.("supplement");
       const schema = structuredClone(supplementSchema);
+      const positiveKeys = state.needs
+        .filter(
+          (need) => need.kind !== "visit" && need.fixed_amount === undefined,
+        )
+        .map((need) => need.key);
+      const zeroAllowedKeys = state.needs
+        .filter(
+          (need) => need.kind === "visit" || need.fixed_amount !== undefined,
+        )
+        .map((need) => need.key);
+      if (state.needs.length) {
+        Object.assign(schema.properties.items, {
+          minItems: state.needs.length,
+          maxItems: state.needs.length,
+        });
+        Object.assign(schema.properties.items.items, {
+          anyOf: [
+            ...(positiveKeys.length
+              ? [
+                  {
+                    properties: {
+                      key: { enum: positiveKeys },
+                      amount: { exclusiveMinimum: 0 },
+                    },
+                  },
+                ]
+              : []),
+            ...(zeroAllowedKeys.length
+              ? [
+                  {
+                    properties: {
+                      key: { enum: zeroAllowedKeys },
+                      amount: { minimum: 0 },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        });
+      }
       if (state.destinations.every((destination) => destination.country)) {
         const countryField: { type: string; enum?: string[] } =
           schema.properties.cities.items.properties.country;
@@ -208,7 +248,7 @@ export class CatalogFirstPlanner {
         "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
         "For a stay without fixed_name, name a real, specific lodging neighborhood/district within the selected city; never return 'Hotel in <city>' or claim an unverified property is booked. The amount is the room/night allowance in that area, not a property quote. For meals/cafes use a specific venue or named dining area. All sightseeing visits must be distinct real venues/areas across days, not repeated names or generic sightseeing. " +
         "Return cities only for destinations whose city is missing; otherwise cities=[]. cities[].country must be the exact two-letter ISO code from the destination context, never the country name. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. If impossible, return no fabricated cheap prices.\n` +
+        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Estimate every mandatory fare and stay independently at realistic positive prices even when their sum exceeds total_group_budget. The server decides budget feasibility. Never reduce or zero fares to fit the requested budget; an over-budget estimate is a valid response, free unconfirmed international travel is not.\n` +
         "";
       const context = {
         currency: state.input.currency,

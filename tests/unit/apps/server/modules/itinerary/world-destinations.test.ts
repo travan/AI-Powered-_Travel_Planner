@@ -195,6 +195,18 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
       expect(payload.messages[1].content).toContain(
         "lodging neighborhood/district",
       );
+      const variants =
+        payload.response_format.json_schema.properties.items.items.anyOf;
+      expect(
+        variants.some(
+          (variant: any) =>
+            variant.properties.amount.exclusiveMinimum === 0 &&
+            variant.properties.key.enum.length > 0,
+        ),
+      ).toBe(true);
+      expect(payload.messages[1].content).toContain(
+        "even when their sum exceeds total_group_budget",
+      );
       expect(s.cityService.remember).not.toHaveBeenCalled();
     },
   );
