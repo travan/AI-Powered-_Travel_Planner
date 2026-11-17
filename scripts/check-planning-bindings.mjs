@@ -41,7 +41,7 @@ export async function verifyPlanningBindings(config, api) {
   );
   const consumers = await api(`/queues/${queue.queue_id}/consumers`);
   const consumer = consumers.find(
-    (c) => c.type === "worker" && c.script_name === config.name,
+    (c) => c.type === "worker" && (c.script ?? c.script_name) === config.name,
   );
   assert.ok(consumer, "Deployed consumer missing");
   assert.equal(
