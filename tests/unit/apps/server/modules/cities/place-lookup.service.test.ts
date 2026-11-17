@@ -135,6 +135,59 @@ describe("explicit location lookup", () => {
     ).rejects.toMatchObject({ status: 503 });
     expect(fetch).toHaveBeenCalledOnce();
   });
+  it.each([false, true])(
+    "falls back when primary city search only offers administrative regions (cached=%s)",
+    async (cached) => {
+      vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+      const region = {
+        ...candidate,
+        addresstype: "state",
+        type: "administrative",
+      };
+      const query = vi.fn(async (sql: string) => ({
+        rows: sql.includes("external_service_limits")
+          ? [{ name: "lease" }]
+          : sql.startsWith("select body") && cached
+            ? [{ body: [region] }]
+            : [],
+      }));
+      const fetch = vi.fn(
+        async (url: string) =>
+          new Response(
+            JSON.stringify(
+              url.includes("nominatim")
+                ? [region]
+                : {
+                    features: [
+                      {
+                        properties: {
+                          osm_type: "R",
+                          osm_id: 123,
+                          type: "city",
+                          name: "Taipei",
+                          countrycode: "TW",
+                        },
+                        geometry: { coordinates: [121.56, 25.03] },
+                      },
+                    ],
+                  },
+            ),
+          ),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const result = await new PlaceLookupService({ query }).cityCandidates(
+        "Taipei, TW",
+      );
+      expect(result.candidates).toEqual([
+        expect.objectContaining({
+          name: "Taipei",
+          country: "TW",
+          source_id: "relation/123",
+        }),
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(cached ? 1 : 2);
+    },
+  );
   it("serves cached candidates without a network request", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ body: [candidate] }] });
     const fetch = vi.fn();

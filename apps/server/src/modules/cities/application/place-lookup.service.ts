@@ -27,6 +27,11 @@ type Location = {
   address?: Record<string, string>;
   geocoder?: "photon";
 };
+const isCityLocation = (r: Location) =>
+  !!r.address?.country_code &&
+  ["city", "town", "village", "municipality"].includes(
+    r.addresstype ?? r.type ?? "",
+  );
 @Injectable()
 export class PlaceLookupService {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
@@ -43,7 +48,12 @@ export class PlaceLookupService {
       "select body from travel_external_cache where cache_key=$1 and expires_at>now()",
       [key],
     );
-    if (cached.rows[0]) return cached.rows[0].body;
+    if (cached.rows[0]) {
+      const body = cached.rows[0].body;
+      if (cityOnly && body.length && !body.some(isCityLocation))
+        return this.photonCities(q, key);
+      return cityOnly ? body.filter(isCityLocation) : body;
+    }
     const contact =
       process.env.WEATHER_CONTACT_URL || process.env.NEXT_PUBLIC_APP_URL;
     if (!contact)
@@ -99,6 +109,7 @@ export class PlaceLookupService {
     }
     const results = raw.filter(
       (r) =>
+        (!cityOnly || isCityLocation(r)) &&
         ["node", "way", "relation"].includes(r.osm_type) &&
         Number.isSafeInteger(r.osm_id) &&
         typeof r.display_name === "string" &&
