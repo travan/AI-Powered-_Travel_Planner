@@ -15,6 +15,41 @@ const candidate = {
   namedetails: { "name:en": "Taipei", "name:vi": "Đài Bắc" },
 };
 describe("explicit location lookup", () => {
+  it("resolves cities on the Worker fetch contract, which rejects redirect:error before sending", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      if (init.redirect === "error")
+        throw new TypeError("Invalid redirect value, must be follow or manual");
+      return new Response(JSON.stringify([candidate]));
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(
+      (await new PlaceLookupService({ query }).cityCandidates("Taipei"))
+        .candidates[0]?.country,
+    ).toBe("TW");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+  it("refuses redirects instead of following to an unapproved resolver host", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      expect(init.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://unapproved.test" },
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      new PlaceLookupService({ query }).cityCandidates("Taipei"),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
   it("uses country-filtered OSM city results from Photon when Nominatim is unavailable", async () => {
     vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
     const query = vi.fn(async (sql: string, _params?: unknown[]) => ({

@@ -68,7 +68,7 @@ export class PlaceLookupService {
         `${process.env.NOMINATIM_BASE_URL || "https://nominatim.openstreetmap.org"}/search?${params}`,
         {
           headers: { "User-Agent": `TravelPlanner/1.0 (${contact})` },
-          redirect: "error",
+          redirect: "manual",
           signal: AbortSignal.timeout(5000),
         },
       );
@@ -147,7 +147,7 @@ export class PlaceLookupService {
           headers: {
             "User-Agent": `TravelPlanner/1.0 (${process.env.WEATHER_CONTACT_URL || process.env.NEXT_PUBLIC_APP_URL})`,
           },
-          redirect: "error",
+          redirect: "manual",
           signal: AbortSignal.timeout(5000),
         },
       );
