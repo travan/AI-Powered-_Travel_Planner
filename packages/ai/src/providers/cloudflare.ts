@@ -242,7 +242,11 @@ export class CloudflareAIProvider implements AIProvider {
             undefined,
             "cloudflare",
           );
-        if (["3023", "5018", "3041"].includes(code))
+        const status = Number((error as { status?: unknown })?.status);
+        if (
+          [401, 403].includes(status) ||
+          ["10000", "3023", "5018", "3041"].includes(code)
+        )
           throw new PlanningGenerationError(
             "AI_AUTH_INVALID",
             undefined,

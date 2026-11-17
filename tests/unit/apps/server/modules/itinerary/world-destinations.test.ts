@@ -197,6 +197,17 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
       );
       const variants =
         payload.response_format.json_schema.properties.items.items.anyOf;
+      for (const variant of variants) {
+        expect(variant.type).toBe("object");
+        expect(variant.required).toEqual([
+          "key",
+          "name",
+          "amount",
+          "duration_minutes",
+        ]);
+        expect(variant.properties.name.type).toBe("string");
+        expect(variant.properties.duration_minutes.type).toBe("integer");
+      }
       expect(
         variants.some(
           (variant: any) =>

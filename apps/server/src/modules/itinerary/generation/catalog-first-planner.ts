@@ -70,7 +70,7 @@ const supplementSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["key", "name", "amount"],
+        required: ["key", "name", "amount", "duration_minutes"],
         properties: {
           key: { type: "string" },
           name: {
@@ -210,14 +210,19 @@ export class CatalogFirstPlanner {
           minItems: state.needs.length,
           maxItems: state.needs.length,
         });
+        // Workers AI may decode only an anyOf branch. Each branch must be
+        // a complete item schema, rather than partial dependent properties.
+        const itemSchema = structuredClone(schema.properties.items.items);
         Object.assign(schema.properties.items.items, {
           anyOf: [
             ...(positiveKeys.length
               ? [
                   {
+                    ...itemSchema,
                     properties: {
-                      key: { enum: positiveKeys },
-                      amount: { exclusiveMinimum: 0 },
+                      ...itemSchema.properties,
+                      key: { type: "string", enum: positiveKeys },
+                      amount: { type: "number", exclusiveMinimum: 0 },
                     },
                   },
                 ]
@@ -225,9 +230,11 @@ export class CatalogFirstPlanner {
             ...(zeroAllowedKeys.length
               ? [
                   {
+                    ...itemSchema,
                     properties: {
-                      key: { enum: zeroAllowedKeys },
-                      amount: { minimum: 0 },
+                      ...itemSchema.properties,
+                      key: { type: "string", enum: zeroAllowedKeys },
+                      amount: { type: "number", minimum: 0 },
                     },
                   },
                 ]
