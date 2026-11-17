@@ -38,9 +38,14 @@ export function generationErrorParams(value: unknown): Record<string, string> {
 export function generationError(
   code: GenerationErrorCode,
   reason?: string,
+  details: Record<string, string | number> = {},
 ): never {
   throw new HttpException(
-    { code, params: reason ? { reason } : {}, message: code },
+    {
+      code,
+      params: { ...details, ...(reason ? { reason } : {}) },
+      message: code,
+    },
     422,
   );
 }

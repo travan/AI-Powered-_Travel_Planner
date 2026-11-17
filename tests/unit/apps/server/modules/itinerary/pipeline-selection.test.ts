@@ -20,18 +20,16 @@ describe("production canary authorization", () => {
   });
   it("does not resume an exhausted V2 ticket even after the reset time has passed", async () => {
     const resume = vi.fn();
-    const query = vi
-      .fn()
-      .mockResolvedValue({
-        rows: [
-          {
-            pipeline_version: 2,
-            error_code: "AI_QUOTA_EXHAUSTED",
-            error_params: { retry_at: "2020-01-01T00:00:00Z" },
-            payload: { dto: {} },
-          },
-        ],
-      });
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          pipeline_version: 2,
+          error_code: "AI_QUOTA_EXHAUSTED",
+          error_params: { retry_at: "2020-01-01T00:00:00Z" },
+          payload: { dto: {} },
+        },
+      ],
+    });
     const service = new JourneyService(
       { query },
       {} as never,
@@ -51,6 +49,37 @@ describe("production canary authorization", () => {
     expect(() => pipelineOverride("normal-user", "v2")).toThrow();
     expect(() => pipelineOverride("normal-user", "v1")).toThrow();
     expect(() => pipelineOverride("test-user", "invalid")).toThrow();
+  });
+  it("retains safe V2 day diagnostics in polling", async () => {
+    const service = new JourneyService(
+      {
+        query: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              id: "job",
+              status: "failed",
+              error_code: "PLANNING_DATA_INSUFFICIENT",
+              error_params: {
+                reason: "schedule_constraints_unsatisfied",
+                day: 6,
+                issue_1_code: "SCHEDULE_CONFLICT",
+                issue_1_slot: "day",
+                raw: "private",
+              },
+            },
+          ],
+        }),
+      },
+      {} as never,
+      {} as never,
+    );
+    const result = await service.getJob("user", "job");
+    expect(result.error_params).toEqual({
+      reason: "schedule_constraints_unsatisfied",
+      day: 6,
+      issue_1_code: "SCHEDULE_CONFLICT",
+      issue_1_slot: "day",
+    });
   });
   it("publishes bounded validation identifiers, never arbitrary model data", () => {
     expect(

@@ -494,7 +494,12 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       ...(row.status === "failed" && row.error_code === "PLANNING_INVALID"
         ? { error_params: planningErrorParams(row.error_params?.reason) }
         : row.status === "failed" && generationCodes.has(row.error_code ?? "")
-          ? { error_params: generationErrorParams(row.error_params?.reason) }
+          ? {
+              error_params: {
+                ...generationErrorParams(row.error_params?.reason),
+                ...validationErrorParams(row.error_params),
+              },
+            }
           : row.status === "failed" && row.error_code === "AI_DAY_INVALID"
             ? { error_params: validationErrorParams(row.error_params) }
             : row.status === "failed" && row.error_code === "AI_QUOTA_EXHAUSTED"

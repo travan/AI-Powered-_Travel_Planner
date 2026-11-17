@@ -1,0 +1,1362 @@
+{
+  "days": [],
+  "legs": [
+    {
+      "to": "country-my",
+      "key": "leg/1",
+      "from": "Hà Nội",
+      "kind": "leg",
+      "destination": "country-my"
+    },
+    {
+      "to": "country-sg",
+      "key": "leg/2",
+      "from": "country-my",
+      "kind": "leg",
+      "destination": "country-sg"
+    },
+    {
+      "to": "Hà Nội",
+      "key": "leg/3",
+      "from": "country-sg",
+      "kind": "leg",
+      "destination": "country-sg"
+    }
+  ],
+  "input": {
+    "budget": 200000000,
+    "cities": ["country-my", "country-sg"],
+    "locale": "vi",
+    "currency": "VND",
+    "end_date": "2027-01-10",
+    "num_days": 10,
+    "planning": {
+      "budget": {
+        "total": 200000000,
+        "currency": "VND"
+      },
+      "journey": {
+        "origin": {
+          "label": "Hà Nội",
+          "source": "manual",
+          "city_slug": "ha-noi"
+        },
+        "timezone": "Asia/Ho_Chi_Minh",
+        "destinations": ["country-my", "country-sg"],
+        "return_to_origin": true
+      },
+      "travelers": {
+        "adults": 2,
+        "child_ages": []
+      },
+      "schema_version": 2,
+      "stay_preferences": {
+        "type": "hotel",
+        "rooms": 1,
+        "requirements": []
+      },
+      "dining_preferences": {
+        "cafe": "",
+        "allergies": [],
+        "requirements": [],
+        "independent_only": true
+      },
+      "transport_preferences": {
+        "mode": "suggest",
+        "confirmed": false,
+        "airport_buffer_minutes": 120
+      },
+      "experience_preferences": {
+        "pace": "balanced",
+        "interests": [],
+        "requirements": []
+      }
+    },
+    "start_date": "2027-01-01",
+    "trip_style": "mixed",
+    "num_travelers": 2,
+    "flexible_month": "2027-01"
+  },
+  "items": {
+    "leg/1": {
+      "name": "Hà Nội to Kuala Lumpur",
+      "scope": "person",
+      "amount": 4000000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking.",
+      "duration_minutes": 240
+    },
+    "leg/2": {
+      "name": "Kuala Lumpur to Singapore",
+      "scope": "person",
+      "amount": 1000000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking.",
+      "duration_minutes": 300
+    },
+    "leg/3": {
+      "name": "Singapore to Hà Nội",
+      "scope": "person",
+      "amount": 5000000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking.",
+      "duration_minutes": 360
+    },
+    "country-my/stay": {
+      "name": "Bukit Bintang",
+      "scope": "room_night",
+      "amount": 1500000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/stay": {
+      "name": "Marina Bay",
+      "scope": "room_night",
+      "amount": 2000000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/1/evening": {
+      "name": "Bukit Bintang",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/2/evening": {
+      "name": "Chinatown",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/3/evening": {
+      "name": "Publika",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/4/evening": {
+      "name": "TREC",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/5/evening": {
+      "name": "Bintang Walk",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/6/evening": {
+      "name": "Singapore River",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/7/evening": {
+      "name": "Little India",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/8/evening": {
+      "name": "Rochor",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/9/evening": {
+      "name": "Siloso Beach",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/cafe/daily": {
+      "name": "VCR Cafe",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/meal/lunch": {
+      "name": "Lot 10 Hutong",
+      "scope": "person",
+      "amount": 150000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/10/evening": {
+      "name": "Clarke Quay",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/cafe/daily": {
+      "name": "Cafe Monocle",
+      "scope": "person",
+      "amount": 80000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/meal/lunch": {
+      "name": "Hawker Centre at Newton Food Centre",
+      "scope": "person",
+      "amount": 150000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/1/morning_1": {
+      "name": "Batu Caves",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/2/morning_1": {
+      "name": "Merdeka Square",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/3/morning_1": {
+      "name": "Thean Hou Temple",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/4/morning_1": {
+      "name": "Sultan Abdul Samad Building",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/5/morning_1": {
+      "name": "Lake Gardens",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/local/daily": {
+      "name": "Kuala Lumpur local travel",
+      "scope": "group",
+      "amount": 150000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/meal/dinner": {
+      "name": "Jalan Alor",
+      "scope": "person",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/6/morning_1": {
+      "name": "Gardens by the Bay",
+      "scope": "person",
+      "amount": 280000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/7/morning_1": {
+      "name": "Chinatown Heritage Centre",
+      "scope": "person",
+      "amount": 100000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/8/morning_1": {
+      "name": "National Gallery Singapore",
+      "scope": "person",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/9/morning_1": {
+      "name": "Sentosa Island",
+      "scope": "person",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/local/daily": {
+      "name": "Singapore local travel",
+      "scope": "group",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/meal/dinner": {
+      "name": "Clarke Quay",
+      "scope": "person",
+      "amount": 250000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/10/morning_1": {
+      "name": "MacRitchie Reservoir Park",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/1/afternoon_1": {
+      "name": "Petronas Twin Towers",
+      "scope": "person",
+      "amount": 80000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/1/afternoon_2": {
+      "name": "Kuala Lumpur Tower",
+      "scope": "person",
+      "amount": 100000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/2/afternoon_1": {
+      "name": "National Museum",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/2/afternoon_2": {
+      "name": "Islamic Arts Museum Malaysia",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/3/afternoon_1": {
+      "name": "Kuala Lumpur Butterfly Park",
+      "scope": "person",
+      "amount": 60000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/3/afternoon_2": {
+      "name": "Kuala Lumpur Bird Park",
+      "scope": "person",
+      "amount": 60000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/4/afternoon_1": {
+      "name": "National Textile Museum",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/4/afternoon_2": {
+      "name": "Kuala Lumpur Performing Arts Centre",
+      "scope": "person",
+      "amount": 100000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/5/afternoon_1": {
+      "name": "Orchid Garden",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/5/afternoon_2": {
+      "name": "Hibiscus Garden",
+      "scope": "person",
+      "amount": 50000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/6/afternoon_1": {
+      "name": "Marina Bay Sands SkyPark",
+      "scope": "person",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/6/afternoon_2": {
+      "name": "Merlion Park",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/7/afternoon_1": {
+      "name": "Buddha Tooth Relic Temple and Museum",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/7/afternoon_2": {
+      "name": "Sri Mariamman Temple",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/8/afternoon_1": {
+      "name": "National Museum of Singapore",
+      "scope": "person",
+      "amount": 0,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/8/afternoon_2": {
+      "name": "Singapore Art Museum",
+      "scope": "person",
+      "amount": 100000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/9/afternoon_1": {
+      "name": "Universal Studios Singapore",
+      "scope": "person",
+      "amount": 500000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/9/afternoon_2": {
+      "name": "S.E.A. Aquarium",
+      "scope": "person",
+      "amount": 250000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-my/meal/breakfast": {
+      "name": "Old Town White Coffee",
+      "scope": "person",
+      "amount": 80000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/10/afternoon_1": {
+      "name": "Singapore Zoo",
+      "scope": "person",
+      "amount": 200000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/10/afternoon_2": {
+      "name": "River Safari",
+      "scope": "person",
+      "amount": 150000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    },
+    "country-sg/meal/breakfast": {
+      "name": "Tong Ah Eating House",
+      "scope": "person",
+      "amount": 100000,
+      "source": "ai_suggestion",
+      "assumption": "Unverified AI planning allowance, not a quote; confirm before booking."
+    }
+  },
+  "needs": [],
+  "version": 2,
+  "schedule": [
+    {
+      "day": 1,
+      "date": "2027-01-01",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-my/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-my/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-my/1/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-my/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "check_in",
+          "time": "13:00",
+          "slot_id": "check_in",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-my/1/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-my/1/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-my/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-my/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-my/1/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-my"
+    },
+    {
+      "day": 2,
+      "date": "2027-01-02",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-my/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-my/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-my/2/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-my/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-my/2/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-my/2/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-my/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-my/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-my/2/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-my"
+    },
+    {
+      "day": 3,
+      "date": "2027-01-03",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-my/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-my/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-my/3/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-my/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-my/3/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-my/3/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-my/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-my/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-my/3/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-my"
+    },
+    {
+      "day": 4,
+      "date": "2027-01-04",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-my/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-my/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-my/4/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-my/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-my/4/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-my/4/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-my/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-my/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-my/4/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-my"
+    },
+    {
+      "day": 5,
+      "date": "2027-01-05",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-my/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-my/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-my/5/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-my/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-my/5/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-my/5/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-my/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-my/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-my/5/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-my"
+    },
+    {
+      "day": 6,
+      "date": "2027-01-06",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-sg/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-sg/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-sg/6/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-sg/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-sg/6/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-sg/6/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-sg/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-sg/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-sg/6/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-sg"
+    },
+    {
+      "day": 7,
+      "date": "2027-01-07",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-sg/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-sg/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-sg/7/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-sg/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-sg/7/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-sg/7/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-sg/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-sg/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-sg/7/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-sg"
+    },
+    {
+      "day": 8,
+      "date": "2027-01-08",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-sg/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-sg/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-sg/8/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-sg/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-sg/8/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-sg/8/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-sg/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-sg/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-sg/8/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-sg"
+    },
+    {
+      "day": 9,
+      "date": "2027-01-09",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-sg/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-sg/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-sg/9/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-sg/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-sg/9/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-sg/9/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-sg/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-sg/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-sg/9/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "duration_minutes": 30
+        }
+      ],
+      "destination": "country-sg"
+    },
+    {
+      "day": 10,
+      "date": "2027-01-10",
+      "slots": [
+        {
+          "kind": "meal",
+          "time": "07:30",
+          "itemKey": "country-sg/meal/breakfast",
+          "slot_id": "breakfast",
+          "meal_slot": "breakfast",
+          "duration_minutes": 45
+        },
+        {
+          "kind": "check_out",
+          "time": "08:15",
+          "slot_id": "check_out",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "transfer",
+          "time": "08:30",
+          "itemKey": "country-sg/local/daily",
+          "slot_id": "local_transport",
+          "duration_minutes": 15
+        },
+        {
+          "kind": "visit",
+          "time": "09:00",
+          "itemKey": "country-sg/10/morning_1",
+          "slot_id": "morning_1",
+          "place_name": "",
+          "duration_minutes": 120
+        },
+        {
+          "kind": "meal",
+          "time": "12:00",
+          "itemKey": "country-sg/meal/lunch",
+          "slot_id": "lunch",
+          "meal_slot": "lunch",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "14:00",
+          "itemKey": "country-sg/10/afternoon_1",
+          "slot_id": "afternoon_1",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "15:30",
+          "itemKey": "country-sg/10/afternoon_2",
+          "slot_id": "afternoon_2",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "cafe",
+          "time": "17:00",
+          "itemKey": "country-sg/cafe/daily",
+          "slot_id": "cafe",
+          "duration_minutes": 30
+        },
+        {
+          "kind": "meal",
+          "time": "18:00",
+          "itemKey": "country-sg/meal/dinner",
+          "slot_id": "dinner",
+          "meal_slot": "dinner",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "visit",
+          "time": "19:30",
+          "itemKey": "country-sg/10/evening",
+          "slot_id": "evening",
+          "place_name": "",
+          "duration_minutes": 60
+        },
+        {
+          "kind": "transfer",
+          "time": "21:00",
+          "slot_id": "return",
+          "place_name": "Di chuyển tới điểm kết thúc hành trình",
+          "duration_minutes": 60
+        }
+      ],
+      "destination": "country-sg"
+    }
+  ],
+  "ai_config": {
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "provider": "cloudflare"
+  },
+  "destinations": [
+    {
+      "city": {
+        "lat": 3.1516964,
+        "lon": 101.6942371,
+        "name": {
+          "en": "Kuala Lumpur",
+          "vi": "Kuala Lumpur"
+        },
+        "slug": "kuala-lumpur-my-relation-2939672",
+        "places": [],
+        "country": "MY",
+        "popular": false,
+        "currency": "",
+        "timezone": "Asia/Kuala_Lumpur",
+        "activities": []
+      },
+      "country": "MY",
+      "selected": "country-my"
+    },
+    {
+      "city": {
+        "lat": 1.2899175,
+        "lon": 103.8519072,
+        "name": {
+          "en": "Singapore",
+          "vi": "Singapore"
+        },
+        "slug": "singapore-sg-relation-17140517",
+        "places": [],
+        "country": "SG",
+        "popular": false,
+        "currency": "",
+        "timezone": "Asia/Singapore",
+        "activities": []
+      },
+      "country": "SG",
+      "selected": "country-sg"
+    }
+  ],
+  "legacy_destination_only": false
+}

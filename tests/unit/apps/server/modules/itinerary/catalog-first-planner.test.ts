@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogFirstPlanner } from "../../../../../../apps/server/src/modules/itinerary/generation/catalog-first-planner";
 import {
   prepareSnapshot,
+  scheduleTravel,
+  type Snapshot,
   applySupplement,
   ensureMandatoryBudget,
   validateSupplementRequirements,
@@ -12,6 +14,7 @@ import {
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-assembler";
 import { workerRequestContext } from "../../../../../../apps/server/src/cloudflare/request-context";
 import { catalogScenario } from "../../../../fixtures/catalog-scenario";
+import travelCheckpoint from "../../../../fixtures/malaysia-singapore-travel-checkpoint.json";
 import realSupplement from "../../../../fixtures/malaysia-singapore-supplement.json";
 import { generationInput } from "../../../../../../apps/server/src/modules/itinerary/generation/generation-input";
 
@@ -27,6 +30,44 @@ function fixture() {
 }
 
 describe("catalog-first generation v2", () => {
+  it("assembles the recorded 4h/5h/6h travel response without dropping required meals or evenings", () => {
+    const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
+    scheduleTravel(snapshot);
+    snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
+    const plan = completePlan(snapshot);
+    expect(plan.days).toHaveLength(10);
+    expect(plan.total_cost).toBe(57893000);
+    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(
+      plan.issues?.some((i) =>
+        ["MEAL_MISSING", "EVENING_MISSING", "SCHEDULE_CONFLICT"].includes(
+          i.code,
+        ),
+      ),
+    ).toBe(false);
+    const last = snapshot.schedule.at(-1)!;
+    expect(last.slots.find((s) => s.coveredBy === "leg/3")).toMatchObject({
+      time: "18:00",
+      duration_minutes: 360,
+    });
+    expect(last.slots.find((s) => s.meal_slot === "dinner")?.time).toBe(
+      "17:00",
+    );
+    for (const day of snapshot.schedule)
+      for (const slot of day.slots) {
+        const [h, m] = slot.time.split(":").map(Number);
+        expect(h! * 60 + m! + slot.duration_minutes).toBeLessThanOrEqual(1440);
+      }
+    const scheduled = structuredClone(snapshot.schedule);
+    scheduleTravel(snapshot);
+    expect(snapshot.schedule).toEqual(scheduled);
+  });
+  it("does not move a confirmed departure to fit an overlong return leg", () => {
+    const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
+    snapshot.input.planning!.transport_preferences.departure_at =
+      "2027-01-10T19:00";
+    expect(() => scheduleTravel(snapshot)).toThrow("main travel does not fit");
+  });
   it("softens independent dining without softening allergy requirements", () => {
     const { input } = fixture();
     input.planning!.dining_preferences.independent_only = true;

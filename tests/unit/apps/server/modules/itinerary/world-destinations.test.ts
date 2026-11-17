@@ -187,6 +187,14 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
       const generated = await s.run();
       expect(generated.result.days).toHaveLength(3);
       expect(s.binding.run).toHaveBeenCalledOnce();
+      const payload = s.binding.run.mock.calls[0]![1];
+      expect(
+        payload.response_format.json_schema.properties.cities.items.properties
+          .country.enum,
+      ).toEqual([target[2]]);
+      expect(payload.messages[1].content).toContain(
+        "lodging neighborhood/district",
+      );
       expect(s.cityService.remember).not.toHaveBeenCalled();
     },
   );

@@ -39,6 +39,13 @@ export function planningErrorParams(reason: unknown): Record<string, string> {
 }
 
 const dayIssueCodes = new Set([
+  "MEAL_MISSING",
+  "ACTIVITIES_MISSING",
+  "EVENING_MISSING",
+  "HOTEL_RETURN_MISSING",
+  "SCHEDULE_CONFLICT",
+  "SCHEDULE_DETAILS_MISSING",
+  "REPEATED_PLACE",
   "DAY_ENTRY_INCOMPLETE",
   "DAY_MEAL_MISMATCH",
   "DAY_VENUE_MISMATCH",
@@ -147,7 +154,10 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
   if (kind === "generate" && body?.code && generationCodes.has(body.code))
     return {
       code: body.code,
-      params: generationErrorParams(body.params?.reason),
+      params: {
+        ...generationErrorParams(body.params?.reason),
+        ...validationErrorParams(body.params),
+      },
       status,
       terminal: true,
       retrySeconds: 15,
