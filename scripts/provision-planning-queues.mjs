@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import assert from "node:assert/strict";
 import ts from "typescript";
+import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
 const filename =
   process.env.WRANGLER_CONFIG ?? "apps/server/wrangler.generated.json";
@@ -8,10 +9,7 @@ const { config, error } = ts.parseConfigFileTextToJson(
   filename,
   await fs.readFile(filename, "utf8"),
 );
-assert.ok(
-  !error && process.env.CLOUDFLARE_API_TOKEN,
-  "Valid config and Cloudflare credentials required",
-);
+assert.ok(!error, "Valid Cloudflare config required");
 const producer = config.queues?.producers?.find(
   (item) => item.binding === "JOURNEY_QUEUE",
 );
@@ -22,13 +20,14 @@ assert.ok(
   producer && consumer?.dead_letter_queue,
   "Queue producer, consumer and DLQ configuration required",
 );
+const token = await cloudflareApiToken();
 async function api(path, init) {
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${config.account_id}${path}`,
     {
       ...init,
       headers: {
-        Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       signal: AbortSignal.timeout(30_000),

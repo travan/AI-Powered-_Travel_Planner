@@ -45,6 +45,37 @@ pnpm dlx wrangler@4.155.0 deploy --dry-run --config apps/server/wrangler.generat
 
 Deploy only after the candidate real-model gates pass. Set `API_BASE_URL`, `EXPECTED_DEPLOY_COMMIT`, dedicated account credentials, and `PLANNING_CANARY_RUN_ID` for `node scripts/check-production-generation.mjs`. The comparison requires health to report 0% and a bound Queue; promoted mode requires 100%. A Cloudflare 429/4006 is exhausted quota and blocks release. Restore quota or explicitly configure and test another provider; do not bypass the gate or automatically switch providers.
 
+## Deploying a merged commit while GitHub Actions is blocked
+
+GitHub-hosted runner billing can prevent the automatic deploy job from starting. It does not prevent uploading a Worker with Wrangler from a local machine. Local verification does not turn failed GitHub check statuses green. Keep the merge decision separate from the production generation gate.
+
+Use Node 22 and pnpm 10.15.0. Check out and pull the merged `main` commit, install with the frozen lockfile, and complete the local equivalents of the quality, security, database, API and browser checks. The validation report must identify the tested source revision. Do not deploy a different application revision based on an older report.
+
+Wrangler can use `CLOUDFLARE_API_TOKEN` from the environment or an existing `pnpm dlx wrangler@4.155.0 login` session. The provisioning and binding verification scripts now support both: they capture `wrangler auth token --json` internally and never print the credential. No GitHub billing change is needed for this path. Global API key/email authentication is not supported by these scripts; use a scoped API token or OAuth login.
+
+Load the existing dedicated CI UUID as `PLANNING_CANARY_USER_IDS`; do not add personal accounts. Load any selected provider secrets and database migration credentials from a private environment/secret manager. The following commands upload only the bounded **0% canary**, after the technical and candidate gates have passed:
+
+```sh
+set -euo pipefail
+: "${PLANNING_CANARY_USER_IDS:?Set the dedicated CI canary UUID}"
+DEPLOY_COMMIT="$(git rev-parse HEAD)"
+export WRANGLER_CONFIG=apps/server/wrangler.generated.json
+export JOURNEY_QUEUE_CONCURRENCY=1 PLANNING_AI_CONCURRENCY=1 PLANNING_V2_PERCENT=0
+node apps/server/cloudflare/prepare-queue-config.mjs production
+node scripts/sync-planning-secrets.mjs
+node scripts/provision-planning-queues.mjs
+pnpm dlx wrangler@4.155.0 deploy --dry-run --config "$WRANGLER_CONFIG"
+node --env-file=.env.cloudflare.local scripts/init-cloudflare-postgres.mjs --ci
+node --env-file=.env.cloudflare.local scripts/init-cloudflare-postgres.mjs --ci --apply
+pnpm dlx wrangler@4.155.0 deploy --config "$WRANGLER_CONFIG" --var "DEPLOY_COMMIT:$DEPLOY_COMMIT"
+API_BASE_URL=https://travel-planner-api.travan-it-96.workers.dev \
+EXPECTED_DEPLOY_COMMIT="$DEPLOY_COMMIT" EXPECTED_PLANNING_V2_PERCENT=0 \
+EXPECTED_PLANNING_CANARY=true node scripts/smoke-cloudflare.mjs
+node scripts/check-planning-bindings.mjs
+```
+
+Then run `scripts/check-production-generation.mjs` with that exact commit, the CI account credentials and a stable `PLANNING_CANARY_RUN_ID`. It submits at most six sequential cases and stops on a failed V2 gate. An exhausted model quota still blocks this step even though Worker upload is available. Only a passing comparison allows changing `PLANNING_V2_PERCENT` to 100 and redeploying the same commit. Verify health/revision/bindings and run `PLANNING_CANARY_MODE=promoted` without an override; return the percentage to zero and retain the Queue if verification fails. Do not interpret a successful upload or health check as a successful generation gate.
+
 ## User-facing quota recovery
 
 Quota exhaustion is distinct from invalid itinerary output. Web and mobile retain the saved request and explain whether an estimated recovery time is available. For Cloudflare daily allocation only, the backend reports the next 00:00 UTC (07:00 Vietnam time) as an expected reset, not a guarantee. Other providers do not receive an invented daily reset. Temporary capacity/rate-limit errors are separate from quota exhaustion.

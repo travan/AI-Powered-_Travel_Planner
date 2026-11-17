@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
 export async function verifyPlanningBindings(config, api) {
   if (
@@ -71,16 +72,14 @@ if (
     await fs.readFile(path, "utf8"),
   );
   assert.ok(!error, "Invalid Worker configuration");
+  let token;
   await verifyPlanningBindings(config, async (resource) => {
-    assert.ok(
-      process.env.CLOUDFLARE_API_TOKEN,
-      "Cloudflare token required for binding verification",
-    );
+    token ??= await cloudflareApiToken();
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${config.account_id}${resource}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          Authorization: `Bearer ${token}`,
         },
         signal: AbortSignal.timeout(15000),
       },
