@@ -2,11 +2,25 @@
 
 ## Release status
 
-**Not released to general V2 traffic.** Production serves commit `49f8fea308ef4ca16e735d494a28fb6f2f55e3bd` with `PLANNING_V2_PERCENT=0`, Queue producer/consumer, DLQ, recovery cron, and concurrency one. Only the dedicated CI account can override the pipeline. No personal account was granted access. The latest positive-cost schema candidate is not deployed: its isolated real-model gate returned `AI_RESULT_UNKNOWN`.
+**V2 is deployed on Cloudflare for production canary testing.** The current Worker serves commit `ed17d41b157d59757f6e5563d0d0260acfb4f26c`, with Queue producer/consumer, DLQ, recovery cron and concurrency one. Only the dedicated CI account has pipeline override access. General rollout remains 0% because the provider exhausted its daily allocation during the production control cases; this is not a passing release gate.
 
-GitHub Actions did not start jobs for the final revisions. The annotation states that recent account payments failed or the spending limit needs increasing. Local checks were used for the bounded 0% candidate deployment; this is not a successful GitHub CI run. The PR remains unmerged. No staging was created.
+The complete-item `anyOf` branches now declare name, amount and duration. The prior partial branches had caused the model to omit names/durations. Before deployment, real-model candidate checks passed: the exact 20m payload returned an explicit budget rejection; the wide route completed ten days at 43,967,000 VND; Da Nang completed three days at 17,798,000 VND. Each dispatched once. 657 unit tests, all six workspace type-check tasks and the Worker bundle passed. GitHub Actions remains blocked by account billing/spending limits; these are local technical checks, not green remote CI.
 
-## Actual production results
+## Latest production comparison — `manual-ed17d41-20261117`
+
+| Case / V2 | Job | Result | Calls | Input / output tokens |
+| --- | --- | --- | --- | --- |
+| Exact MY → SG, 20m VND | `9eba2bd6-611e-4ccc-8927-8cfbde782bfd` | Concrete mandatory travel/stay budget rejection, 101.3s; **no itinerary** | 1 | 2,126 / 2,015 |
+| MY → SG, 200m VND | `201b428f-662a-4d6d-9f83-dc0a45b024e2` | **Complete**, ten days, Kuala Lumpur → Singapore with origin/return legs, 51,293,000 VND, 85.8s; plan validation passed | 1 | 2,126 / 2,007 |
+| Da Nang, 3 days, 30m VND | `f4daf129-d338-4f0e-8165-72dd993900c4` | `AI_QUOTA_EXHAUSTED`, 7.3s; not successful generation | 1 rejected request | unavailable |
+
+The runner stopped on quota exhaustion before sending V1 baselines. The new round therefore does not provide a complete V1/V2 comparison or certify a population completion rate. No fallback provider was selected and no generation was automatically retried.
+
+The backend returned estimated recovery at `2026-11-18T00:00:00.000Z` (**07:00 on 18 November in Vietnam**). Recovery is not guaranteed. A production retry-guard check on the exhausted V2 job returned HTTP 409 / `AI_QUOTA_EXHAUSTED`; its recorded call count stayed one. A consumed quota ticket cannot resume as a fresh inference.
+
+Raw synthetic test evidence is in `test-results/v2-production-test-20261117-0342/`: `release-status.json`, `production-compare.json`, `quota-guard.json` and the three candidate reports. It contains no session credentials.
+
+## Earlier production results
 
 | Case / pipeline | Job | Result | AI calls | Input / output tokens |
 | --- | --- | --- | --- | --- |
@@ -29,11 +43,11 @@ The failed wide-budget V2 job was subsequently resumed using its saved response 
 - The binding verifier accepts Cloudflare's actual consumer `script` field and validates producer, consumer, DLQ and concurrency.
 - Canary reports save the accepted job ID immediately and stop on a failed V2 gate before submitting further cases.
 
-The new candidate constrains unconfirmed mandatory costs to positive values and tells the model to return realistic estimates even when over budget. Zero-fare output is still rejected, not converted into a budget rejection or repaired with invented prices. Its real-model test dispatched once, returned an unknown outcome with unavailable token usage, and was not repeated or deployed.
+The earlier positive-cost candidate returned an unknown outcome, then a later real response exposed missing names/durations from partial schema branches. Complete item schemas in each branch fixed that issue. Zero-fare output is still rejected, not converted into a budget rejection or repaired with invented prices. The current candidate passed the real-model gate before deployment; the latest production blocker is quota exhaustion.
 
 ## Technical checks and limits
 
-655 unit tests passed. All workspace type checks, the unified production build and Worker bundle were checked locally; subsequent server changes passed server type checks and Worker builds. The 100-job mock pipeline completed with 100 calls and no duplicate itineraries. These are technical checks, not production generation certification.
+657 unit tests passed. All workspace type checks, the unified production build and Worker bundle were checked locally; subsequent server changes passed server type checks and Worker builds. The 100-job mock pipeline completed with 100 calls and no duplicate itineraries. These are technical checks, not production generation certification.
 
 Cloudflare has real inference evidence. Claude, OpenAI and Gemini have adapter contract tests but **no live credential verification**. BYOK and token purchases remain deferred. Quota UI changes are in the PR; the production web release is still pending merge.
 
@@ -41,4 +55,4 @@ Local evidence is under `test-results/production-generation/` (ignored): `compar
 
 ## Remaining release gate
 
-Restore an executable CI runner/billing state, establish a successful real-model gate for the latest candidate without replaying its unknown dispatch ticket, then run one bounded fresh comparison. Both V2 controls must complete, and the original payload must complete or produce a concrete constraint rejection. Preserve failures. Only then promote to 100%, verify the ordinary API without an override, and retain the 0% compensation path if verification fails. Health alone cannot satisfy this gate.
+After provider quota recovers (or a separately authorized backend provider is configured and tested), use fresh CI test submissions to run one bounded comparison; never replay the exhausted dispatch ticket. Both V2 controls must complete, and the original payload must complete or produce a concrete constraint rejection. Restore GitHub runner billing for the automated workflow; the same manual production gates remain available. Only after the comparison passes may rollout reach 100%, followed by an ordinary API V2 job without an override. Keep Queue bindings and the 0% compensation path if verification fails. No new feature PR is needed just to change the rollout configuration.
