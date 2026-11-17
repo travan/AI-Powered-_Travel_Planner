@@ -1,3 +1,7 @@
+import * as travelTypes from "@travel/types";
+const { countryDestinationReference, countryReference } =
+  (travelTypes as unknown as { default?: typeof travelTypes }).default ??
+  travelTypes;
 import {
   BadRequestException,
   Inject,
@@ -21,6 +25,7 @@ type Location = {
   addresstype?: string;
   namedetails?: Record<string, string>;
   address?: Record<string, string>;
+  geocoder?: "photon";
 };
 @Injectable()
 export class PlaceLookupService {
@@ -68,17 +73,21 @@ export class PlaceLookupService {
         },
       );
     } catch {
+      if (cityOnly) return this.photonCities(q, key);
       throw new ServiceUnavailableException("Location lookup unavailable");
     }
     if (!response.ok) {
+      if (cityOnly && response.status !== 429) return this.photonCities(q, key);
       throw Object.assign(
         new ServiceUnavailableException("Location lookup unavailable"),
         { headers: response.headers },
       );
     }
-    const raw = await response.json().catch(() => null) as Location[] | null;
-    if (!Array.isArray(raw))
+    const raw = (await response.json().catch(() => null)) as Location[] | null;
+    if (!Array.isArray(raw)) {
+      if (cityOnly) return this.photonCities(q, key);
       throw new ServiceUnavailableException("Invalid location response");
+    }
     const results = raw.filter(
       (r) =>
         ["node", "way", "relation"].includes(r.osm_type) &&
@@ -89,9 +98,102 @@ export class PlaceLookupService {
         Number.isFinite(Number(r.lon)) &&
         Math.abs(Number(r.lon)) <= 180,
     );
+    if (cityOnly && !results.length) return this.photonCities(q, key);
     await this.sql.query(
       `insert into travel_external_cache(cache_key,body,expires_at) values($1,$2,now()+interval '30 days') on conflict(cache_key) do update set body=excluded.body,expires_at=excluded.expires_at`,
       [key, JSON.stringify(results)],
+    );
+    return results;
+  }
+  /** OSM-backed city failover only; never convert AI coordinates into catalog records. */
+  private async photonCities(
+    query: string,
+    cacheKey: string,
+  ): Promise<Location[]> {
+    const lease = await this.sql.query(
+      `insert into external_service_limits(name,next_allowed_at) values('photon',now()+interval '1 second') on conflict(name) do update set next_allowed_at=excluded.next_allowed_at where external_service_limits.next_allowed_at<=now() returning name`,
+    );
+    if (!lease.rows.length)
+      throw new HttpException("Please wait before searching again", 429);
+    const parts = query.split(",").map((part) => part.trim());
+    const last = parts.at(-1)!;
+    const country =
+      countryDestinationReference(`country-${last.toLowerCase()}`) ??
+      countryReference(last);
+    const search =
+      country && parts.length > 1
+        ? [...parts.slice(0, -1), country.names.en].join(", ")
+        : query;
+    const params = new URLSearchParams({
+      q: search,
+      limit: "5",
+      lang: "en",
+      ...(country ? { countrycode: country.country } : {}),
+    });
+    let raw: { features?: any[] };
+    try {
+      const response = await fetch(
+        `${process.env.PHOTON_BASE_URL || "https://photon.komoot.io"}/api/?${params}`,
+        {
+          headers: {
+            "User-Agent": `TravelPlanner/1.0 (${process.env.WEATHER_CONTACT_URL || process.env.NEXT_PUBLIC_APP_URL})`,
+          },
+          redirect: "error",
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!response.ok) throw new Error("Resolver unavailable");
+      const value: unknown = await response.json();
+      if (
+        !value ||
+        typeof value !== "object" ||
+        !("features" in value) ||
+        !Array.isArray(value.features)
+      )
+        throw new Error("Invalid resolver response");
+      raw = { features: value.features };
+    } catch {
+      throw new ServiceUnavailableException("Location lookup unavailable");
+    }
+    const results = raw.features!.flatMap((feature): Location[] => {
+      const p = feature?.properties;
+      const coordinates = feature?.geometry?.coordinates;
+      const osmType = (
+        { N: "node", W: "way", R: "relation" } as Record<string, string>
+      )[p?.osm_type];
+      const kind = p?.type ?? p?.osm_value;
+      if (
+        !osmType ||
+        !Number.isSafeInteger(p?.osm_id) ||
+        typeof p?.name !== "string" ||
+        !["city", "town", "village", "municipality"].includes(kind) ||
+        !/^[A-Za-z]{2}$/.test(p?.countrycode ?? "") ||
+        (country && p.countrycode.toUpperCase() !== country.country) ||
+        !Array.isArray(coordinates) ||
+        !Number.isFinite(coordinates[0]) ||
+        !Number.isFinite(coordinates[1]) ||
+        Math.abs(coordinates[0]) > 180 ||
+        Math.abs(coordinates[1]) > 90
+      )
+        return [];
+      return [
+        {
+          osm_type: osmType,
+          osm_id: p.osm_id,
+          display_name: [p.name, p.state, p.country].filter(Boolean).join(", "),
+          lat: String(coordinates[1]),
+          lon: String(coordinates[0]),
+          addresstype: kind,
+          address: { country_code: p.countrycode.toLowerCase() },
+          namedetails: { "name:en": p.name },
+          geocoder: "photon",
+        },
+      ];
+    });
+    // Retain the historical cache namespace so offered OSM source IDs survive deployments.
+    await this.sql.query(
+      `insert into travel_external_cache(cache_key,body,expires_at) values($1,$2,now()+interval '30 days') on conflict(cache_key) do update set body=excluded.body,expires_at=excluded.expires_at`,
+      [cacheKey, JSON.stringify(results)],
     );
     return results;
   }
