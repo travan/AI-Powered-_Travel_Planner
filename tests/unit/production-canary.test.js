@@ -186,6 +186,62 @@ describe("production generation gate", () => {
       await fs.rm(directory, { recursive: true, force: true });
     }
   });
+  it("stops a failed V2 gate before spending calls on remaining cases", async () => {
+    vi.stubEnv("PLANNING_CANARY_EMAIL", "ci@example.test");
+    vi.stubEnv("PLANNING_CANARY_PASSWORD", "test-password");
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "planning-stop-"),
+    );
+    let submitted = 0;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const request = async (url) => {
+      const pathname = new URL(url).pathname;
+      const result =
+        pathname === "/health"
+          ? {
+              deploy_commit: "candidate",
+              planning_pipeline: { v2_percent: 0, queue_bound: true },
+            }
+          : pathname === "/api/auth/session"
+            ? {
+                user: { id: "ci" },
+                session: { access_token: "private" },
+              }
+            : pathname === "/api/itinerary/generate"
+              ? (++submitted, { job_id: "failed-job" })
+              : {
+                  status: "failed",
+                  error_code: "LOCATION_LOOKUP_UNAVAILABLE",
+                  pipeline_version: 2,
+                  usage_recorded: true,
+                  ai_usage: [{ provider: "cloudflare", model: "test" }],
+                };
+      return new Response(JSON.stringify(result));
+    };
+    try {
+      await expect(
+        runProductionCanary({
+          base: "https://example.test",
+          commit: "candidate",
+          runId: "stop-run",
+          request,
+          output: directory,
+        }),
+      ).rejects.toThrow("stop before spending");
+      expect(submitted).toBe(1);
+      const report = JSON.parse(
+        await fs.readFile(path.join(directory, "compare.json"), "utf8"),
+      );
+      expect(report.cases[0]).toMatchObject({
+        job_id: "failed-job",
+        status: "failed",
+        error_code: "LOCATION_LOOKUP_UNAVAILABLE",
+      });
+    } finally {
+      log.mockRestore();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
   it("never accepts AI/system failure or malformed success as business rejection", () => {
     const test = { allowConstraintFailure: true };
     expect(

@@ -263,11 +263,14 @@ export async function runProductionCanary({
           row.requests_submitted = 1;
           row.job_id = queued.job_id;
           assert.ok(row.job_id, "Missing job ID");
+          await save();
           let job;
           let terminalAt;
           do {
             job = await session.json(`/api/itinerary/jobs/${row.job_id}`);
             if (["complete", "failed"].includes(job.status)) {
+              row.error_code = job.error_code;
+              row.error_params = job.error_params;
               terminalAt ??= Date.now();
               if (job.usage_recorded) break;
               assert.ok(
@@ -323,6 +326,11 @@ export async function runProductionCanary({
         row.duration_ms = Date.now() - started;
         await save();
         console.log(JSON.stringify(row));
+        assert.ok(
+          pipeline !== 2 ||
+            ["complete", "constraint_rejected"].includes(row.status),
+          "V2 production gate failed; stop before spending more model calls. Rollout remains blocked.",
+        );
         assert.ok(
           ![
             "AI_QUOTA_EXHAUSTED",

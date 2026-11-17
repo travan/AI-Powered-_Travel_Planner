@@ -73,10 +73,19 @@ export class PlaceLookupService {
         },
       );
     } catch {
+      console.warn("CITY_RESOLVER_UNAVAILABLE", {
+        service: "nominatim",
+        reason: "network_or_timeout",
+      });
       if (cityOnly) return this.photonCities(q, key);
       throw new ServiceUnavailableException("Location lookup unavailable");
     }
     if (!response.ok) {
+      console.warn("CITY_RESOLVER_UNAVAILABLE", {
+        service: "nominatim",
+        reason: "http",
+        status: response.status,
+      });
       if (cityOnly && response.status !== 429) return this.photonCities(q, key);
       throw Object.assign(
         new ServiceUnavailableException("Location lookup unavailable"),
@@ -142,7 +151,14 @@ export class PlaceLookupService {
           signal: AbortSignal.timeout(5000),
         },
       );
-      if (!response.ok) throw new Error("Resolver unavailable");
+      if (!response.ok) {
+        console.warn("CITY_RESOLVER_UNAVAILABLE", {
+          service: "photon",
+          reason: "http",
+          status: response.status,
+        });
+        throw new Error("Resolver unavailable");
+      }
       const value: unknown = await response.json();
       if (
         !value ||
@@ -153,6 +169,10 @@ export class PlaceLookupService {
         throw new Error("Invalid resolver response");
       raw = { features: value.features };
     } catch {
+      console.warn("CITY_RESOLVER_UNAVAILABLE", {
+        service: "photon",
+        reason: "request_failed",
+      });
       throw new ServiceUnavailableException("Location lookup unavailable");
     }
     const results = raw.features!.flatMap((feature): Location[] => {
