@@ -81,7 +81,7 @@ const binding = {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(input),
-        signal: AbortSignal.timeout(180000),
+        signal: AbortSignal.timeout(120000),
       },
     );
     const body = (await result.json()) as {

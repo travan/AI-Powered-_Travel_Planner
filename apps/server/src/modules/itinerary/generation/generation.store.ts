@@ -201,7 +201,7 @@ export class GenerationStore {
         new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => reject(new HttpException({ code: "AI_RESULT_UNKNOWN" }, 422)),
-            180_000,
+            120_000,
           );
           timer.unref?.();
         }),

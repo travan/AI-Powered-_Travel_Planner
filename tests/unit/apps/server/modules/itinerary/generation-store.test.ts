@@ -147,7 +147,7 @@ describe("generation dispatch durability", () => {
     const result = expect(store.once("g", work)).rejects.toMatchObject({
       response: { code: "AI_RESULT_UNKNOWN" },
     });
-    await vi.advanceTimersByTimeAsync(180001);
+    await vi.advanceTimersByTimeAsync(120001);
     await result;
     expect(db.row?.state).toBe("unknown");
     expect(db.occupied).toBe(true);

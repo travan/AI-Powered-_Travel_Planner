@@ -21,7 +21,7 @@ The GitHub `production` environment needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_MI
 
 Set these as GitHub production environment variables/secrets. The workflow validates the selected model and syncs available third-party secrets using a private temporary file. Missing keys/models fail before dispatch. V2 never silently selects Mock or another provider. Synthetic staging mocks remain explicitly restricted to `PLANNING_STAGING=true`.
 
-The external adapters send one HTTPS request with a 120-second timeout and no automatic retry. Cloudflare binding requests retain the ledger's 180-second deadline. Raw business content is persisted before JSON validation. Timeout/unknown response consumes the dispatch ticket, so retrying that generation cannot incur a second inference. No API key, authorization header or raw provider error is written into usage or public responses.
+The external adapters send one HTTPS request with a 120-second timeout and no automatic retry. Cloudflare binding requests use the same 120-second ledger deadline. An unresolved binding call retains its capacity lease until it settles and cannot be dispatched again. Raw business content is persisted before JSON validation. Timeout/unknown response consumes the dispatch ticket, so retrying that generation cannot incur a second inference. No API key, authorization header or raw provider error is written into usage or public responses.
 
 ## Cases and pass criteria
 
