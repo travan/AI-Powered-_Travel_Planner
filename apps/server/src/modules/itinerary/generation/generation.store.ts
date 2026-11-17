@@ -201,7 +201,7 @@ export class GenerationStore {
         new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => reject(new HttpException({ code: "AI_RESULT_UNKNOWN" }, 422)),
-            180_000,
+            120_000,
           );
           timer.unref?.();
         }),
@@ -224,6 +224,10 @@ export class GenerationStore {
         "AI_RESULT_UNKNOWN",
         "AI_RESPONSE_INVALID",
         "AI_QUOTA_EXHAUSTED",
+        "AI_PROVIDER_CONFIGURATION_INVALID",
+        "AI_AUTH_INVALID",
+        "AI_RATE_LIMITED",
+        "AI_UNAVAILABLE",
       ].includes(candidate)
         ? candidate
         : "AI_RESULT_UNKNOWN";

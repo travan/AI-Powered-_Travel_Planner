@@ -36,6 +36,24 @@ describe("Cloudflare AI provider", () => {
     );
   });
 
+  it.each([401, 403])(
+    "classifies Cloudflare REST authorization status %s without calling it an unknown inference",
+    async (status) => {
+      const run = vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error("Authentication error"), {
+            status,
+            code: 10000,
+          }),
+        );
+      const provider = new CloudflareAIProvider({ run });
+      await expect(
+        provider.supplementRaw("test", "en", { type: "object" }),
+      ).rejects.toMatchObject({ code: "AI_AUTH_INVALID" });
+      expect(run).toHaveBeenCalledOnce();
+    },
+  );
   it("uses the requested duration for structured trips without a redundant model overview", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-15T00:00:00Z"));

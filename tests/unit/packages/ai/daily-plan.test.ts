@@ -28,7 +28,7 @@ const overview: ItineraryOverview = {
 const description =
   "Walk through the named area and focus on the distinctive buildings and local street life along this route. This fits the day's neighborhood theme without unnecessary backtracking. Take a short break and allow time to reach the following stop comfortably.";
 describe("complete daily planning", () => {
-  it("reproduces the populated 26-word return rejected after real day 8 repair", () => {
+  it("accepts the populated 26-word return captured after real day 8 repair", () => {
     const description =
       "Trở về khách sạn sau một ngày khám phá. Hãy nghỉ ngơi và chuẩn bị cho ngày mai. Khách sạn là nơi nghỉ ngơi thoải mái.";
     const response = {
@@ -55,7 +55,7 @@ describe("complete daily planning", () => {
         false,
         () => false,
       ),
-    ).toMatchObject([{ slot: "return", code: "DAY_ENTRY_INCOMPLETE" }]);
+    ).toEqual([]);
   });
 
   it("repairs only duplicated positions in the outline captured from Workers AI", async () => {

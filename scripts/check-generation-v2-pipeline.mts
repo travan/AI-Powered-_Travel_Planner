@@ -25,6 +25,7 @@ assert.ok(
     /test/.test(url.pathname),
   "Isolated local test database only",
 );
+process.env.AI_PROVIDER = "cloudflare";
 process.env.PLANNING_V2_PERCENT = "100";
 process.env.PLANNING_AI_CONCURRENCY = "4";
 process.env.DOCUMENT_STORE = "postgres";
@@ -117,10 +118,11 @@ try {
     );
   const first = await service.enqueue(users[100]!, dto, "db-first");
   await run(first.job_id);
-  assert.equal(
-    (await service.getJob(users[100]!, first.job_id)).status,
-    "complete",
-  );
+  const firstStatus = await service.getJob(users[100]!, first.job_id);
+  assert.equal(firstStatus.status, "complete");
+  assert.equal(firstStatus.pipeline_version, 2);
+  assert.equal(firstStatus.usage_recorded, true);
+  assert.deepEqual(firstStatus.ai_usage, []);
   assert.equal(
     calls,
     0,

@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
 export async function verifyPlanningBindings(config, api) {
-  if (Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0) return;
+  if (
+    Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0 &&
+    !config.vars?.PLANNING_CANARY_USER_IDS?.trim()
+  )
+    return;
   const producer = config.queues?.producers?.find(
     (p) => p.binding === "JOURNEY_QUEUE",
   );
@@ -37,7 +42,7 @@ export async function verifyPlanningBindings(config, api) {
   );
   const consumers = await api(`/queues/${queue.queue_id}/consumers`);
   const consumer = consumers.find(
-    (c) => c.type === "worker" && c.script_name === config.name,
+    (c) => c.type === "worker" && (c.script ?? c.script_name) === config.name,
   );
   assert.ok(consumer, "Deployed consumer missing");
   assert.equal(
@@ -67,16 +72,14 @@ if (
     await fs.readFile(path, "utf8"),
   );
   assert.ok(!error, "Invalid Worker configuration");
+  let token;
   await verifyPlanningBindings(config, async (resource) => {
-    assert.ok(
-      process.env.CLOUDFLARE_API_TOKEN,
-      "Cloudflare token required for binding verification",
-    );
+    token ??= await cloudflareApiToken();
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${config.account_id}${resource}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          Authorization: `Bearer ${token}`,
         },
         signal: AbortSignal.timeout(15000),
       },

@@ -143,6 +143,14 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     return [
       {
         name: item.name,
+        note:
+          item.source === "ai_suggestion" &&
+          !item.id &&
+          !p.stay_preferences.booked_name
+            ? input.locale === "vi"
+              ? "Khu vực lưu trú đề xuất, chưa chọn khách sạn cụ thể. Chi phí là dự toán phòng/đêm; cần xác nhận trước khi đặt."
+              : "Suggested lodging area; no specific property has been selected. Costs are room/night allowances to confirm before booking."
+            : "",
         city_slug: d.city!.slug,
         city: d.city!.name.en ?? d.city!.slug,
         rooms: p.stay_preferences.rooms,
@@ -280,15 +288,34 @@ export function completePlan(snapshot: Snapshot): Itinerary {
   if (input.budget !== undefined && !enriched.budget_breakdown.complete) {
     generationError("PLANNING_DATA_INSUFFICIENT", "budget_incomplete");
   }
-  if (
-    enriched.issues.some(
-      (i) => i.severity === "error" || blockingCatalogIssues.has(i.code),
-    )
-  )
+  const blocking = enriched.issues.filter(
+    (i) => i.severity === "error" || blockingCatalogIssues.has(i.code),
+  );
+  if (blocking.length) {
+    const day = enriched.days.find((d) => d.id === blocking[0]!.day_id);
     generationError(
       "PLANNING_DATA_INSUFFICIENT",
       "schedule_constraints_unsatisfied",
+      {
+        ...(day ? { day: day.day_number } : {}),
+        ...Object.fromEntries(
+          blocking.slice(0, 5).flatMap((issue, i) => [
+            [`issue_${i + 1}_code`, issue.code],
+            [`issue_${i + 1}_slot`, "day"],
+          ]),
+        ),
+      },
     );
+  }
+  if (p.dining_preferences.independent_only)
+    enriched.issues.push({
+      code: "INDEPENDENT_DINING_UNVERIFIED",
+      severity: "warning",
+      message:
+        input.locale === "vi"
+          ? "Ưu tiên quán ăn độc lập; cần xác nhận trực tiếp, các gợi ý chưa được bảo đảm là quán độc lập."
+          : "Independent dining is preferred; confirm directly, suggested venues are not guaranteed independent.",
+    });
   const visits = new Set<string>();
   for (const day of enriched.days)
     for (const a of day.activities.filter((a) => a.kind === "visit")) {

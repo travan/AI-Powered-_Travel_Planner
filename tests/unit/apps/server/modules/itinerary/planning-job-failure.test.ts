@@ -82,7 +82,7 @@ describe("generation job failures", () => {
         true,
         null,
         "AI_DAY_INVALID",
-        {},
+        { day: 4, issue_1_code: "DAY_PRICE_INVALID", issue_1_slot: "lunch" },
         15,
       ]);
     } finally {

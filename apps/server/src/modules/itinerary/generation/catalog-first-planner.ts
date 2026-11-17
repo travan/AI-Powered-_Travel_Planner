@@ -4,7 +4,12 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
-import { CloudflareAIProvider } from "@travel/ai";
+import {
+  createSupplementProvider,
+  destinationContext,
+  supplementConfig,
+  type SupplementProvider,
+} from "@travel/ai";
 import type { AiTokenUsage, Itinerary, ItineraryInput } from "@travel/types";
 import * as types from "@travel/types";
 import { CitiesService } from "../../cities/application/cities.service.js";
@@ -52,7 +57,11 @@ const supplementSchema = {
         properties: {
           destination: { type: "string" },
           name: { type: "string" },
-          country: { type: "string" },
+          country: {
+            type: "string",
+            description:
+              "ISO 3166-1 alpha-2 country code, never the full country name",
+          },
         },
       },
     },
@@ -61,10 +70,14 @@ const supplementSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["key", "name", "amount"],
+        required: ["key", "name", "amount", "duration_minutes"],
         properties: {
           key: { type: "string" },
-          name: { type: "string" },
+          name: {
+            type: "string",
+            description:
+              "Specific venue or named area. Unverified stays must name a lodging district, never a generic hotel in a city.",
+          },
           amount: { type: "number", minimum: 0 },
           duration_minutes: { type: "integer", minimum: 15, maximum: 1440 },
         },
@@ -140,7 +153,10 @@ export class CatalogFirstPlanner {
             )
           : [await this.cities.findForPlanning(selected, 300)];
         const ranked = candidates
-          .filter((c) => !!c)
+          .filter(
+            (c): c is NonNullable<typeof c> =>
+              !!c && (!country || c.country === country.country),
+          )
           .sort(
             (a, b) =>
               b.places.length - a.places.length || a.slug.localeCompare(b.slug),
@@ -178,9 +194,68 @@ export class CatalogFirstPlanner {
     ensureMandatoryBudget(state);
     if (state.needs.length || state.destinations.some((d) => !d.city)) {
       await options.onStage?.("supplement");
+      const schema = structuredClone(supplementSchema);
+      const positiveKeys = state.needs
+        .filter(
+          (need) => need.kind !== "visit" && need.fixed_amount === undefined,
+        )
+        .map((need) => need.key);
+      const zeroAllowedKeys = state.needs
+        .filter(
+          (need) => need.kind === "visit" || need.fixed_amount !== undefined,
+        )
+        .map((need) => need.key);
+      if (state.needs.length) {
+        Object.assign(schema.properties.items, {
+          minItems: state.needs.length,
+          maxItems: state.needs.length,
+        });
+        // Workers AI may decode only an anyOf branch. Each branch must be
+        // a complete item schema, rather than partial dependent properties.
+        const itemSchema = structuredClone(schema.properties.items.items);
+        Object.assign(schema.properties.items.items, {
+          anyOf: [
+            ...(positiveKeys.length
+              ? [
+                  {
+                    ...itemSchema,
+                    properties: {
+                      ...itemSchema.properties,
+                      key: { type: "string", enum: positiveKeys },
+                      amount: { type: "number", exclusiveMinimum: 0 },
+                    },
+                  },
+                ]
+              : []),
+            ...(zeroAllowedKeys.length
+              ? [
+                  {
+                    ...itemSchema,
+                    properties: {
+                      ...itemSchema.properties,
+                      key: { type: "string", enum: zeroAllowedKeys },
+                      amount: { type: "number", minimum: 0 },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        });
+      }
+      if (state.destinations.every((destination) => destination.country)) {
+        const countryField: { type: string; enum?: string[] } =
+          schema.properties.cities.items.properties.country;
+        countryField.enum = [
+          ...new Set(
+            state.destinations.map((destination) => destination.country),
+          ),
+        ];
+      }
       const instruction =
         "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the requested ISO country. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. If impossible, return no fabricated cheap prices.\n` +
+        "For a stay without fixed_name, name a real, specific lodging neighborhood/district within the selected city; never return 'Hotel in <city>' or claim an unverified property is booked. The amount is the room/night allowance in that area, not a property quote. For meals/cafes use a specific venue or named dining area. All sightseeing visits must be distinct real venues/areas across days, not repeated names or generic sightseeing. " +
+        "Return cities only for destinations whose city is missing; otherwise cities=[]. cities[].country must be the exact two-letter ISO code from the destination context, never the country name. " +
+        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Estimate every mandatory fare and stay independently at realistic positive prices even when their sum exceeds total_group_budget. The server decides budget feasibility. Never reduce or zero fares to fit the requested budget; an over-budget estimate is a valid response, free unconfirmed international travel is not.\n` +
         "";
       const context = {
         currency: state.input.currency,
@@ -188,6 +263,19 @@ export class CatalogFirstPlanner {
         people: state.input.num_travelers,
         days: state.input.num_days,
         rooms: state.input.planning!.stay_preferences.rooms,
+        destination_context: destinationContext(
+          state.input,
+          state.destinations.map((d) => ({
+            id: d.selected,
+            city: d.city?.name.en,
+            country: d.country,
+          })),
+        ),
+        journey: state.input.planning!.journey,
+        selected_dates: {
+          start: state.input.start_date,
+          end: state.input.end_date,
+        },
         destinations: state.destinations.map((d) => ({
           destination: d.selected,
           country: d.country,
@@ -207,8 +295,8 @@ export class CatalogFirstPlanner {
         },
       };
       const bytes = (value: string) =>
-        new TextEncoder().encode(value + JSON.stringify(supplementSchema))
-          .byteLength + 512;
+        new TextEncoder().encode(value + JSON.stringify(schema)).byteLength +
+        512;
       let prompt = instruction + JSON.stringify(context);
       // Retained costs are useful context, but repeated daily entries are optional.
       context.retained = [
@@ -225,18 +313,19 @@ export class CatalogFirstPlanner {
         generationError("PLANNING_DATA_INSUFFICIENT", "context_limit");
       const workerContext = workerRequestContext.getStore();
       const binding = workerContext?.rawAi ?? workerContext?.ai;
+      let provider: SupplementProvider | undefined;
       const raw = await this.store.once(
         job.generation_id,
         async () => {
-          const provider = new CloudflareAIProvider(
-            binding!,
-            process.env.CLOUDFLARE_AI_MODEL,
-          );
+          provider ??= createSupplementProvider({
+            workersAI: binding,
+            config: state.ai_config,
+          });
           try {
             return await provider.supplementRaw(
               prompt,
               state.input.locale,
-              supplementSchema,
+              schema,
             );
           } finally {
             for (const usage of provider.getUsage()) options.onUsage?.(usage);
@@ -246,8 +335,11 @@ export class CatalogFirstPlanner {
           }
         },
         () => {
-          if (!binding)
-            throw new HttpException({ code: "AI_UNAVAILABLE" }, 503);
+          state.ai_config ??= supplementConfig();
+          provider = createSupplementProvider({
+            workersAI: binding,
+            config: state.ai_config,
+          });
         },
       );
       let response: unknown;

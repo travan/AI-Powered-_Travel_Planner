@@ -250,10 +250,29 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    timeout-minutes: 15
+    timeout-minutes: 240
     environment:
       name: production
       url: https://travel-planner-api.travan-it-96.workers.dev
+    env:
+      API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
+      PLANNING_CANARY_EMAIL: ${{ secrets.PLANNING_CANARY_EMAIL }}
+      PLANNING_CANARY_PASSWORD: ${{ secrets.PLANNING_CANARY_PASSWORD }}
+      DEPLOY_AI_PROVIDER: ${{ vars.AI_PROVIDER || 'cloudflare' }}
+      CLOUDFLARE_AI_MODEL: ${{ vars.CLOUDFLARE_AI_MODEL }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      PLANNING_CANARY_RUN_ID: ci-${{ github.run_id }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     permissions:
       contents: read
     concurrency:
@@ -279,27 +298,53 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Select measured queue configuration
+      - name: Prepare dedicated production canary account
+        run: node scripts/prepare-production-canary.mjs
+
+      - name: Select bounded production canary configuration
         env:
-          JOURNEY_QUEUE_CONCURRENCY: ${{ vars.JOURNEY_QUEUE_CONCURRENCY }}
-          PLANNING_V2_PERCENT: ${{ vars.PLANNING_V2_PERCENT }}
-          PLANNING_AI_CONCURRENCY: ${{ vars.PLANNING_AI_CONCURRENCY }}
-          PLANNING_V2_CERTIFIED_COMMIT: ${{ vars.PLANNING_V2_CERTIFIED_COMMIT }}
+          JOURNEY_QUEUE_CONCURRENCY: "1"
+          PLANNING_V2_PERCENT: "0"
+          PLANNING_AI_CONCURRENCY: "1"
         run: |
-          if [ "${PLANNING_V2_PERCENT:-0}" != "0" ] && [ -z "$JOURNEY_QUEUE_CONCURRENCY" ]; then
-            echo '::error::Planning v2 requires provisioned Queues and measured concurrency'
-            exit 1
-          fi
-          if [ "${PLANNING_V2_PERCENT:-0}" != "0" ] && [ "$PLANNING_V2_CERTIFIED_COMMIT" != "$GITHUB_SHA" ]; then
-            echo '::error::Planning v2 requires real-model/load certification for this exact commit'
-            exit 1
-          fi
-          if [ -n "$JOURNEY_QUEUE_CONCURRENCY" ]; then
-            node apps/server/cloudflare/prepare-queue-config.mjs production
-            echo 'WRANGLER_CONFIG=apps/server/wrangler.generated.json' >> "$GITHUB_ENV"
-          else
-            echo 'WRANGLER_CONFIG=apps/server/wrangler.jsonc' >> "$GITHUB_ENV"
-          fi
+          node apps/server/cloudflare/prepare-queue-config.mjs production
+          echo 'WRANGLER_CONFIG=apps/server/wrangler.generated.json' >> "$GITHUB_ENV"
+
+      - name: Initialize isolated candidate test database
+        run: node apps/server/scripts/init-local-postgres.mjs
+        env:
+          DATABASE_PROVIDER: postgres
+          POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          POSTGRES_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
+
+      - name: Test candidate with real default model before production deployment
+        env:
+          PLANNING_V2_TEST_URL: postgresql://travel_e2e:test-only@127.0.0.1:5432/travel_api_test
+          PLANNING_LIVE_MODEL: "true"
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'cloudflare' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: 6b34ff1e99d15ffdbbb503dac4423549
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          NEXT_PUBLIC_APP_URL: https://ai-powered-travel-planner-api.vercel.app
+        run: |
+          for case_id in original-my-sg wide-my-sg short-da-nang; do
+            PLANNING_LIVE_CASE="$case_id" ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2-live.mts
+          done
+
+      - name: Sync configured third-party API secrets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/sync-planning-secrets.mjs
+
+      - name: Provision production Queue and DLQ
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/provision-planning-queues.mjs
 
       # Bundle before touching the database; Wrangler also validates the bindings.
       - name: Validate Worker bundle
@@ -324,12 +369,62 @@ jobs:
         env:
           API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
           EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
-          EXPECTED_PLANNING_V2_PERCENT: ${{ vars.PLANNING_V2_PERCENT }}
+          EXPECTED_PLANNING_V2_PERCENT: "0"
+          EXPECTED_PLANNING_CANARY: "true"
         run: node scripts/smoke-cloudflare.mjs
       - name: Verify deployed producer, consumer and dead-letter queue
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/check-planning-bindings.mjs
+
+      - name: Compare V1 and V2 generation on production (six sequential jobs)
+        env:
+          EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
+        run: node scripts/check-production-generation.mjs
+
+      - name: Promote V2 to all new requests after the canary passes
+        id: promote-v2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          JOURNEY_QUEUE_CONCURRENCY: "1"
+          PLANNING_AI_CONCURRENCY: "1"
+          PLANNING_V2_PERCENT: "100"
+        run: |
+          node apps/server/cloudflare/prepare-queue-config.mjs production
+          pnpm dlx wrangler@4.155.0 deploy --config "$WRANGLER_CONFIG" --var DEPLOY_COMMIT:${{ github.sha }}
+          node scripts/check-planning-bindings.mjs
+
+      - name: Verify promoted revision and ordinary V2 generation
+        env:
+          EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
+          EXPECTED_PLANNING_V2_PERCENT: "100"
+          PLANNING_CANARY_MODE: promoted
+        run: |
+          node scripts/smoke-cloudflare.mjs
+          node scripts/check-production-generation.mjs
+
+      - name: Stop general V2 admission if promotion verification fails
+        if: failure() && (steps.promote-v2.outcome == 'success' || steps.promote-v2.outcome == 'failure')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          JOURNEY_QUEUE_CONCURRENCY: "1"
+          PLANNING_AI_CONCURRENCY: "1"
+          PLANNING_V2_PERCENT: "0"
+        run: |
+          node apps/server/cloudflare/prepare-queue-config.mjs production
+          pnpm dlx wrangler@4.155.0 deploy --config "$WRANGLER_CONFIG" --var DEPLOY_COMMIT:${{ github.sha }}
+          node scripts/check-planning-bindings.mjs
+
+      - name: Preserve production and candidate evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: planning-production-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            test-results/production-generation/
+            test-results/generation-v2-live/
+          if-no-files-found: warn
+          retention-days: 7
 
   deploy:
     name: Deploy to Vercel

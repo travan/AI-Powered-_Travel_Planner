@@ -33,7 +33,7 @@ export class WeatherService {
       process.env.WEATHER_CONTACT_URL || process.env.NEXT_PUBLIC_APP_URL;
     if (!nasa && !contact) throw new Error("WEATHER_CONTACT_MISSING");
     const response = await fetch(url, {
-      redirect: "error",
+      redirect: "manual",
       headers: {
         "User-Agent": `TravelPlanner/1.0 (${contact ?? "NASA POWER client"})`,
         ...(previous?.modified

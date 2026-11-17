@@ -49,7 +49,14 @@ export default function ItineraryDetailScreen() {
           if (!status.ok) throw new Error("Unable to read planning status.");
           const job = (await status.json()) as PlanningJob;
           if (job.status === "failed")
-            throw new Error(planningErrorMessage(job.error_code));
+            throw new Error(
+              planningErrorMessage(
+                job.error_code,
+                undefined,
+                job.error_params,
+                job.pipeline_version,
+              ),
+            );
           pending = job.status !== "complete";
           itineraryId = job.itinerary_id ?? id;
         }
@@ -116,7 +123,9 @@ export default function ItineraryDetailScreen() {
   if (fetchState === "error" || !data) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>Failed to load. {error}</Text>
+        <Text style={styles.errorText}>
+          {error ?? "Unable to load itinerary."}
+        </Text>
       </View>
     );
   }

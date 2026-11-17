@@ -1,6 +1,15 @@
 # Catalog-first generation v2 — implementation verification
 
-Date: 2026-11-16. Production remains on pipeline v1 (`PLANNING_V2_PERCENT=0`). No production migration or application deployment was performed during these checks.
+Date: 2026-11-16. The original verification below is historical and does not certify the current candidate or production generation. The new release procedure is the [production canary](../deployment/planning-production-canary.md), with no staging prerequisite.
+
+## Current implementation follow-up
+
+- Added named destination context from bare country IDs, configurable V2 Cloudflare/Claude/OpenAI/Gemini adapters, bounded public day/slot diagnostics and logistics-specific description validation.
+- Independent dining is now a preference with a warning; allergies and explicit required restrictions still block unverified results.
+- The regression fixture is now the exact supplied request, without destination names/references. Earlier live reports used a fixture enriched with those optional fields.
+- Rechecked production job `8d40383b-8eaa-4be1-94d7-430c9b7344e4`: V1, 18 model calls, failed after the day-10 repair. Its stored public diagnostics are empty; access to historical Workers Logs returned 403, so the exact failing slot is not claimed as known.
+- Current candidate: 645 unit tests, 20 local API integration tests (one browser-only case skipped), four quota browser tests at desktop/mobile widths, and server/web/mobile type checks passed. The local PostgreSQL durability check admitted 100 unique jobs; the mock pipeline completed 100/100 ten-day jobs with no duplicate itineraries and exactly 100 mock calls. These are not production model certifications. Real-model control on 2026-11-16 returned HTTP 429, Cloudflare code 4006 (`AI_QUOTA_EXHAUSTED`). A subsequent full model response succeeded but city lookup failed with `LOCATION_LOOKUP_UNAVAILABLE`. OSM-backed Photon city failover has since resolved Kuala Lumpur/MY and Singapore/SG with valid timezones against the isolated test database. These are failed/incomplete pipeline gates, not a production generation certification. Do not promote until full model and production canary checks pass.
+
 
 ## Implemented
 
@@ -34,16 +43,12 @@ An earlier live call reached the city resolver and failed with 503; local DNS co
 
 Local mock timing does not certify Cloudflare Queue throughput, real model quota, HTTP latency under production traffic or the required ≥95% completion rate for feasible real-model fixtures.
 
-## Deployment gate still open
+## Release gate
 
-The account has a production Hyperdrive binding but no isolated staging DB/Hyperdrive/origin. Staging Queue and DLQ were provisioned, with no consumer deployed. Production Queue/DLQ provisioning and canary remain pending the staging gates. No plan or model upgrade was made.
-
-Before rollout, run the isolated staging tests at inference concurrency 1, 2, 4, 8 and 16. Require 100 simultaneous accounts, admission p95 ≤1 second, reads p95 ≤500 ms, infrastructure errors <0.5%, no lost jobs, terminal p95 ≤30 minutes and ≥95% complete feasible model fixtures, with no invalid success. Use the exact tested commit for CI certification, then canary 10% → 50% → 100%.
-
-See [the rollout runbook](../deployment/journey-capacity.md) for commands, configuration, recovery and rollback.
+The old staging-only release requirement is superseded by the [production canary runbook](../deployment/planning-production-canary.md). Local mock checks never certify model quality. Candidate model checks and actual production comparison must pass; quota exhaustion blocks promotion. The 100-account staging load experiment remains optional future capacity evidence, not a substitute for these real generation checks.
 
 ## Worldwide coverage follow-up
 
 The matrix includes Tokyo/Japan, Paris/France, New York/USA, London/UK, Sydney/Australia, Cape Town/South Africa, Rio/Brazil, Cairo/Egypt, Reykjavík/Iceland, Đà Nẵng/Vietnam, Auckland/New Zealand and Singapore. These fixtures test backend routing, provenance and the zero/one-call rule with synthetic catalog/pricing and a mock resolver/model. They do not certify venue availability, realistic international travel times/prices or live inference quality for these locations.
 
-When `independent_only=true` and there is no verified dining catalog, generation deliberately returns `PLANNING_DATA_INSUFFICIENT` / `required_dining_unverified`. It cannot claim the hard restriction was verified from an AI venue name alone. Resolver 429/503 during supplementation now stays `LOCATION_LOOKUP_UNAVAILABLE` instead of becoming an unexplained `PLANNING_FAILED`. Consequently, universal successful generation for arbitrary destinations is not a verified or supported guarantee at this stage.
+The earlier independent-dining failure expectation is superseded: `independent_only=true` now generates a warning when verification is unavailable. It never claims verification from an AI venue name. Allergies and explicit required dining restrictions still require evidence. Resolver 429/503 during supplementation now stays `LOCATION_LOOKUP_UNAVAILABLE` instead of becoming an unexplained `PLANNING_FAILED`. Consequently, universal successful generation for arbitrary destinations is not a verified or supported guarantee at this stage.

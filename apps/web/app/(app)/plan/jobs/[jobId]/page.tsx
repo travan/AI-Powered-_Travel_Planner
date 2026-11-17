@@ -9,10 +9,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "../../../../../lib/supabase/client";
-import { getJourneyJob, notifyJobStatusChanged, retryJourneyJob } from "../../../../../lib/journey-api";
+import {
+  getJourneyJob,
+  notifyJobStatusChanged,
+  retryJourneyJob,
+} from "../../../../../lib/journey-api";
 import { pollWhileVisible } from "@/lib/visible-poll";
 import { ApiRequestError } from "@/lib/api";
-import type { PlanningJob } from "@travel/types";
+import { planningQuotaState, type PlanningJob } from "@travel/types";
 import { useLocale, useTranslations } from "next-intl";
 const LABELS: Record<string, string> = {
   queued: "Yêu cầu đang chờ xử lý",
@@ -38,14 +42,20 @@ export default function JourneyJobPage() {
   const [job, setJob] = useState<PlanningJob | null>(null),
     [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
-  const retryKey = useRef<{ jobId: string; key: string } | undefined>(undefined);
+  const retryKey = useRef<{ jobId: string; key: string } | undefined>(
+    undefined,
+  );
   useEffect(() => {
     return pollWhileVisible(async (signal) => {
       try {
-        const { data: { session } } = await createClient().auth.getSession();
+        const {
+          data: { session },
+        } = await createClient().auth.getSession();
         if (signal.aborted) return false;
         if (!session) {
-          router.replace(`/login?redirectTo=${encodeURIComponent(`/plan/jobs/${jobId}`)}`);
+          router.replace(
+            `/login?redirectTo=${encodeURIComponent(`/plan/jobs/${jobId}`)}`,
+          );
           return false;
         }
         const next = await getJourneyJob(jobId, session.access_token, signal);
@@ -54,13 +64,18 @@ export default function JourneyJobPage() {
         setError("");
         if (next.status === "complete" || next.status === "failed") {
           notifyJobStatusChanged();
-          if (next.itinerary_id) router.replace(`/itinerary/${next.itinerary_id}`);
+          if (next.itinerary_id)
+            router.replace(`/itinerary/${next.itinerary_id}`);
           return false;
         }
         return true;
       } catch (e) {
         if (signal.aborted) return false;
-        setError(e instanceof Error ? e.message : "Không tải được trạng thái; đang kết nối lại.");
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Không tải được trạng thái; đang kết nối lại.",
+        );
         if (e instanceof ApiRequestError) {
           if ([401, 403, 404].includes(e.status)) return false;
           return e.retryAfterMs ?? true;
@@ -74,11 +89,17 @@ export default function JourneyJobPage() {
     if (retrying || !window.confirm(t("Thử lập lại lịch trình này?"))) return;
     setRetrying(true);
     try {
-      const { data: { session } } = await createClient().auth.getSession();
+      const {
+        data: { session },
+      } = await createClient().auth.getSession();
       if (!session) return;
       if (retryKey.current?.jobId !== jobId)
         retryKey.current = { jobId, key: crypto.randomUUID() };
-      const result = await retryJourneyJob(jobId, session.access_token, retryKey.current.key);
+      const result = await retryJourneyJob(
+        jobId,
+        session.access_token,
+        retryKey.current.key,
+      );
       notifyJobStatusChanged();
       setJob(null);
       router.replace(`/plan/jobs/${result.job_id}`);
@@ -88,9 +109,8 @@ export default function JourneyJobPage() {
       setRetrying(false);
     }
   };
-  const retryAt = job?.error_code === "AI_QUOTA_EXHAUSTED" &&
-    typeof job.error_params?.retry_at === "string"
-    ? Date.parse(job.error_params.retry_at) : NaN;
+  const quota = planningQuotaState(job);
+  const retryAt = quota.retryAt ?? NaN;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const delay = retryAt - Date.now();
@@ -100,7 +120,9 @@ export default function JourneyJobPage() {
   }, [retryAt]);
   const resetTime = Number.isFinite(retryAt)
     ? new Intl.DateTimeFormat(locale, {
-        dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Ho_Chi_Minh",
       }).format(retryAt)
     : "";
   return (
@@ -110,16 +132,21 @@ export default function JourneyJobPage() {
         <UiText id="t868f6c8e3c1e" fallback="HÀNH TRÌNH CỦA BẠN" />{" "}
       </p>
       <h1 className="text-3xl font-black">
-        {t(LABELS[job?.stage ?? "queued"] ?? "Đang xử lý")}
+        {quota.exhausted
+          ? requestsText("quota_title")
+          : t(LABELS[job?.stage ?? "queued"] ?? "Đang xử lý")}
       </h1>
       <p role="status">
         {job?.status === "failed" ? (
           job.error_code ? (
             issueText({
-              code: job.error_code === "PLANNING_INVALID" &&
+              code:
+                job.error_code === "PLANNING_INVALID" &&
                 typeof job.error_params?.reason === "string"
-                ? job.error_params.reason
-                : job.error_code,
+                  ? job.error_params.reason
+                  : job.error_code === "AI_QUOTA_EXHAUSTED" && !resetTime
+                    ? "AI_QUOTA_RESET_UNKNOWN"
+                    : job.error_code,
               params: { ...job.error_params, retry_time: resetTime },
               message: job.error ?? undefined,
             })
@@ -133,10 +160,24 @@ export default function JourneyJobPage() {
           />
         )}
       </p>
-      {job?.status === "failed" && job.kind === "generate" && job.error_code !== "PLANNING_INVALID" && (
-        <button type="button" disabled={retrying || retryAt > now} onClick={() => void retry()} className="rounded-full bg-primary px-5 py-3 text-white">
-          {t("Thử lại")}
-        </button>
+      {job?.status === "failed" &&
+        job.kind === "generate" &&
+        job.error_code !== "PLANNING_INVALID" &&
+        !quota.newRequestRequired &&
+        !(quota.exhausted && quota.retryAt === null) && (
+          <button
+            type="button"
+            disabled={retrying || retryAt > now}
+            onClick={() => void retry()}
+            className="rounded-full bg-primary px-5 py-3 text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t("Thử lại")}
+          </button>
+        )}
+      {quota.newRequestRequired && (
+        <p className="text-sm text-on-surface-variant">
+          {requestsText("quota_new_request")}
+        </p>
       )}
       {job?.status !== "failed" && job?.status !== "complete" && (
         <div className="h-2 animate-pulse rounded-full bg-primary/30" />
@@ -154,7 +195,11 @@ export default function JourneyJobPage() {
         href="/plan"
       >
         {" "}
-        <UiText id="t44a1a7c46056" fallback="Quay lại bộ lập kế hoạch" />{" "}
+        {quota.exhausted && !(retryAt > now) ? (
+          requestsText("new_request")
+        ) : (
+          <UiText id="t44a1a7c46056" fallback="Quay lại bộ lập kế hoạch" />
+        )}{" "}
       </Link>
     </main>
   );

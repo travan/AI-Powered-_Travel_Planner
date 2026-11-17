@@ -38,6 +38,49 @@ export function planningErrorParams(reason: unknown): Record<string, string> {
   return field ? { reason, field } : {};
 }
 
+const dayIssueCodes = new Set([
+  "MEAL_MISSING",
+  "ACTIVITIES_MISSING",
+  "EVENING_MISSING",
+  "HOTEL_RETURN_MISSING",
+  "SCHEDULE_CONFLICT",
+  "SCHEDULE_DETAILS_MISSING",
+  "REPEATED_PLACE",
+  "DAY_ENTRY_INCOMPLETE",
+  "DAY_MEAL_MISMATCH",
+  "DAY_VENUE_MISMATCH",
+  "DAY_PRICE_INVALID",
+  "DAY_COST_DUPLICATED",
+  "DAY_PLACE_REPEATED",
+]);
+export function validationErrorParams(
+  value: unknown,
+): Record<string, string | number> {
+  if (!value || typeof value !== "object") return {};
+  const source = value as Record<string, unknown>;
+  const result: Record<string, string | number> = {};
+  if (
+    Number.isInteger(source.day) &&
+    Number(source.day) >= 1 &&
+    Number(source.day) <= 30
+  )
+    result.day = Number(source.day);
+  for (let i = 1; i <= 5; i++) {
+    const code = source[`issue_${i}_code`],
+      slot = source[`issue_${i}_slot`];
+    if (
+      typeof code === "string" &&
+      dayIssueCodes.has(code) &&
+      typeof slot === "string" &&
+      /^[a-z0-9_]{1,80}$/.test(slot)
+    ) {
+      result[`issue_${i}_code`] = code;
+      result[`issue_${i}_slot`] = slot;
+    }
+  }
+  return result;
+}
+
 export function publicJobError(code?: string) {
   if (code && generationCodes.has(code)) return code;
   switch (code) {
@@ -46,6 +89,9 @@ export function publicJobError(code?: string) {
     case "AI_QUOTA_EXHAUSTED":
     case "AI_OUTLINE_INVALID":
     case "AI_DAY_INVALID":
+    case "AI_PROVIDER_CONFIGURATION_INVALID":
+    case "AI_AUTH_INVALID":
+    case "AI_RATE_LIMITED":
     case "NO_ITINERARY":
     case "LOCATION_LOOKUP_UNAVAILABLE":
       return code;
@@ -59,9 +105,23 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
     const quota = error.code === "AI_QUOTA_EXHAUSTED";
     const next = new Date();
     next.setUTCHours(24, 0, 0, 0);
-    const params: Record<string, string> = quota
-      ? { retry_at: next.toISOString() }
-      : {};
+    const params: Record<string, string | number> =
+      quota && error.provider === "cloudflare"
+        ? { retry_at: next.toISOString() }
+        : {};
+    if (error.details)
+      Object.assign(
+        params,
+        validationErrorParams({
+          day: error.details.day,
+          ...Object.fromEntries(
+            error.details.issues.slice(0, 5).flatMap((issue, index) => [
+              [`issue_${index + 1}_code`, issue.code],
+              [`issue_${index + 1}_slot`, issue.slot],
+            ]),
+          ),
+        }),
+      );
     return {
       code: error.code,
       params,
@@ -94,7 +154,25 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
   if (kind === "generate" && body?.code && generationCodes.has(body.code))
     return {
       code: body.code,
-      params: generationErrorParams(body.params?.reason),
+      params: {
+        ...generationErrorParams(body.params?.reason),
+        ...validationErrorParams(body.params),
+      },
+      status,
+      terminal: true,
+      retrySeconds: 15,
+    };
+  if (
+    kind === "generate" &&
+    [
+      "AI_PROVIDER_CONFIGURATION_INVALID",
+      "AI_AUTH_INVALID",
+      "AI_RATE_LIMITED",
+    ].includes(body?.code ?? "")
+  )
+    return {
+      code: body!.code!,
+      params: {},
       status,
       terminal: true,
       retrySeconds: 15,

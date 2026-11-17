@@ -20,7 +20,20 @@ function scenario(mode: "healthy" | "repair" | "invalid") {
     recordFailure: vi.fn(),
   };
   const cities = {
-    remember: vi.fn(),
+    remember: vi.fn(async (name: string) => ({
+      slug: name.startsWith("Kuala Lumpur") ? "kuala-lumpur" : "singapore",
+      name: {
+        en: name.startsWith("Kuala Lumpur") ? "Kuala Lumpur" : "Singapore",
+      },
+      country: name.startsWith("Kuala Lumpur") ? "MY" : "SG",
+      timezone: "Asia/Singapore",
+      places: [],
+      activities: [],
+      lat: null,
+      lon: null,
+      currency: "VND",
+      popular: false,
+    })),
     findForPlanning: vi.fn().mockResolvedValue(null),
   };
   let firstDay = true;
@@ -123,7 +136,7 @@ describe("production Malaysia–Singapore request", () => {
         cache_hit: false,
       });
       expect(repository.createComplete).toHaveBeenCalledOnce();
-      expect(cities.remember).not.toHaveBeenCalled();
+      expect(cities.remember).toHaveBeenCalledTimes(2);
       const saved = repository.createComplete.mock.calls[0]![0];
       expect(saved.request.start_date).toMatch(/^2027-01-/);
       expect(saved.request.end_date).toMatch(/^2027-01-/);

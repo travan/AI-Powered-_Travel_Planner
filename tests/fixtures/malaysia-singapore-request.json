@@ -1,0 +1,25 @@
+{
+  "budget": 20000000,
+  "cities": ["country-my", "country-sg"],
+  "locale": "vi",
+  "currency": "VND",
+  "num_days": 10,
+  "planning": {
+    "budget": { "total": 20000000, "currency": "VND" },
+    "journey": {
+      "origin": { "label": "Hà Nội", "source": "manual", "city_slug": "ha-noi" },
+      "timezone": "Asia/Ho_Chi_Minh",
+      "destinations": ["country-my", "country-sg"],
+      "return_to_origin": true
+    },
+    "travelers": { "adults": 2, "child_ages": [] },
+    "schema_version": 2,
+    "stay_preferences": { "type": "hotel", "rooms": 1, "requirements": [] },
+    "dining_preferences": { "cafe": "", "allergies": [], "requirements": [], "independent_only": true },
+    "transport_preferences": { "mode": "suggest", "confirmed": false, "airport_buffer_minutes": 120 },
+    "experience_preferences": { "pace": "balanced", "interests": [], "requirements": [] }
+  },
+  "trip_style": "mixed",
+  "num_travelers": 2,
+  "flexible_month": "2027-01"
+}

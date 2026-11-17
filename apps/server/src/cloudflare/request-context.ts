@@ -7,7 +7,7 @@ export type WorkersAI = {
 
 export const workerRequestContext = new AsyncLocalStorage<{
   pool: Pool;
-  ai: WorkersAI;
+  ai?: WorkersAI;
   rawAi?: WorkersAI;
   queue?: { send(body: { jobId: string }): Promise<unknown> };
   rateLimitedAtEdge?: boolean;

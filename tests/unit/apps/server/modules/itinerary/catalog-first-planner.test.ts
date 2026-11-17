@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogFirstPlanner } from "../../../../../../apps/server/src/modules/itinerary/generation/catalog-first-planner";
 import {
   prepareSnapshot,
+  scheduleTravel,
+  type Snapshot,
   applySupplement,
   ensureMandatoryBudget,
+  validateSupplementRequirements,
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-data";
 import {
   completePlan,
@@ -11,17 +14,80 @@ import {
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-assembler";
 import { workerRequestContext } from "../../../../../../apps/server/src/cloudflare/request-context";
 import { catalogScenario } from "../../../../fixtures/catalog-scenario";
+import travelCheckpoint from "../../../../fixtures/malaysia-singapore-travel-checkpoint.json";
 import realSupplement from "../../../../fixtures/malaysia-singapore-supplement.json";
 import { generationInput } from "../../../../../../apps/server/src/modules/itinerary/generation/generation-input";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 function fixture() {
+  vi.stubEnv("AI_PROVIDER", "cloudflare");
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-15T00:00:00Z"));
   return catalogScenario();
 }
 
 describe("catalog-first generation v2", () => {
+  it("assembles the recorded 4h/5h/6h travel response without dropping required meals or evenings", () => {
+    const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
+    scheduleTravel(snapshot);
+    snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
+    const plan = completePlan(snapshot);
+    expect(plan.days).toHaveLength(10);
+    expect(plan.total_cost).toBe(57893000);
+    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(
+      plan.issues?.some((i) =>
+        ["MEAL_MISSING", "EVENING_MISSING", "SCHEDULE_CONFLICT"].includes(
+          i.code,
+        ),
+      ),
+    ).toBe(false);
+    const last = snapshot.schedule.at(-1)!;
+    expect(last.slots.find((s) => s.coveredBy === "leg/3")).toMatchObject({
+      time: "18:00",
+      duration_minutes: 360,
+    });
+    expect(last.slots.find((s) => s.meal_slot === "dinner")?.time).toBe(
+      "17:00",
+    );
+    for (const day of snapshot.schedule)
+      for (const slot of day.slots) {
+        const [h, m] = slot.time.split(":").map(Number);
+        expect(h! * 60 + m! + slot.duration_minutes).toBeLessThanOrEqual(1440);
+      }
+    const scheduled = structuredClone(snapshot.schedule);
+    scheduleTravel(snapshot);
+    expect(snapshot.schedule).toEqual(scheduled);
+  });
+  it("does not move a confirmed departure to fit an overlong return leg", () => {
+    const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
+    snapshot.input.planning!.transport_preferences.departure_at =
+      "2027-01-10T19:00";
+    expect(() => scheduleTravel(snapshot)).toThrow("main travel does not fit");
+  });
+  it("softens independent dining without softening allergy requirements", () => {
+    const { input } = fixture();
+    input.planning!.dining_preferences.independent_only = true;
+    const snapshot = prepareSnapshot(
+      input,
+      input.cities.map((selected) => ({ selected, country: "MY" })),
+    );
+    const meal = snapshot.needs.find((need) => need.kind === "meal")!;
+    snapshot.needs = [meal];
+    snapshot.items[meal.key] = {
+      name: "Suggested dining area",
+      amount: 100000,
+      source: "ai_suggestion",
+      scope: "person",
+      assumption: "Unverified allowance",
+    };
+    expect(() => validateSupplementRequirements(snapshot)).not.toThrow();
+    input.planning!.dining_preferences.allergies = ["peanut"];
+    expect(() => validateSupplementRequirements(snapshot)).toThrow();
+  });
   it("supports a legacy destination-only day without inventing an external origin or fare", async () => {
     const { dto, cities } = fixture();
     delete dto.planning;
@@ -61,6 +127,27 @@ describe("catalog-first generation v2", () => {
     delete dto.planning;
     dto.start_date = "2027-02-30";
     expect(() => generationInput(dto)).toThrow();
+  });
+  it("rejects the production model's zero international fares rather than inventing affordability", () => {
+    const { input } = fixture();
+    const snapshot = prepareSnapshot(
+      input,
+      input.cities.map((selected) => ({
+        selected,
+        country: selected.endsWith("my") ? "MY" : "SG",
+      })),
+    );
+    snapshot.needs = snapshot.legs;
+    expect(() =>
+      applySupplement(snapshot, {
+        items: snapshot.legs.map((leg) => ({
+          key: leg.key,
+          name: `${leg.from} to ${leg.to}`,
+          amount: 0,
+          duration_minutes: 240,
+        })),
+      }),
+    ).toThrow("missing mandatory cost");
   });
   it("rejects the recorded real-model estimate because mandatory group travel/stay exceeds 20m VND", () => {
     const { input } = fixture();

@@ -25,9 +25,13 @@ export async function checkCloudflare(
   }
   const expectedPercent = Number(process.env.EXPECTED_PLANNING_V2_PERCENT || 0);
   if (
-    expectedPercent > 0 &&
+    (health.planning_pipeline ||
+      expectedPercent > 0 ||
+      process.env.EXPECTED_PLANNING_CANARY === "true") &&
     (health.planning_pipeline?.v2_percent !== expectedPercent ||
-      health.planning_pipeline?.queue_bound !== true)
+      ((expectedPercent > 0 ||
+        process.env.EXPECTED_PLANNING_CANARY === "true") &&
+        health.planning_pipeline?.queue_bound !== true))
   )
     throw new Error(
       "Production planning pipeline/Queue binding does not match the rollout configuration",

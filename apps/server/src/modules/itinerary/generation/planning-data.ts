@@ -66,6 +66,7 @@ export type Snapshot = {
   days: ItineraryDay[];
   legs: Need[];
   version: 2;
+  ai_config?: import("@travel/ai").SupplementConfig;
   legacy_destination_only?: boolean;
   travel_scheduled?: boolean;
 };
@@ -254,7 +255,14 @@ export function prepareSnapshot(
               "Catalog allowance for all local rides for the group this day.",
           };
       }
-      const pool = catalogs.get(dest.selected)!.places;
+      const pool =
+        kind === "meal" && criteria.dining_preferences.independent_only
+          ? [...catalogs.get(dest.selected)!.places].sort(
+              (a, b) =>
+                Number(b.tags.includes("independent")) -
+                Number(a.tags.includes("independent")),
+            )
+          : catalogs.get(dest.selected)!.places;
       if (!snapshot.items[key] && !item) {
         const picked = pool.find((p) => {
           const category = p.category ?? p.type;
@@ -303,12 +311,7 @@ export function prepareSnapshot(
             )
           )
             return false;
-          if (
-            kind === "meal" &&
-            (criteria.dining_preferences.allergies.length ||
-              (criteria.dining_preferences.independent_only &&
-                !p.tags.includes("independent")))
-          )
+          if (kind === "meal" && criteria.dining_preferences.allergies.length)
             return false;
           return true;
         });
@@ -574,8 +577,7 @@ export function validateSupplementRequirements(snapshot: Snapshot) {
       "required_experience_unverified",
     );
   if (
-    (snapshot.input.planning!.dining_preferences.independent_only ||
-      snapshot.input.planning!.dining_preferences.allergies.length ||
+    (snapshot.input.planning!.dining_preferences.allergies.length ||
       snapshot.input.planning!.dining_preferences.requirements.some(
         (r) => r.priority === "required",
       )) &&
@@ -628,7 +630,8 @@ export function scheduleTravel(snapshot: Snapshot) {
     const day = target ?? snapshot.schedule.at(-1)!;
     const incoming = !!target;
     const transport = snapshot.input.planning!.transport_preferences;
-    let start = incoming ? 8 * 60 + 30 : 19 * 60;
+    // Unconfirmed return travel must finish within the trip's final day.
+    let start = incoming ? 8 * 60 + 30 : Math.min(19 * 60, 24 * 60 - duration);
     if (
       incoming &&
       snapshot.schedule.indexOf(day) === 0 &&
@@ -665,8 +668,28 @@ export function scheduleTravel(snapshot: Snapshot) {
       let next = start + duration + 15;
       // Arrival-day meals remain present; all times are provisional local allowances.
       const kept: SlotDay["slots"] = [];
-      for (const slot of day.slots) {
+      const confirmedArrival =
+        snapshot.schedule.indexOf(day) === 0 &&
+        transport.arrival_at?.startsWith(day.date);
+      const optional = (slot: SlotDay["slots"][number]) =>
+        slot.kind === "cafe" ||
+        (slot.kind === "visit" && slot.slot_id !== "evening");
+      for (const [slotIndex, slot] of day.slots.entries()) {
         if (slot.kind === "check_out") continue;
+        if (
+          slot.meal_slot === "breakfast" &&
+          minutes(slot.time) + slot.duration_minutes <= start
+        ) {
+          if (!confirmedArrival)
+            kept.push({
+              ...slot,
+              displayName:
+                snapshot.input.locale === "vi"
+                  ? "Ăn sáng tại nơi xuất phát (chi phí dự trù, cần xác nhận)"
+                  : "Breakfast at departure (provisional allowance; confirm locally)",
+            });
+          continue;
+        }
         if (slot.kind === "visit" && minutes(slot.time) < start + duration + 15)
           continue;
         const time = Math.max(
@@ -674,6 +697,16 @@ export function scheduleTravel(snapshot: Snapshot) {
           next,
           slot.kind === "check_in" ? 14 * 60 : 0,
         );
+        // Optional stops must leave room for meals, check-in and the hotel return.
+        const requiredAfter = day.slots
+          .slice(slotIndex + 1)
+          .filter((s) => s.kind !== "check_out" && !optional(s));
+        const reserve = requiredAfter.reduce(
+          (sum, s) => sum + s.duration_minutes + 15,
+          0,
+        );
+        if (optional(slot) && time + slot.duration_minutes + reserve > 22 * 60)
+          continue;
         if (time + slot.duration_minutes > 22 * 60) {
           if (slot.kind === "visit" || slot.kind === "cafe") continue;
           throw new Error("arrival day cannot fit required meals and rest");
@@ -715,6 +748,23 @@ export function scheduleTravel(snapshot: Snapshot) {
         (a, b) => minutes(a.time) - minutes(b.time),
       );
     } else {
+      if (!transport.departure_at?.startsWith(day.date)) {
+        // Allow an early dinner before a long provisional return journey.
+        // Confirmed departures are never moved to make a template fit.
+        const dinner = day.slots.find((s) => s.meal_slot === "dinner");
+        if (dinner && minutes(dinner.time) + dinner.duration_minutes > start) {
+          const dinnerStart = start - dinner.duration_minutes;
+          if (dinnerStart >= 17 * 60) {
+            dinner.time = clock(dinnerStart);
+            day.slots = day.slots.filter(
+              (s) =>
+                s === dinner ||
+                minutes(s.time) + s.duration_minutes <= dinnerStart - 15 ||
+                minutes(s.time) >= start,
+            );
+          }
+        }
+      }
       day.slots = day.slots.filter(
         (s) =>
           s.slot_id !== "return" &&

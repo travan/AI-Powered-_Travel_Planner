@@ -34,7 +34,7 @@ export class CurrencyService {
     let status: number | undefined;
     try {
       const response = await fetch("https://open.er-api.com/v6/latest/USD", {
-        redirect: "error",
+        redirect: "manual",
         signal,
       });
       if (!response.ok) {

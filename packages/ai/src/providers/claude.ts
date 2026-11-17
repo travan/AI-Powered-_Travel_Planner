@@ -37,7 +37,8 @@ export class ClaudeProvider implements AIProvider {
     return [...this.usage];
   }
 
-  constructor(apiKey: string, model = "claude-3-5-sonnet-20241022") {
+  constructor(apiKey: string, model?: string) {
+    if (!model?.trim()) throw new Error("ANTHROPIC_MODEL is required");
     this.client = new Anthropic({ apiKey });
     this.model = model;
   }

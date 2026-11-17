@@ -1,3 +1,4 @@
+import { pipelineOverride } from "./pipeline-selection.js";
 import type {
   CatalogJob,
   DayTemplate,
@@ -27,6 +28,7 @@ import {
   classifyJobError,
   generationCodes,
   planningErrorParams,
+  validationErrorParams,
   publicJobError,
 } from "./planning-job-error.js";
 import type { ItineraryTranslation } from "@travel/types";
@@ -141,7 +143,12 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  async enqueue(userId: string, dto: GenerateItineraryDto, key?: string) {
+  async enqueue(
+    userId: string,
+    dto: GenerateItineraryDto,
+    key?: string,
+    pipeline?: string,
+  ) {
     if (process.env.JOURNEY_MVP_ENABLED === "false")
       throw new BadRequestException({
         code: "JOURNEY_DISABLED",
@@ -163,18 +170,21 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     const percent = Number(process.env.PLANNING_V2_PERCENT ?? 0);
     if (!Number.isInteger(percent) || percent < 0 || percent > 100)
       throw new Error("Invalid planning rollout percentage");
+    const override = pipelineOverride(userId, pipeline);
     const selected =
-      percent > 0 &&
-      (parseInt(
-        createHash("sha256")
-          .update(userId + generationKey(dto))
-          .digest("hex")
-          .slice(0, 8),
-        16,
-      ) /
-        0x100000000) *
-        100 <
-        percent;
+      override === 2 ||
+      (override !== 1 &&
+        percent > 0 &&
+        (parseInt(
+          createHash("sha256")
+            .update(userId + generationKey(dto))
+            .digest("hex")
+            .slice(0, 8),
+          16,
+        ) /
+          0x100000000) *
+          100 <
+          percent);
     const context = workerRequestContext.getStore();
     if (
       selected &&
@@ -284,10 +294,9 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async expireJobs() {
-    if (Number(process.env.PLANNING_V2_PERCENT ?? 0) > 0)
-      await this.sql.query(
-        `update itinerary_jobs set status='failed',stage='failed',error_code='GENERATION_DEADLINE_EXCEEDED',error=null,error_params=null,completed_at=now(),locked_until=null,claim_token=null where pipeline_version=2 and status in ('queued','processing') and deadline_at<=now()`,
-      );
+    await this.sql.query(
+      `update itinerary_jobs set status='failed',stage='failed',error_code='GENERATION_DEADLINE_EXCEEDED',error=null,error_params=null,completed_at=now(),locked_until=null,claim_token=null where pipeline_version=2 and status in ('queued','processing') and deadline_at<=now()`,
+    );
     await this.sql.query(
       `update itinerary_jobs set status='failed',stage='failed',
        error_code='PLANNING_FAILED',error_params=null,error=null,locked_until=null,claim_token=null
@@ -312,6 +321,15 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     );
     const row = result.rows[0];
     if (!row) throw new NotFoundException("Failed planning job not found.");
+    if (
+      row.error_code === "AI_QUOTA_EXHAUSTED" &&
+      (row.pipeline_version === 2 ||
+        Date.parse(row.error_params?.retry_at ?? "") > Date.now())
+    )
+      throw new ConflictException({
+        code: "AI_QUOTA_EXHAUSTED",
+        params: row.error_params ?? {},
+      });
     if (row.pipeline_version === 2) {
       if (row.deadline_at && Date.parse(row.deadline_at) <= Date.now())
         generationError("GENERATION_DEADLINE_EXCEEDED");
@@ -431,10 +449,15 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         source_kind?: TranslationPayload["sourceKind"];
         source_id?: string;
         trip_id?: string;
+        pipeline_version?: number;
+        ai_usage?: AiTokenUsage[];
+        usage_recorded?: boolean;
       }
     >(
       `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,
-        error_code,error_params,kind,
+        error_code,error_params,kind,pipeline_version,
+        exists(select 1 from planning_ai_attempts a where a.job_id=itinerary_jobs.id) as usage_recorded,
+        (select coalesce(jsonb_agg(call order by a.recorded_at), '[]'::jsonb) from planning_ai_attempts a cross join lateral jsonb_array_elements(a.calls) call where a.job_id=itinerary_jobs.id) as ai_usage,
         case when kind='translate' then payload->>'sourceKind' end as source_kind,
         case when kind='translate' then payload->>'sourceId' end as source_id,
         case when kind='revision' then payload->>'tripId' end as trip_id
@@ -458,6 +481,11 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       status: row.status,
       stage: row.stage,
       attempts: row.attempts,
+      pipeline_version: row.pipeline_version ?? 1,
+      ai_usage: row.ai_usage ?? [],
+      usage_recorded: row.usage_recorded === true,
+      provider: row.ai_usage?.at(-1)?.provider,
+      model: row.ai_usage?.at(-1)?.model,
       itinerary_id: row.itinerary_id,
       revision_id: row.revision_id,
       translation_id: row.translation_id,
@@ -466,10 +494,23 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       ...(row.status === "failed" && row.error_code === "PLANNING_INVALID"
         ? { error_params: planningErrorParams(row.error_params?.reason) }
         : row.status === "failed" && generationCodes.has(row.error_code ?? "")
-          ? { error_params: generationErrorParams(row.error_params?.reason) }
-          : row.status === "failed" && row.error_code === "AI_QUOTA_EXHAUSTED"
-            ? { error_params: { retry_at: row.error_params?.retry_at } }
-            : {}),
+          ? {
+              error_params: {
+                ...generationErrorParams(row.error_params?.reason),
+                ...validationErrorParams(row.error_params),
+              },
+            }
+          : row.status === "failed" && row.error_code === "AI_DAY_INVALID"
+            ? { error_params: validationErrorParams(row.error_params) }
+            : row.status === "failed" && row.error_code === "AI_QUOTA_EXHAUSTED"
+              ? {
+                  error_params:
+                    typeof row.error_params?.retry_at === "string" &&
+                    Number.isFinite(Date.parse(row.error_params.retry_at))
+                      ? { retry_at: row.error_params.retry_at }
+                      : {},
+                }
+              : {}),
     };
   }
   async processNextJob(id?: string) {
@@ -671,7 +712,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         stage,
         attempts: job?.attempts,
         status: failure.status,
-        code: failure.params.reason ?? failure.code,
+        code: String(failure.params.reason ?? failure.code),
         willRetry: Boolean(job && job.attempts < 3 && !failure.terminal),
       });
       if (job)

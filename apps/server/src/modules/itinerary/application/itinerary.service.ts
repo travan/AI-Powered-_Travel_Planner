@@ -557,6 +557,36 @@ export class ItineraryService {
     }
 
     await input.onStage?.("validation");
+    // A country ID from the outline is not proof that its proposed city belongs there.
+    const checkedCities = new Set<string>();
+    for (const day of detail.days) {
+      const country = countryDestinationReference(day.destination_slug ?? "");
+      if (!country || checkedCities.has(`${day.destination_slug}:${day.city}`))
+        continue;
+      let city: City | undefined = resolveCity(
+        routeCities.filter((entry) => !countryDestinationReference(entry.slug)),
+        day.city,
+      );
+      if (!city) {
+        try {
+          city = await this.cities.remember(`${day.city}, ${country.names.en}`);
+        } catch {
+          throw new HttpException({ code: "LOCATION_LOOKUP_UNAVAILABLE" }, 503);
+        }
+      }
+      if (!city || city.country !== country.country)
+        throw new HttpException(
+          {
+            code: "PLANNING_DATA_INSUFFICIENT",
+            params: { reason: "city_country_mismatch" },
+          },
+          422,
+        );
+      day.city_slug = city.slug;
+      if (!routeCities.some((entry) => entry.slug === city.slug))
+        routeCities.push({ ...city, places: [], activities: [] });
+      checkedCities.add(`${day.destination_slug}:${day.city}`);
+    }
     if (request.planning) {
       detail = upgradeJourneyPlan(detail, request);
       detail.locale = request.locale === "vi" ? "vi" : "en";

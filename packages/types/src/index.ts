@@ -24,3 +24,5 @@ export * from "./reference-places";
 export * from "./journey-route";
 
 export * from "./country-reference";
+
+export { planningQuotaState } from "./planning-quota";

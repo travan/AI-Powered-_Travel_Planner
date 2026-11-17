@@ -43,14 +43,19 @@ export function validateDayOutput(
       typeof row?.name !== "string" ||
       !row.name.trim() ||
       typeof row.description !== "string" ||
-      row.description.trim().split(/\s+/).length < 30
+      !row.description.trim() ||
+      (!["transfer", "check_in", "check_out", "rest"].includes(
+        slot.kind ?? "",
+      ) &&
+        row.description.trim().split(/\s+/).length < 30)
     )
       return issue(
         "DAY_ENTRY_INCOMPLETE",
-        "include exactly one specific, detailed entry (at least 30 words).",
+        "include exactly one specific entry; visits and meals need at least 30 words, logistics need a useful non-empty description.",
       );
     if (
       slot.kind === "meal" &&
+      /japan|日本|nhật bản/iu.test(JSON.stringify(input.cities)) &&
       input.planning?.experience_preferences.interests.some((interest) =>
         /ẩm thực địa phương|local food/iu.test(interest),
       ) &&

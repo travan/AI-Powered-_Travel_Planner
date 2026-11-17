@@ -15,6 +15,179 @@ const candidate = {
   namedetails: { "name:en": "Taipei", "name:vi": "Đài Bắc" },
 };
 describe("explicit location lookup", () => {
+  it("resolves cities on the Worker fetch contract, which rejects redirect:error before sending", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      if (init.redirect === "error")
+        throw new TypeError("Invalid redirect value, must be follow or manual");
+      return new Response(JSON.stringify([candidate]));
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(
+      (await new PlaceLookupService({ query }).cityCandidates("Taipei"))
+        .candidates[0]?.country,
+    ).toBe("TW");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+  it("refuses redirects instead of following to an unapproved resolver host", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      expect(init.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://unapproved.test" },
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      new PlaceLookupService({ query }).cityCandidates("Taipei"),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it("uses country-filtered OSM city results from Photon when Nominatim is unavailable", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string, _params?: unknown[]) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("DNS lookup failed"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            features: [
+              {
+                properties: {
+                  osm_type: "R",
+                  osm_id: 2939672,
+                  osm_value: "state",
+                  type: "city",
+                  name: "Kuala Lumpur",
+                  countrycode: "MY",
+                  country: "Malaysia",
+                },
+                geometry: { type: "Point", coordinates: [101.695, 3.151] },
+              },
+              {
+                properties: {
+                  osm_type: "N",
+                  osm_id: 222,
+                  type: "city",
+                  name: "Wrong country",
+                  countrycode: "SG",
+                },
+                geometry: { type: "Point", coordinates: [103.8, 1.3] },
+              },
+              {
+                properties: {
+                  osm_type: "N",
+                  osm_id: 333,
+                  type: "city",
+                  name: "Invalid coordinates",
+                  countrycode: "MY",
+                },
+                geometry: { type: "Point", coordinates: [999, 999] },
+              },
+            ],
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const result = await new PlaceLookupService({ query }).cityCandidates(
+      "Kuala Lumpur, MY",
+    );
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        name: "Kuala Lumpur",
+        country: "MY",
+        source_id: "relation/2939672",
+      }),
+    ]);
+    const url = new URL(fetch.mock.calls[1]![0]);
+    expect(url.searchParams.get("q")).toBe("Kuala Lumpur, Malaysia");
+    expect(url.searchParams.get("countrycode")).toBe("MY");
+    expect(
+      query.mock.calls.some(
+        ([sql, params]) =>
+          sql.includes("insert into travel_external_cache") &&
+          JSON.parse((params as unknown[])[1] as string)[0].geocoder ===
+            "photon",
+      ),
+    ).toBe(true);
+  });
+  it("does not fail over city lookup when the primary service explicitly rate limits", async () => {
+    vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+    const query = vi.fn(async (sql: string, _params?: unknown[]) => ({
+      rows: sql.includes("external_service_limits") ? [{ name: "lease" }] : [],
+    }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response("rate limited", { status: 429 }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      new PlaceLookupService({ query }).cityCandidates("Taipei"),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+  it.each([false, true])(
+    "falls back when primary city search only offers administrative regions (cached=%s)",
+    async (cached) => {
+      vi.stubEnv("WEATHER_CONTACT_URL", "https://example.test");
+      const region = {
+        ...candidate,
+        addresstype: "state",
+        type: "administrative",
+      };
+      const query = vi.fn(async (sql: string) => ({
+        rows: sql.includes("external_service_limits")
+          ? [{ name: "lease" }]
+          : sql.startsWith("select body") && cached
+            ? [{ body: [region] }]
+            : [],
+      }));
+      const fetch = vi.fn(
+        async (url: string) =>
+          new Response(
+            JSON.stringify(
+              url.includes("nominatim")
+                ? [region]
+                : {
+                    features: [
+                      {
+                        properties: {
+                          osm_type: "R",
+                          osm_id: 123,
+                          type: "city",
+                          name: "Taipei",
+                          countrycode: "TW",
+                        },
+                        geometry: { coordinates: [121.56, 25.03] },
+                      },
+                    ],
+                  },
+            ),
+          ),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const result = await new PlaceLookupService({ query }).cityCandidates(
+        "Taipei, TW",
+      );
+      expect(result.candidates).toEqual([
+        expect.objectContaining({
+          name: "Taipei",
+          country: "TW",
+          source_id: "relation/123",
+        }),
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(cached ? 1 : 2);
+    },
+  );
   it("serves cached candidates without a network request", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ body: [candidate] }] });
     const fetch = vi.fn();

@@ -17,7 +17,7 @@ const queues = [
 const binding = { type: "queue", name: "JOURNEY_QUEUE", queue_name: "jobs" };
 const consumer = {
   type: "worker",
-  script_name: "staging",
+  script: "staging",
   dead_letter_queue: "dead",
   settings: { max_concurrency: 4, batch_size: 1 },
 };
@@ -34,6 +34,15 @@ describe("deployed planning resources", () => {
   it("checks the real producer and consumer settings", async () => {
     await expect(
       verifyPlanningBindings(config, api()),
+    ).resolves.toBeUndefined();
+  });
+  it("accepts the legacy script_name response shape", async () => {
+    const { script, ...rest } = consumer;
+    await expect(
+      verifyPlanningBindings(
+        config,
+        api([binding], [{ ...rest, script_name: script }]),
+      ),
     ).resolves.toBeUndefined();
   });
   it("rejects a producer without a deployed consumer", async () => {

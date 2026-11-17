@@ -1,3 +1,11 @@
+export { destinationContext } from "./destination-context.js";
+export { createSupplementProvider, supplementConfig } from "./supplement.js";
+export type {
+  SupplementProvider,
+  SupplementConfig,
+  SupplementProviderName,
+  SupplementResponse,
+} from "./supplement.js";
 export { PlanningGenerationError } from "./providers/planning-generation-error.js";
 export { prepareDailySlots } from "./providers/daily-plan.js";
 export type { AIProvider, PreFetchedCityData } from "./provider.js";
@@ -47,6 +55,12 @@ function resolveKey(envVar: string, isDev: boolean): string | null {
   throw new Error(`${envVar} is not set`);
 }
 
+function configuredModel(envVar: string, isDev: boolean): string | undefined {
+  const model = process.env[envVar]?.trim();
+  if (!model && !isDev) throw new Error(`${envVar} is not set`);
+  return model;
+}
+
 export function createAIProvider(
   provider: AIProviderName = "openai",
   options: { workersAI?: WorkersAIBinding } = {},
@@ -63,15 +77,21 @@ export function createAIProvider(
       );
     case "openai": {
       const key = resolveKey("OPENAI_API_KEY", isDev);
-      return key === null ? new MockAIProvider() : new OpenAIProvider(key);
+      return key === null
+        ? new MockAIProvider()
+        : new OpenAIProvider(key, configuredModel("OPENAI_MODEL", isDev));
     }
     case "gemini": {
       const key = resolveKey("GEMINI_API_KEY", isDev);
-      return key === null ? new MockAIProvider() : new GeminiProvider(key);
+      return key === null
+        ? new MockAIProvider()
+        : new GeminiProvider(key, configuredModel("GEMINI_MODEL", isDev));
     }
     case "claude": {
       const key = resolveKey("ANTHROPIC_API_KEY", isDev);
-      return key === null ? new MockAIProvider() : new ClaudeProvider(key);
+      return key === null
+        ? new MockAIProvider()
+        : new ClaudeProvider(key, configuredModel("ANTHROPIC_MODEL", isDev));
     }
     case "ollama":
       return new OllamaProvider({
