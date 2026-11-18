@@ -356,6 +356,8 @@ export interface Itinerary {
 export interface AiTokenUsage {
   source_id?: string;
   diagnostic_code?: "invalid_fetch_context" | "response_parse_error" | "timeout" | "transport_error";
+  provider_status?: number;
+  provider_reason?: "invalid_api_key" | "api_key_restricted" | "model_not_found" | "request_rejected";
   operation: "overview" | "detail" | "translate";
   provider: string;
   model: string;

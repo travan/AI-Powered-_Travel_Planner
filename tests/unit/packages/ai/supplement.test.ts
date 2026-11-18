@@ -15,6 +15,13 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it("records a safe invalid-key diagnosis without retaining provider response text", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ error: { message: "API key not valid", reason: "API_KEY_INVALID", private: "do-not-record" } }), { status: 400 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_status: 400, provider_reason: "invalid_api_key" }]);
+    expect(JSON.stringify(adapter.getUsage())).not.toContain("do-not-record");
+  });
   it("binds the runtime fetch to the global scope", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test-key");
     const runtimeFetch = vi.fn(function (this: unknown) {
