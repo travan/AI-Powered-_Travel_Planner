@@ -6,7 +6,7 @@ import {
 import { destinationContext } from "../../../../packages/ai/src/destination-context";
 import { malaysiaSingaporeRequest } from "../../fixtures/malaysia-singapore-request";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const schema = {
   type: "object",
   properties: { cities: { type: "array" }, items: { type: "array" } },
@@ -15,6 +15,17 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it("binds the runtime fetch to the global scope", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    const runtimeFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    });
+    vi.stubGlobal("fetch", runtimeFetch);
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" } });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).resolves.toEqual({ response: content });
+    expect(runtimeFetch).toHaveBeenCalledOnce();
+  });
   it("uses the selected account key instead of the provider default", async () => {
     vi.stubEnv("GEMINI_API_KEY", "default-test-key");
     const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));

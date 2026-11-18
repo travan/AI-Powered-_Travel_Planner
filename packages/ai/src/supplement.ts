@@ -66,7 +66,7 @@ export function createSupplementProvider(
   const key = options.apiKey?.trim() || (keyName && process.env[keyName]?.trim());
   if (!key || key === "..." || key.includes("placeholder"))
     throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
-  return new HttpSupplementProvider(config, key, options.request ?? fetch);
+  return new HttpSupplementProvider(config, key, options.request ?? globalThis.fetch.bind(globalThis));
 }
 
 class HttpSupplementProvider implements SupplementProvider {
@@ -218,6 +218,11 @@ class HttpSupplementProvider implements SupplementProvider {
             : result.choices?.[0]?.message?.content;
       return { response: content ?? "" };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const diagnostic = error instanceof PlanningGenerationError ? undefined :
+        /illegal invocation|incorrect this reference/i.test(message) ? "invalid_fetch_context" as const :
+        error instanceof SyntaxError ? "response_parse_error" as const :
+        error instanceof Error && /timeout|abort/i.test(error.name) ? "timeout" as const : "transport_error" as const;
       if (!this.usage.length)
         this.usage.push({
           provider,
@@ -227,6 +232,7 @@ class HttpSupplementProvider implements SupplementProvider {
           output_tokens: null,
           total_tokens: null,
           duration_ms: Date.now() - started,
+          ...(diagnostic ? { diagnostic_code: diagnostic } : {}),
           outcome:
             error instanceof PlanningGenerationError &&
             error.code === "AI_QUOTA_EXHAUSTED"
