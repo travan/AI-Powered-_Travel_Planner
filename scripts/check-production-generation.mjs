@@ -343,7 +343,7 @@ export async function runProductionCanary({
     }
     const v2 = reports.filter((row) => row.pipeline === 2);
     assert.ok(
-      v2.length === (mode === "compare" ? 3 : 1) &&
+      v2.length === (mode === "compare" ? 3 : 2) &&
         v2.every((row) =>
           ["complete", "constraint_rejected"].includes(row.status),
         ),
