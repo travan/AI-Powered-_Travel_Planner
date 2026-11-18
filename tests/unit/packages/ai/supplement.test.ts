@@ -15,6 +15,13 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it("uses the selected account key instead of the provider default", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "default-test-key");
+    const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test-model" }, apiKey: "second-test-key", request });
+    await adapter.supplementRaw("prompt", "vi", schema);
+    expect((request.mock.calls[0]![1] as RequestInit).headers).toMatchObject({ "x-goog-api-key": "second-test-key" });
+  });
   it.each(["claude", "openai", "gemini"] as const)(
     "%s supplies structured data, preserves raw content and records usage",
     async (provider) => {

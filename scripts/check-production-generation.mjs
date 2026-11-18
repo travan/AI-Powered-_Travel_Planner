@@ -300,8 +300,11 @@ export async function runProductionCanary({
             pipeline,
             "Job used the wrong pipeline",
           );
-          if (pipeline === 2)
-            assert.ok(row.calls <= 1, "V2 dispatched AI more than once");
+          if (pipeline === 2) {
+            const usage = job.ai_usage ?? [];
+            assert.ok(usage.length <= 6 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected") &&
+              (usage.length <= 1 || usage[0].provider === "cloudflare"), "Unexpected V2 provider dispatches");
+          }
           let validationError;
           if (job.status === "complete") {
             const result = await session.json(
@@ -343,7 +346,7 @@ export async function runProductionCanary({
     }
     const v2 = reports.filter((row) => row.pipeline === 2);
     assert.ok(
-      v2.length === (mode === "compare" ? 3 : 1) &&
+      v2.length === (mode === "compare" ? 3 : 2) &&
         v2.every((row) =>
           ["complete", "constraint_rejected"].includes(row.status),
         ),

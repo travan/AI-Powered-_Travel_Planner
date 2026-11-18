@@ -354,6 +354,7 @@ export interface Itinerary {
 }
 
 export interface AiTokenUsage {
+  source_id?: string;
   operation: "overview" | "detail" | "translate";
   provider: string;
   model: string;

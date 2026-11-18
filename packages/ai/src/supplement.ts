@@ -53,6 +53,7 @@ export function createSupplementProvider(
     workersAI?: WorkersAIBinding;
     config?: SupplementConfig;
     request?: typeof fetch;
+    apiKey?: string;
   } = {},
 ): SupplementProvider {
   const config = options.config ?? supplementConfig();
@@ -62,7 +63,7 @@ export function createSupplementProvider(
     return new CloudflareAIProvider(options.workersAI, config.model);
   }
   const keyName = settings[config.provider].key;
-  const key = keyName && process.env[keyName]?.trim();
+  const key = options.apiKey?.trim() || (keyName && process.env[keyName]?.trim());
   if (!key || key === "..." || key.includes("placeholder"))
     throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
   return new HttpSupplementProvider(config, key, options.request ?? fetch);

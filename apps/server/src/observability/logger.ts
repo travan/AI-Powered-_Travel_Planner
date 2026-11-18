@@ -5,6 +5,7 @@ import type { LoggerService } from "@nestjs/common";
 type RecordFields = {
   requestId?: string;
   jobId?: string;
+  sourceId?: string;
   code?: string;
   durationMs?: number;
   route?: string;
@@ -33,7 +34,7 @@ export function logEvent(
     severity,
     time: new Date().toISOString(),
   };
-  for (const key of ["requestId", "jobId", "code", "stage", "slot"] as const) {
+  for (const key of ["requestId", "jobId", "sourceId", "code", "stage", "slot"] as const) {
     const value = merged[key];
     if (typeof value === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value))
       record[key] = value;

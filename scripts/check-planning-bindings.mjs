@@ -4,6 +4,15 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
+export function verifyFallbackSecrets(config, settings) {
+  const fallbacks = config.vars?.AI_FALLBACK_PROVIDERS
+    ? JSON.parse(config.vars.AI_FALLBACK_PROVIDERS)
+    : [];
+  for (const source of fallbacks)
+    assert.ok(settings.bindings?.some((b) => b.type === "secret_text" && b.name === source.key_env),
+      `Fallback source ${source.id} requires an encrypted Worker secret`);
+}
+
 export async function verifyPlanningBindings(config, api) {
   if (
     Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0 &&
@@ -31,6 +40,7 @@ export async function verifyPlanningBindings(config, api) {
   const settings = await api(
     `/workers/scripts/${encodeURIComponent(config.name)}/settings`,
   );
+  verifyFallbackSecrets(config, settings);
   const binding = settings.bindings?.find(
     (b) => b.type === "queue" && b.name === "JOURNEY_QUEUE",
   );

@@ -22,9 +22,11 @@ import {
   type SqlClient,
 } from "../../../database/database.tokens.js";
 import { workerRequestContext } from "../../../cloudflare/request-context.js";
+import { logEvent } from "../../../observability/logger.js";
 import { GenerationStore } from "./generation.store.js";
 import { generationInput, generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
+import { fallbackSources, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
 import {
   prepareSnapshot,
   applySupplement,
@@ -314,28 +316,37 @@ export class CatalogFirstPlanner {
       const workerContext = workerRequestContext.getStore();
       const binding = workerContext?.rawAi ?? workerContext?.ai;
       let provider: SupplementProvider | undefined;
+      let sources: FallbackSource[] = [];
       const raw = await this.store.once(
         job.generation_id,
-        async () => {
+        async (signal) => {
           provider ??= createSupplementProvider({
             workersAI: binding,
             config: state.ai_config,
           });
-          try {
-            return await provider.supplementRaw(
-              prompt,
-              state.input.locale,
-              schema,
-            );
-          } finally {
-            for (const usage of provider.getUsage()) options.onUsage?.(usage);
-            await this.store
-              .recordUsage?.(job.generation_id, provider.getUsage())
-              .catch(() => {});
-          }
+          let recorded = 0;
+          return supplementWithFallback({
+            primary: provider,
+            fallbacks: sources.map((source) => ({ id: source.id, create: () => {
+              const key = process.env[source.key_env]?.trim();
+              if (!key) throw new HttpException({ code: "AI_PROVIDER_CONFIGURATION_INVALID" }, 503);
+              return createSupplementProvider({ config: { provider: source.provider, model: source.model }, apiKey: key });
+            }})),
+            prompt, locale: state.input.locale, schema, signal,
+            onUsage: async (usage) => {
+              for (const item of usage.slice(recorded)) options.onUsage?.(item);
+              recorded = usage.length;
+              await this.store.recordUsage?.(job.generation_id, usage).catch(() => {});
+            },
+          });
         },
         () => {
           state.ai_config ??= supplementConfig();
+          sources = state.ai_config.provider === "cloudflare" ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS).filter((source) => {
+            if (process.env[source.key_env]?.trim()) return true;
+            logEvent("journey.ai_fallback_unconfigured", "warn", { sourceId: source.id, code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+            return false;
+          }) : [];
           provider = createSupplementProvider({
             workersAI: binding,
             config: state.ai_config,
