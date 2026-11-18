@@ -15,6 +15,12 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it("does not label every HTTP 404 as a missing model", async () => {
+    const request = vi.fn(async () => new Response("<html>Not found</html>", { status: 404 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_status: 404, provider_reason: "endpoint_not_found", provider_response_type: "html" }]);
+  });
   it("records a safe invalid-key diagnosis without retaining provider response text", async () => {
     const request = vi.fn(async () => new Response(JSON.stringify({ error: { message: "API key not valid", reason: "API_KEY_INVALID", private: "do-not-record" } }), { status: 400 }));
     const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });

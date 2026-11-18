@@ -149,6 +149,7 @@ class HttpSupplementProvider implements SupplementProvider {
     const started = Date.now();
     let providerStatus: number | undefined;
     let providerReason: AiTokenUsage["provider_reason"];
+    let providerResponseType: AiTokenUsage["provider_response_type"];
     try {
       const response = await this.request(url, {
         method: "POST",
@@ -159,9 +160,10 @@ class HttpSupplementProvider implements SupplementProvider {
       if (!response.ok) {
         const text = await response.text();
         providerStatus = response.status;
+        providerResponseType = /^\s*[{[]/.test(text) ? "json" : /^\s*(?:<!doctype|<html)/i.test(text) ? "html" : "other";
         providerReason = /API_KEY_INVALID|API key not valid/i.test(text) ? "invalid_api_key" :
           /API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED/i.test(text) ? "api_key_restricted" :
-          response.status === 404 ? "model_not_found" : response.status === 400 ? "request_rejected" : undefined;
+          response.status === 404 ? (/model[^\n]{0,200}not found|not found[^\n]{0,200}model/i.test(text) ? "model_not_found" : "endpoint_not_found") : response.status === 400 ? "request_rejected" : undefined;
         let code: PlanningGenerationError["code"] = "AI_UNAVAILABLE";
         if (response.status === 401 || response.status === 403)
           code = "AI_AUTH_INVALID";
@@ -241,6 +243,7 @@ class HttpSupplementProvider implements SupplementProvider {
           ...(diagnostic ? { diagnostic_code: diagnostic } : {}),
           ...(providerStatus ? { provider_status: providerStatus } : {}),
           ...(providerReason ? { provider_reason: providerReason } : {}),
+          ...(providerResponseType ? { provider_response_type: providerResponseType } : {}),
           outcome:
             error instanceof PlanningGenerationError &&
             error.code === "AI_QUOTA_EXHAUSTED"

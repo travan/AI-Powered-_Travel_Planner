@@ -357,7 +357,8 @@ export interface AiTokenUsage {
   source_id?: string;
   diagnostic_code?: "invalid_fetch_context" | "response_parse_error" | "timeout" | "transport_error";
   provider_status?: number;
-  provider_reason?: "invalid_api_key" | "api_key_restricted" | "model_not_found" | "request_rejected";
+  provider_reason?: "invalid_api_key" | "api_key_restricted" | "model_not_found" | "endpoint_not_found" | "request_rejected";
+  provider_response_type?: "json" | "html" | "other";
   operation: "overview" | "detail" | "translate";
   provider: string;
   model: string;
