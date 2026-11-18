@@ -60,12 +60,13 @@ if (
   throw new Error("Unsupported deployment AI provider");
 config.vars.AI_PROVIDER = provider;
 const fallback = target === "production" ? (process.env.DEPLOY_AI_FALLBACK_PROVIDERS ?? "") : "";
-if (fallback && provider !== "cloudflare")
-  throw new Error("Fallback sources require the Cloudflare primary provider");
+const maxFallbacks = Number(process.env.DEPLOY_AI_FALLBACK_MAX_SOURCES ?? 5);
+if (!Number.isInteger(maxFallbacks) || maxFallbacks < 1 || maxFallbacks > 20)
+  throw new Error("AI fallback limit must be between 1 and 20");
 if (fallback) {
   let sources;
   try { sources = JSON.parse(fallback); } catch { throw new Error("Invalid AI_FALLBACK_PROVIDERS JSON"); }
-  if (!Array.isArray(sources) || sources.length > 5) throw new Error("Invalid fallback sources");
+  if (!Array.isArray(sources) || sources.length > maxFallbacks) throw new Error("Invalid fallback sources");
   const names = new Set();
   const prefixes = { gemini: "GEMINI_API_KEY", openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY" };
   for (const source of sources) {
@@ -78,6 +79,7 @@ if (fallback) {
   }
 }
 config.vars.AI_FALLBACK_PROVIDERS = fallback;
+config.vars.AI_FALLBACK_MAX_SOURCES = String(maxFallbacks);
 config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "true" ? "true" : "false";
 for (const key of [
   "CLOUDFLARE_AI_MODEL",

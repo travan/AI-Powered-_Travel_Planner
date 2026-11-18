@@ -25,7 +25,7 @@ export async function planningCanaryCases() {
   return [
     { id: "original-my-sg", request: original, allowConstraintFailure: true },
     { id: "wide-my-sg", request: wide, allowConstraintFailure: false },
-    { id: "short-da-nang", request: short, allowConstraintFailure: false },
-    { id: "ha-giang", request: haGiang, allowConstraintFailure: false },
+    { id: "short-da-nang", request: short, allowConstraintFailure: false, promoted: true },
+    { id: "ha-giang", request: haGiang, allowConstraintFailure: false, promoted: true, compare: false },
   ];
 }

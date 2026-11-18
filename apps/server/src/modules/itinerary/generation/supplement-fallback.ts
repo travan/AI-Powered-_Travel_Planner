@@ -9,11 +9,11 @@ export function simulateCanaryQuota(userId: string, env: NodeJS.ProcessEnv): boo
   return env.AI_FALLBACK_CANARY_FORCE_QUOTA === "true" && env.AI_FALLBACK_CANARY_ONLY === "true" &&
     fallbackAllowed(userId, "true", env.PLANNING_CANARY_USER_IDS);
 }
-export function fallbackSources(value: string | undefined): FallbackSource[] {
+export function fallbackSources(value: string | undefined, limit = 5): FallbackSource[] {
   if (!value?.trim()) return [];
   let sources: unknown;
   try { sources = JSON.parse(value); } catch { throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID"); }
-  if (!Array.isArray(sources) || sources.length > 5) throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20 || !Array.isArray(sources) || sources.length > limit) throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
   const names = new Set<string>();
   for (const item of sources) {
     const prefixes: Record<string, string> = { gemini: "GEMINI_API_KEY", openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY" };

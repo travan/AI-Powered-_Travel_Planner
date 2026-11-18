@@ -215,6 +215,8 @@ export async function runProductionCanary({
   );
   const session = await canarySession(base, { request });
   const cases = await planningCanaryCases();
+  const selectedCases = cases.filter((test) => mode === "compare" ? test.compare !== false : test.promoted === true);
+  assert.ok(selectedCases.length > 0, "No production canary cases configured");
   const reports = [];
   await fs.mkdir(output, { recursive: true });
   const save = () =>
@@ -236,7 +238,7 @@ export async function runProductionCanary({
   try {
     // Establish V2 results before spending tokens on the legacy baseline.
     for (const pipeline of mode === "compare" ? [2, 1] : [2]) {
-      for (const test of mode === "compare" ? cases.slice(0, 3) : cases.filter((test) => ["short-da-nang", "ha-giang"].includes(test.id))) {
+      for (const test of selectedCases) {
         const started = Date.now();
         const row = {
           case: test.id,
@@ -302,8 +304,7 @@ export async function runProductionCanary({
           );
           if (pipeline === 2) {
             const usage = job.ai_usage ?? [];
-            assert.ok(usage.length <= 6 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected") &&
-              (usage.length <= 1 || usage[0].provider === "cloudflare"), "Unexpected V2 provider dispatches");
+            assert.ok(usage.length <= 21 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected"), "Unexpected V2 provider dispatches");
           }
           let validationError;
           if (job.status === "complete") {
@@ -346,7 +347,7 @@ export async function runProductionCanary({
     }
     const v2 = reports.filter((row) => row.pipeline === 2);
     assert.ok(
-      v2.length === (mode === "compare" ? 3 : 2) &&
+      v2.length === selectedCases.length &&
         v2.every((row) =>
           ["complete", "constraint_rejected"].includes(row.status),
         ),

@@ -344,7 +344,7 @@ export class CatalogFirstPlanner {
         () => {
           state.ai_config ??= supplementConfig();
           const allowFallback = fallbackAllowed(options.userId, process.env.AI_FALLBACK_CANARY_ONLY, process.env.PLANNING_CANARY_USER_IDS);
-          sources = state.ai_config.provider === "cloudflare" && allowFallback ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS).filter((source) => {
+          sources = allowFallback ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS, Number(process.env.AI_FALLBACK_MAX_SOURCES ?? 5)).filter((source) => {
             if (process.env[source.key_env]?.trim()) return true;
             logEvent("journey.ai_fallback_unconfigured", "warn", { sourceId: source.id, code: "AI_PROVIDER_CONFIGURATION_INVALID" });
             return false;

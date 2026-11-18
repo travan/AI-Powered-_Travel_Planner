@@ -1,7 +1,7 @@
 # AI fallback sources
 
-V2 can use a configurable, ordered list of up to five fallback sources after a
-definitive quota rejection. Cloudflare remains the primary provider. A timeout,
+V2 can use a configurable, ordered list of fallback sources after a
+definitive quota rejection. Cloudflare remains the default primary provider. A timeout,
 unknown result, authentication error or other provider error does not trigger
 another source. One durable dispatch ticket covers the complete sequence; a
 redelivered queue message does not repeat it.
@@ -37,3 +37,7 @@ API key. Existing jobs with a recorded response reuse it; unknown outcomes never
 trigger fallback on resume. A free-tier key does not guarantee availability or
 that another account uses an independent quota. Provider billing and data-use
 policies must be checked for every configured account.
+
+The default limit is five sources; set `AI_FALLBACK_MAX_SOURCES` (or the GitHub
+Actions variable of the same name) to a value from 1 through 20 when more are
+needed. This bounds the number of provider calls without changing code.
