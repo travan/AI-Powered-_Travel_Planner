@@ -29,6 +29,7 @@ import {
   generationCodes,
   planningErrorParams,
   validationErrorParams,
+  budgetErrorParams,
   publicJobError,
 } from "./planning-job-error.js";
 import type { ItineraryTranslation } from "@travel/types";
@@ -498,6 +499,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
               error_params: {
                 ...generationErrorParams(row.error_params?.reason),
                 ...validationErrorParams(row.error_params),
+                ...(row.error_code === "PLANNING_BUDGET_UNSATISFIABLE" ? budgetErrorParams(row.error_params) : {}),
               },
             }
           : row.status === "failed" && row.error_code === "AI_DAY_INVALID"
@@ -707,6 +709,11 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
           });
       }
       outcome = failure.code;
+      for (let i = 1; i <= 5; i++) {
+        const code = failure.params[`issue_${i}_code`];
+        if (typeof code === "string")
+          logEvent("journey.ai_validation_failed", "error", { jobId: job?.id, stage, code });
+      }
       logEvent("journey.job_failed", "error", {
         jobId: job?.id,
         stage,

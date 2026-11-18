@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pipelineOverride } from "../../../../../../apps/server/src/modules/itinerary/journey/pipeline-selection";
-import { validationErrorParams } from "../../../../../../apps/server/src/modules/itinerary/journey/planning-job-error";
+import { budgetErrorParams, validationErrorParams } from "../../../../../../apps/server/src/modules/itinerary/journey/planning-job-error";
 import { JourneyService } from "../../../../../../apps/server/src/modules/itinerary/journey/journey.service";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("production canary authorization", () => {
+  it("keeps only safe estimate amounts and route diagnostics", () => {
+    expect(budgetErrorParams({ estimated_total: 16170000, budget_total: 10000075, currency: "VND", raw: "private" })).toEqual({ estimated_total: 16170000, budget_total: 10000075, currency: "VND" });
+    expect(validationErrorParams({ issue_1_code: "JOURNEY_LEG_MISSING", issue_1_slot: "day" })).toEqual({ issue_1_code: "JOURNEY_LEG_MISSING", issue_1_slot: "day" });
+  });
   it("expires admitted V2 jobs even while the general rollout is zero", async () => {
     vi.stubEnv("PLANNING_V2_PERCENT", "0");
     const query = vi.fn().mockResolvedValue({ rows: [] });

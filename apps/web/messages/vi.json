@@ -1090,7 +1090,7 @@
     "GENERATION_FAILED": "Chưa tạo được lịch trình. Thông tin của bạn vẫn được giữ lại; hãy thử lại.",
     "CURRENCY_RATE_UNAVAILABLE": "Chưa lấy được tỷ giá. Các khoản tiền đã nhập vẫn được giữ nguyên.",
     "PLANNING_DATA_INSUFFICIENT": "Chưa đủ dữ liệu để tạo lịch trình đáp ứng yêu cầu. Hãy chọn thành phố cụ thể hoặc điều chỉnh tiêu chí.",
-    "PLANNING_BUDGET_UNSATISFIABLE": "Dự toán đầy đủ vượt ngân sách cả nhóm. Hãy điều chỉnh ngân sách, số ngày hoặc điểm đến.",
+    "PLANNING_BUDGET_UNSATISFIABLE": "Phương án này có dự toán vượt ngân sách cả nhóm. Hãy xem các khoản ước tính và điều chỉnh nếu cần.",
     "AI_RESPONSE_INVALID": "Dữ liệu AI bổ sung chưa hợp lệ. Hệ thống đã giữ phần dữ liệu hợp lệ và không tự gọi AI thêm.",
     "AI_RESULT_UNKNOWN": "Lần gọi AI chưa xác định được kết quả. Hệ thống không tự gọi lại để tránh phát sinh chi phí trùng.",
     "GENERATION_DEADLINE_EXCEEDED": "Yêu cầu đã vượt thời gian xử lý. Tiến độ được giữ; hãy tạo yêu cầu mới nếu cần.",

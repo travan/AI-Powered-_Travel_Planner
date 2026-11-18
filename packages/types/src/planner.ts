@@ -41,7 +41,10 @@ export function slugifyCityName(input: string): string {
   return input
     .trim()
     .toLocaleLowerCase()
-    .normalize("NFKC")
+    .normalize("NFKD")
+    .replace(/([a-z])\p{M}+/gu, "$1")
+    .replace(/đ/g, "d")
+    .normalize("NFC")
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
 }

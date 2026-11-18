@@ -33,7 +33,7 @@
 		"AUTH_PROVIDER": "local",
 		"AI_PROVIDER": "cloudflare",
 		"PLANNING_CATALOG_PERCENT": "0",
-		"PLANNING_V2_PERCENT": "0",
+		"PLANNING_V2_PERCENT": "100",
 		"PLANNING_AI_CONCURRENCY": "1",
 		"CLOUDFLARE_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 		"NEXT_PUBLIC_APP_URL": "https://ai-powered-travel-planner-api.vercel.app",

@@ -96,6 +96,24 @@ const cities: CityPlanningData[] = [
   },
 ];
 describe("travel enrichment", () => {
+  it("reconciles the Ha Giang group estimate without duplicating main travel", () => {
+    const p = plan();
+    p.num_days = 7;
+    const price = (amount: number, scope: "group" | "person") => ({ amount, scope, currency: "VND", status: "estimated" as const, basis: "planning_estimate" as const, assumption: "Unverified planning estimate" });
+    p.days = Array.from({ length: 7 }, (_, index) => ({ ...p.days[0]!, day_number: index + 1, city_slug: "ha-giang", activities: [
+      { name: "Local", kind: "transfer", category: "transport", cost: 200000, currency: "VND", price: price(200000, "group") },
+      ...(index === 0 ? [
+        { name: "Meals", kind: "meal", category: "food", cost: 2040000, currency: "VND", price: price(2040000, "person") },
+        { name: "Visits", description: "Estimated sightseeing", kind: "visit", category: "attraction", cost: 210000, currency: "VND", price: price(210000, "person") },
+      ] : []),
+    ] } as Itinerary["days"][number]));
+    p.hotels = [{ name: "Stay", city: "Ha Giang", city_slug: "ha-giang", nightly_estimate: 800000, rooms: 1, nights: 6 } as Itinerary["hotels"][number]];
+    p.transport_summary = ["outbound", "return"].map(segment => ({ segment, from: "A", to: "B", recommended_mode: "other", options: [], price: price(1000000, "person") } as Itinerary["transport_summary"][number]));
+    const criteria = createPlanningCriteria();
+    const input = { planning: criteria, cities: ["ha-giang"], currency: "VND", trip_style: "mixed", num_travelers: 2 } as ItineraryInput;
+    const result = reconcileBudget(p, input);
+    expect(result.budget_breakdown).toMatchObject({ accommodation: 4800000, food: 4080000, activities: 420000, transport: 5400000, contingency: 1470000, total: 16170000 });
+  });
   it("matches places within their city and ignores invented coordinates and URLs", () => {
     const p = plan();
     p.days[0]!.activities = [

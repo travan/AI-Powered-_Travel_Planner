@@ -236,7 +236,7 @@ export async function runProductionCanary({
   try {
     // Establish V2 results before spending tokens on the legacy baseline.
     for (const pipeline of mode === "compare" ? [2, 1] : [2]) {
-      for (const test of mode === "compare" ? cases : [cases[2]]) {
+      for (const test of mode === "compare" ? cases.slice(0, 3) : cases.filter((test) => ["short-da-nang", "ha-giang"].includes(test.id))) {
         const started = Date.now();
         const row = {
           case: test.id,

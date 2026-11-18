@@ -25,13 +25,13 @@ const norm = (s: string) =>
     .replace(/đ/g, "d")
     .replace(/[^a-z0-9]/g, "");
 export function resolveCity(cities: CityPlanningData[], value?: string) {
-  return value
-    ? cities.find((c) =>
-        [c.slug, ...Object.values(c.name)].some(
-          (n) => placeKey(n) === placeKey(value),
-        ),
-      )
-    : undefined;
+  if (!value) return undefined;
+  const exact = cities.filter((city) => city.slug === value);
+  if (exact.length === 1) return exact[0];
+  const matches = cities.filter((city) =>
+    [city.slug, ...Object.values(city.name)].some((name) => placeKey(name) === placeKey(value)),
+  );
+  return matches.length === 1 ? matches[0] : undefined;
 }
 const link = (platform: string, url: string): BookingLink => ({
   platform,
@@ -410,7 +410,11 @@ export function itineraryRouteIssues(
   const end =
     endpoint &&
     identity(endpoint.label, endpoint.names ? endpoint.city_slug : undefined);
-  const expected = journey.destinations;
+  // Resolve selected city IDs through the same catalog identity used for days
+  // and legs. Country IDs must remain country identities, not city slugs.
+  const expected = journey.destinations.map((destination) =>
+    countryDestinationReference(destination) ? destination : identity(destination),
+  );
   const days = plan.days ?? [];
   const visits: string[] = [];
   for (const [index, day] of days.entries()) {
