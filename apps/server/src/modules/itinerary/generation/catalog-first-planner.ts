@@ -7,6 +7,7 @@ import {
 import {
   createSupplementProvider,
   destinationContext,
+  PlanningGenerationError,
   supplementConfig,
   type SupplementProvider,
 } from "@travel/ai";
@@ -26,7 +27,7 @@ import { logEvent } from "../../../observability/logger.js";
 import { GenerationStore } from "./generation.store.js";
 import { generationInput, generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
-import { fallbackAllowed, fallbackSources, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
+import { fallbackAllowed, fallbackSources, simulateCanaryQuota, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
 import {
   prepareSnapshot,
   applySupplement,
@@ -352,6 +353,11 @@ export class CatalogFirstPlanner {
             workersAI: binding,
             config: state.ai_config,
           });
+          if (state.ai_config.provider === "cloudflare" && sources.length && simulateCanaryQuota(options.userId, process.env))
+            provider = {
+              supplementRaw: async () => { throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, "cloudflare"); },
+              getUsage: () => [{ operation: "detail", provider: "cloudflare", model: "canary-simulated-quota", input_tokens: null, output_tokens: null, total_tokens: null, outcome: "quota_rejected" }],
+            };
         },
       );
       let response: unknown;

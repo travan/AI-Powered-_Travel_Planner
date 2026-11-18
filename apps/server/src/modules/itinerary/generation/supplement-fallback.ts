@@ -5,6 +5,10 @@ export type FallbackSource = { id: string; provider: "gemini" | "openai" | "clau
 export function fallbackAllowed(userId: string, canaryOnly: string | undefined, allowlist: string | undefined): boolean {
   return canaryOnly !== "true" || (allowlist ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(userId);
 }
+export function simulateCanaryQuota(userId: string, env: NodeJS.ProcessEnv): boolean {
+  return env.AI_FALLBACK_CANARY_FORCE_QUOTA === "true" && env.AI_FALLBACK_CANARY_ONLY === "true" &&
+    fallbackAllowed(userId, "true", env.PLANNING_CANARY_USER_IDS);
+}
 export function fallbackSources(value: string | undefined): FallbackSource[] {
   if (!value?.trim()) return [];
   let sources: unknown;
