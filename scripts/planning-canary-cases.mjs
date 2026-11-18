@@ -17,9 +17,15 @@ export async function planningCanaryCases() {
   short.num_days = 3;
   short.budget = short.planning.budget.total = 30_000_000;
   short.planning.dining_preferences.independent_only = false;
+  const haGiang = structuredClone(original);
+  haGiang.cities = haGiang.planning.journey.destinations = ["ha-giang"];
+  haGiang.num_days = 7;
+  haGiang.budget = haGiang.planning.budget.total = 100_000_000;
+  haGiang.planning.dining_preferences.independent_only = false;
   return [
     { id: "original-my-sg", request: original, allowConstraintFailure: true },
     { id: "wide-my-sg", request: wide, allowConstraintFailure: false },
     { id: "short-da-nang", request: short, allowConstraintFailure: false },
+    { id: "ha-giang", request: haGiang, allowConstraintFailure: false },
   ];
 }

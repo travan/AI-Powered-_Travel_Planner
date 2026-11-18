@@ -77,6 +77,8 @@ describe("planning quota recovery", () => {
         message: "daily free allocation exhausted",
       }),
     ).toBe(true);
+    expect(isWorkersAiQuota({ code: 4006, message: "AiError: you have used up your daily free allocation of 10,000 neurons" })).toBe(true);
+    expect(isWorkersAiQuota({ code: 4006, message: "unknown provider failure" })).toBe(false);
   });
   it("shows mobile users the Vietnam reset time and an explicit fresh-request instruction", () => {
     const message = planningErrorMessage(

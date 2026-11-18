@@ -295,13 +295,13 @@ describe("compact planner submission", () => {
     await waitFor(() => expect(mock.generate).toHaveBeenCalledOnce());
     const sent = mock.generate.mock.calls[0]![0];
     expect(sent).toMatchObject({
-      cities: ["tây-an"],
+      cities: ["tay-an"],
       city_names: ["Tây An"],
       num_days: 3,
       num_travelers: 2,
       force_refresh: false,
       planning: {
-        journey: { origin: { label: "Hà Nội" }, destinations: ["tây-an"] },
+        journey: { origin: { label: "Hà Nội" }, destinations: ["tay-an"] },
       },
     });
     expect(mock.validate).not.toHaveBeenCalled();
@@ -374,7 +374,7 @@ describe("compact planner submission", () => {
     );
     fireEvent.click(screen.getByText("Lưu nháp"));
     const saved = JSON.parse(localStorage.getItem(key)!);
-    expect(saved.cities).toEqual([{ slug: "tây-an", name: "Tây An" }]);
+    expect(saved.cities).toEqual([{ slug: "tay-an", name: "Tây An" }]);
     expect(saved.destinationQuery).toBe("");
     fireEvent.click(
       screen.getByTestId("planner-optional-settings").querySelector("summary")!,
@@ -461,9 +461,9 @@ describe("compact planner submission", () => {
     await waitFor(() => expect(screen.getByTestId("web-plan-error")).toBeTruthy());
     const [firstRequest, , firstKey] = mock.generate.mock.calls[0]!;
     expect(firstRequest).toMatchObject({
-      cities: ["country-sg", "tây-an"],
+      cities: ["country-sg", "tay-an"],
       city_names: ["Singapore", "Tây An"],
-      planning: { journey: { destinations: ["country-sg", "tây-an"] } },
+      planning: { journey: { destinations: ["country-sg", "tay-an"] } },
     });
     cleanup();
     show();

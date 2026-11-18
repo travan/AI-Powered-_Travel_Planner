@@ -12,4 +12,10 @@ describe("manual city names", () => {
   it("keeps letters from non-Latin city names in the slug", () => {
     expect(slugifyCityName("東京")).toBe("東京");
   });
+
+  it("normalizes Vietnamese identifiers without changing their display names", () => {
+    expect(createManualCity("Hà Giang")).toEqual({ slug: "ha-giang", name: "Hà Giang" });
+    expect(slugifyCityName("Đà Nẵng")).toBe("da-nang");
+    expect(slugifyCityName("country-my")).toBe("country-my");
+  });
 });

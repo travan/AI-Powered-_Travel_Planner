@@ -24,7 +24,7 @@ if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 250)
     "Set JOURNEY_QUEUE_CONCURRENCY to the measured concurrency limit.",
   );
 const percent = Number(
-  process.env.PLANNING_V2_PERCENT || (target === "staging" ? 100 : 0),
+  process.env.PLANNING_V2_PERCENT || 100,
 );
 const aiConcurrency = Number(
   process.env.PLANNING_AI_CONCURRENCY || concurrency,

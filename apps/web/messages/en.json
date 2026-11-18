@@ -1090,7 +1090,7 @@
     "GENERATION_FAILED": "The itinerary could not be created. Your details have been kept; please retry.",
     "CURRENCY_RATE_UNAVAILABLE": "Exchange rates are unavailable. Your original amounts have been kept.",
     "PLANNING_DATA_INSUFFICIENT": "There is not enough data to satisfy this trip. Choose specific cities or adjust the requirements.",
-    "PLANNING_BUDGET_UNSATISFIABLE": "The complete group estimate exceeds the budget. Adjust the budget, duration or destinations.",
+    "PLANNING_BUDGET_UNSATISFIABLE": "This plan's estimated cost exceeds the group budget. Review the estimates and adjust as needed.",
     "AI_RESPONSE_INVALID": "The AI supplement was invalid. Valid progress was retained and no additional AI call was made.",
     "AI_RESULT_UNKNOWN": "The AI call outcome is unknown. It will not be called again automatically to avoid duplicate charges.",
     "GENERATION_DEADLINE_EXCEEDED": "The processing deadline was exceeded. Progress was retained; submit a new request if needed.",

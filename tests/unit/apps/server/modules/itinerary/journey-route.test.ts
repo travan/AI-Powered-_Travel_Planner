@@ -55,6 +55,18 @@ function fixture() {
 }
 
 describe("confirmed journey route", () => {
+  it("accepts an accented legacy destination ID with catalog-backed outbound and return legs", () => {
+    const planning = createPlanningCriteria();
+    planning.journey.origin = { label: "Hà Nội", city_slug: "ha-noi", source: "manual" };
+    planning.journey.destinations = ["hà-giang"];
+    planning.journey.return_to_origin = true;
+    const input = { planning, cities: ["hà-giang"], currency: "VND", trip_style: "mixed", locale: "vi", num_travelers: 2 } as ItineraryInput;
+    const plan = { days: [{ ...day("Ha Giang"), city_slug: "ha-giang", destination_slug: "hà-giang" }], transport_summary: [leg("Hà Nội", "Ha Giang"), leg("Ha Giang", "Hà Nội")] } as unknown as Itinerary;
+    const catalog = [{ slug: "ha-giang", name: { en: "Ha Giang", vi: "Hà Giang" }, country: "VN" }] as CityPlanningData[];
+    expect(itineraryRouteIssues(plan, input, catalog)).toEqual([]);
+    plan.transport_summary.pop();
+    expect(itineraryRouteIssues(plan, input, catalog).map(i => i.code)).toContain("JOURNEY_LEG_MISSING");
+  });
   it("accepts concrete cities inside selected countries without a whole-trip repair", () => {
     const input = malaysiaSingaporeRequest();
     const plan = {

@@ -160,6 +160,27 @@ export default function JourneyJobPage() {
           />
         )}
       </p>
+      {job?.status === "failed" && job.error_code === "PLANNING_BUDGET_UNSATISFIABLE" &&
+        typeof job.error_params?.estimated_total === "number" && (() => {
+          const params = job.error_params;
+          const format = (amount: number) => new Intl.NumberFormat(locale, {
+            style: "currency", currency: typeof params.currency === "string" ? params.currency : "VND", maximumFractionDigits: 0,
+          }).format(amount);
+          const rows = [
+            ["accommodation", locale === "vi" ? "Lưu trú" : "Accommodation"],
+            ["food", locale === "vi" ? "Ăn uống" : "Food"],
+            ["activities", locale === "vi" ? "Tham quan" : "Activities"],
+            ["transport", locale === "vi" ? "Di chuyển" : "Transport"],
+            ["contingency", locale === "vi" ? "Dự phòng" : "Contingency"],
+          ] as const;
+          return <section aria-label={locale === "vi" ? "Chi tiết dự toán" : "Estimate breakdown"}>
+            <p>{locale === "vi" ? "Các khoản là dự toán; giá AI đề xuất chưa được xác minh." : "These are estimates; AI-suggested prices are unverified."}</p>
+            <dl>{rows.map(([key, label]) => typeof params[key] === "number" && <div key={key} className="flex justify-between"><dt>{label}</dt><dd>{format(params[key] as number)}</dd></div>)}
+              <div className="flex justify-between font-bold"><dt>{locale === "vi" ? "Tổng dự toán" : "Estimated total"}</dt><dd>{format(params.estimated_total as number)}</dd></div>
+              {typeof params.budget_total === "number" && <div className="flex justify-between"><dt>{locale === "vi" ? "Vượt ngân sách" : "Over budget"}</dt><dd>{format(Math.max(0, (params.estimated_total as number) - params.budget_total))}</dd></div>}
+            </dl>
+          </section>;
+        })()}
       {job?.status === "failed" &&
         job.kind === "generate" &&
         job.error_code !== "PLANNING_INVALID" &&

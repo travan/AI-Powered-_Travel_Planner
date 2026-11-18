@@ -51,7 +51,7 @@ describe("shared planner model", () => {
     form.planning.journey.origin.label = " Hà Nội ";
     const result = preparePlannerSubmission(form, "vi");
     expect(result.request).toMatchObject({
-      cities: ["tây-an"],
+      cities: ["tay-an"],
       city_names: ["Tây An"],
       planning: { journey: { origin: { label: "Hà Nội" } } },
     });

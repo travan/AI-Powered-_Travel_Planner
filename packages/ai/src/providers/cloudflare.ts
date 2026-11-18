@@ -235,6 +235,8 @@ export class CloudflareAIProvider implements AIProvider {
             "cloudflare",
           );
         const code = String((error as { code?: unknown })?.code ?? "");
+        if (code === "4006" || /\b4006\s*:/.test(String((error as { message?: unknown })?.message ?? "")))
+          throw new PlanningGenerationError("AI_UNAVAILABLE", undefined, undefined, "cloudflare");
         if (["5007", "3042", "5028", "5035", "5016"].includes(code))
           throw new PlanningGenerationError(
             "AI_PROVIDER_CONFIGURATION_INVALID",

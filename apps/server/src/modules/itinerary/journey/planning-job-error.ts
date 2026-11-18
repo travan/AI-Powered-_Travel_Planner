@@ -39,6 +39,8 @@ export function planningErrorParams(reason: unknown): Record<string, string> {
 }
 
 const dayIssueCodes = new Set([
+  "JOURNEY_DAY_ORDER",
+  "JOURNEY_LEG_MISSING",
   "MEAL_MISSING",
   "ACTIVITIES_MISSING",
   "EVENING_MISSING",
@@ -53,6 +55,17 @@ const dayIssueCodes = new Set([
   "DAY_COST_DUPLICATED",
   "DAY_PLACE_REPEATED",
 ]);
+export function budgetErrorParams(value: unknown): Record<string, string | number> {
+  if (!value || typeof value !== "object") return {};
+  const source = value as Record<string, unknown>;
+  const result: Record<string, string | number> = {};
+  for (const key of ["budget_total", "estimated_total", "accommodation", "food", "activities", "transport", "contingency"]) {
+    const amount = source[key];
+    if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0 && amount <= 1e15) result[key] = amount;
+  }
+  if (typeof source.currency === "string" && /^[A-Z]{3}$/.test(source.currency)) result.currency = source.currency;
+  return result;
+}
 export function validationErrorParams(
   value: unknown,
 ): Record<string, string | number> {
@@ -157,6 +170,7 @@ export function classifyJobError(error: unknown, stage: string, kind: string) {
       params: {
         ...generationErrorParams(body.params?.reason),
         ...validationErrorParams(body.params),
+        ...(body.code === "PLANNING_BUDGET_UNSATISFIABLE" ? budgetErrorParams(body.params) : {}),
       },
       status,
       terminal: true,

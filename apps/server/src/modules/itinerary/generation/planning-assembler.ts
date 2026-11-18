@@ -284,6 +284,16 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     generationError(
       "PLANNING_BUDGET_UNSATISFIABLE",
       "group_total_exceeds_budget",
+      {
+        budget_total: input.budget ?? 0,
+        estimated_total: enriched.budget_breakdown.total,
+        accommodation: enriched.budget_breakdown.accommodation,
+        food: enriched.budget_breakdown.food,
+        activities: enriched.budget_breakdown.activities,
+        transport: enriched.budget_breakdown.transport,
+        contingency: enriched.budget_breakdown.contingency,
+        currency: enriched.currency,
+      },
     );
   if (input.budget !== undefined && !enriched.budget_breakdown.complete) {
     generationError("PLANNING_DATA_INSUFFICIENT", "budget_incomplete");
