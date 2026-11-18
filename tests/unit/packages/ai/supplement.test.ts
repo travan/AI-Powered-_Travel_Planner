@@ -15,6 +15,20 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it("bounds Gemini schema complexity without mutating the original constraints", async () => {
+    const complex = { type: "object", properties: { items: { type: "array", minItems: 80, maxItems: 80, items: { type: "object", properties: { key: { type: "string" }, amount: { type: "number", minimum: 0 } }, anyOf: [{ properties: { key: { enum: ["meal-1", "meal-2"] } } }] } } } };
+    const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "test-key", request });
+    await adapter.supplementRaw("prompt", "vi", complex);
+    const body = JSON.parse((request.mock.calls as unknown as [string, RequestInit][])[0]![1].body as string);
+    const itemSchema = body.generationConfig.responseJsonSchema.properties.items;
+    expect(itemSchema).not.toHaveProperty("minItems");
+    expect(itemSchema).not.toHaveProperty("maxItems");
+    expect(itemSchema.items).not.toHaveProperty("anyOf");
+    expect(itemSchema.items.properties.amount.minimum).toBe(0);
+    expect(complex.properties.items.items.anyOf).toHaveLength(1);
+    expect(complex.properties.items.minItems).toBe(80);
+  });
   it("does not label every HTTP 404 as a missing model", async () => {
     const request = vi.fn(async () => new Response("<html>Not found</html>", { status: 404 }));
     const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });

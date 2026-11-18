@@ -127,7 +127,7 @@ class HttpSupplementProvider implements SupplementProvider {
           maxOutputTokens: 6000,
           temperature: 0.2,
           responseMimeType: "application/json",
-          responseJsonSchema: schema,
+          responseJsonSchema: geminiSupplementSchema(schema),
         },
       };
     } else {
@@ -265,4 +265,18 @@ class HttpSupplementProvider implements SupplementProvider {
       throw new PlanningGenerationError("AI_RESULT_UNKNOWN");
     }
   }
+}
+
+/** Keep Gemini's output grammar bounded as the number of requested items grows.
+ * The application validates every key and price after receiving the response. */
+function geminiSupplementSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const result = structuredClone(schema);
+  const properties = result.properties as Record<string, any> | undefined;
+  const items = properties?.items;
+  if (items && typeof items === "object") {
+    delete items.minItems;
+    delete items.maxItems;
+    if (items.items && typeof items.items === "object") delete items.items.anyOf;
+  }
+  return result;
 }

@@ -12,11 +12,15 @@ Worker secret, never the secret value. Example:
 
 ```json
 [
-  {"id":"gemini-first","provider":"gemini","model":"gemini-2.5-flash","key_env":"GEMINI_API_KEY"},
-  {"id":"gemini-second","provider":"gemini","model":"gemini-2.5-flash","key_env":"GEMINI_API_KEY_2"},
+  {"id":"gemini-first","provider":"gemini","model":"CONFIGURED_GEMINI_MODEL","key_env":"GEMINI_API_KEY"},
+  {"id":"gemini-second","provider":"gemini","model":"CONFIGURED_GEMINI_MODEL","key_env":"GEMINI_API_KEY_2"},
   {"id":"openai-example","provider":"openai","model":"CONFIGURED_MODEL","key_env":"OPENAI_API_KEY"}
 ]
 ```
+
+Replace each model placeholder with a model available to that account and test
+it before enabling fallback for all users. Model availability and free-tier
+limits can change independently of this application.
 
 Supported fallback providers are `gemini`, `openai`, and `claude`. Secret names
 must begin with `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`
