@@ -2,6 +2,9 @@ import { PlanningGenerationError, type SupplementProvider, type SupplementRespon
 import type { AiTokenUsage } from "@travel/types";
 
 export type FallbackSource = { id: string; provider: "gemini" | "openai" | "claude"; model: string; key_env: string };
+export function fallbackAllowed(userId: string, canaryOnly: string | undefined, allowlist: string | undefined): boolean {
+  return canaryOnly !== "true" || (allowlist ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(userId);
+}
 export function fallbackSources(value: string | undefined): FallbackSource[] {
   if (!value?.trim()) return [];
   let sources: unknown;

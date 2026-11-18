@@ -26,7 +26,7 @@ import { logEvent } from "../../../observability/logger.js";
 import { GenerationStore } from "./generation.store.js";
 import { generationInput, generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
-import { fallbackSources, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
+import { fallbackAllowed, fallbackSources, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
 import {
   prepareSnapshot,
   applySupplement,
@@ -342,7 +342,8 @@ export class CatalogFirstPlanner {
         },
         () => {
           state.ai_config ??= supplementConfig();
-          sources = state.ai_config.provider === "cloudflare" ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS).filter((source) => {
+          const allowFallback = fallbackAllowed(options.userId, process.env.AI_FALLBACK_CANARY_ONLY, process.env.PLANNING_CANARY_USER_IDS);
+          sources = state.ai_config.provider === "cloudflare" && allowFallback ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS).filter((source) => {
             if (process.env[source.key_env]?.trim()) return true;
             logEvent("journey.ai_fallback_unconfigured", "warn", { sourceId: source.id, code: "AI_PROVIDER_CONFIGURATION_INVALID" });
             return false;

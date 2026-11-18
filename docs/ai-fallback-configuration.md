@@ -27,6 +27,10 @@ the source list; manual deployment uses `DEPLOY_AI_FALLBACK_PROVIDERS`. Invalid
 configuration fails preflight. Deployment checks that every configured key is an
 encrypted Worker secret. If a secret later becomes unavailable, that source is
 skipped with a warning without preventing the primary provider from working.
+Set `AI_FALLBACK_CANARY_ONLY=true` to restrict fallback to the existing
+`PLANNING_CANARY_USER_IDS` allowlist during live verification. Other jobs still
+use the primary provider. After verification, set it to `false` to enable the
+configured sources for all new jobs.
 
 Source usage records include the source ID, provider, model and outcome, not the
 API key. Existing jobs with a recorded response reuse it; unknown outcomes never

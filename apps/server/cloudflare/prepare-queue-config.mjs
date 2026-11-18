@@ -78,6 +78,7 @@ if (fallback) {
   }
 }
 config.vars.AI_FALLBACK_PROVIDERS = fallback;
+config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "true" ? "true" : "false";
 for (const key of [
   "CLOUDFLARE_AI_MODEL",
   "ANTHROPIC_MODEL",

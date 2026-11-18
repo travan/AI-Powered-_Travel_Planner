@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PlanningGenerationError, type SupplementProvider } from "../../../../../../packages/ai/src";
-import { fallbackSources, supplementWithFallback } from "../../../../../../apps/server/src/modules/itinerary/generation/supplement-fallback";
+import { fallbackAllowed, fallbackSources, supplementWithFallback } from "../../../../../../apps/server/src/modules/itinerary/generation/supplement-fallback";
 
 const quota = (provider: string) => new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, provider);
 function provider(name: string, outcome: unknown): SupplementProvider {
@@ -10,6 +10,11 @@ function provider(name: string, outcome: unknown): SupplementProvider {
   };
 }
 describe("configurable AI fallback", () => {
+  it("limits canary fallback to backend-allowlisted users", () => {
+    expect(fallbackAllowed("ci", "true", "ci,other")).toBe(true);
+    expect(fallbackAllowed("user", "true", "ci,other")).toBe(false);
+    expect(fallbackAllowed("user", "false", "ci")).toBe(true);
+  });
   it("validates bounded safe references and supports multiple accounts", () => {
     const entries = [{ id: "gemini-1", provider: "gemini", model: "gemini-2.5-flash", key_env: "GEMINI_API_KEY" }, { id: "gemini-2", provider: "gemini", model: "gemini-2.5-flash", key_env: "GEMINI_API_KEY_2" }];
     expect(fallbackSources(JSON.stringify(entries))).toEqual(entries);
