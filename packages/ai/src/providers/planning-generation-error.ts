@@ -28,10 +28,11 @@ export function isWorkersAiQuota(error: unknown): boolean {
   const value = error as { code?: string | number; message?: string };
   if (/capacity|temporarily busy|rate.?limit/i.test(value.message ?? ""))
     return false;
+  const message = value.message ?? "";
   return (
-    String(value.code) === "4006" ||
     String(value.code) === "3036" ||
-    /^(?:AiError:\s*)?(?:4006|3036):/i.test(value.message ?? "")
+    /\b3036\s*:/i.test(message) ||
+    /daily free allocation|daily (?:neuron |free )?(?:quota|limit)|used up your daily/i.test(message)
   );
 }
 
