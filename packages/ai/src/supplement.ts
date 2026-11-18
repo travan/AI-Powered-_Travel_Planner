@@ -150,6 +150,8 @@ class HttpSupplementProvider implements SupplementProvider {
     let providerStatus: number | undefined;
     let providerReason: AiTokenUsage["provider_reason"];
     let providerResponseType: AiTokenUsage["provider_response_type"];
+    let providerOrigin: AiTokenUsage["provider_origin"];
+    let providerApiStatus: AiTokenUsage["provider_api_status"];
     try {
       const response = await this.request(url, {
         method: "POST",
@@ -161,6 +163,13 @@ class HttpSupplementProvider implements SupplementProvider {
         const text = await response.text();
         providerStatus = response.status;
         providerResponseType = /^\s*[{[]/.test(text) ? "json" : /^\s*(?:<!doctype|<html)/i.test(text) ? "html" : "other";
+        try { providerOrigin = response.url ? (new URL(response.url).hostname === new URL(url).hostname ? "expected" : "unexpected") : "unknown"; } catch { providerOrigin = "unknown"; }
+        if (providerResponseType === "json") {
+          try {
+            const value = JSON.parse(text)?.error?.status;
+            if (typeof value === "string") providerApiStatus = ["NOT_FOUND", "INVALID_ARGUMENT", "PERMISSION_DENIED", "UNAUTHENTICATED", "RESOURCE_EXHAUSTED"].includes(value) ? value as AiTokenUsage["provider_api_status"] : "OTHER";
+          } catch { /* retain only the response type */ }
+        }
         providerReason = /API_KEY_INVALID|API key not valid/i.test(text) ? "invalid_api_key" :
           /API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED/i.test(text) ? "api_key_restricted" :
           response.status === 404 ? (/model[^\n]{0,200}not found|not found[^\n]{0,200}model/i.test(text) ? "model_not_found" : "endpoint_not_found") : response.status === 400 ? "request_rejected" : undefined;
@@ -244,6 +253,8 @@ class HttpSupplementProvider implements SupplementProvider {
           ...(providerStatus ? { provider_status: providerStatus } : {}),
           ...(providerReason ? { provider_reason: providerReason } : {}),
           ...(providerResponseType ? { provider_response_type: providerResponseType } : {}),
+          ...(providerOrigin ? { provider_origin: providerOrigin } : {}),
+          ...(providerApiStatus ? { provider_api_status: providerApiStatus } : {}),
           outcome:
             error instanceof PlanningGenerationError &&
             error.code === "AI_QUOTA_EXHAUSTED"
