@@ -19,3 +19,10 @@ condition = "AND"
 paths = ['''(?:^|/)apps/web/messages/ui-sources\.json$''']
 regexTarget = "secret"
 regexes = ['''^t20469f34b8d5$''']
+
+[[rules.allowlists]]
+description = "Exact itinerary item identifiers in the recorded Moscow response fixture"
+condition = "AND"
+paths = ['''(?:^|/)tests/unit/fixtures/beijing-moscow-supplement\.json$''']
+regexTarget = "secret"
+regexes = ['''^moscow/(?:cafe/daily|meal/dinner|10/evening)$''']
