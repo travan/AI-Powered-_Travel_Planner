@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test-fixtures";
 import { cachedScenario } from "../fixtures/index.mjs";
 import { injectWebMockAuthSession } from "./helpers/e2e-helpers";
 

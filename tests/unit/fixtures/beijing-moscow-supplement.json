@@ -1,0 +1,335 @@
+{
+  "items": [
+    {
+      "key": "bac-kinh/meal/breakfast",
+      "name": "Jingzun Peking Roast Duck",
+      "amount": 80000,
+      "duration_minutes": 60
+    },
+    {
+      "key": "bac-kinh/local/daily",
+      "name": "Beijing Public Transportation",
+      "amount": 20000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/1/morning_1",
+      "name": "Forbidden City",
+      "amount": 60000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/meal/lunch",
+      "name": "Quanjude Roast Duck Restaurant",
+      "amount": 120000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/1/afternoon_1",
+      "name": "Temple of Heaven",
+      "amount": 35000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/1/afternoon_2",
+      "name": "Wangfujing Street",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/cafe/daily",
+      "name": "Gongmei Coffee",
+      "amount": 40000,
+      "duration_minutes": 60
+    },
+    {
+      "key": "bac-kinh/meal/dinner",
+      "name": "Din Tai Fung",
+      "amount": 150000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/1/evening",
+      "name": "Qianmen Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/2/morning_1",
+      "name": "Summer Palace",
+      "amount": 50000,
+      "duration_minutes": 150
+    },
+    {
+      "key": "bac-kinh/2/afternoon_1",
+      "name": "Beijing Zoo",
+      "amount": 20000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/2/afternoon_2",
+      "name": "Panjiayuan Antique Market",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/2/evening",
+      "name": "Ghost Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/3/morning_1",
+      "name": "Ming Tombs",
+      "amount": 60000,
+      "duration_minutes": 150
+    },
+    {
+      "key": "bac-kinh/3/afternoon_1",
+      "name": "Beijing Botanical Garden",
+      "amount": 20000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/3/afternoon_2",
+      "name": "Fragrant Hills Park",
+      "amount": 20000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/3/evening",
+      "name": "Sanlitun Bar Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/4/morning_1",
+      "name": "Beijing Museum of Natural History",
+      "amount": 30000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/4/afternoon_1",
+      "name": "Confucius Temple",
+      "amount": 20000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/4/afternoon_2",
+      "name": "Guozijian Street",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/4/evening",
+      "name": "Houhai Lake",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/5/morning_1",
+      "name": "Beijing Aquarium",
+      "amount": 15000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "bac-kinh/5/afternoon_1",
+      "name": "China Science and Technology Museum",
+      "amount": 30000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/5/afternoon_2",
+      "name": "Olympic Park",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/5/evening",
+      "name": "The Place",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/meal/breakfast",
+      "name": "Bulka Bakery",
+      "amount": 60000,
+      "duration_minutes": 60
+    },
+    {
+      "key": "moscow/local/daily",
+      "name": "Moscow Metro",
+      "amount": 40000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/6/morning_1",
+      "name": "Kremlin",
+      "amount": 80000,
+      "duration_minutes": 150
+    },
+    {
+      "key": "moscow/meal/lunch",
+      "name": "Teremok",
+      "amount": 100000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/6/afternoon_1",
+      "name": "Red Square",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/6/afternoon_2",
+      "name": "GUM Department Store",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/cafe/daily",
+      "name": "Coffee Mania",
+      "amount": 50000,
+      "duration_minutes": 60
+    },
+    {
+      "key": "moscow/meal/dinner",
+      "name": "Mari Vanna",
+      "amount": 200000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/6/evening",
+      "name": "Arbat Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/7/morning_1",
+      "name": "Tretyakov Gallery",
+      "amount": 50000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/7/afternoon_1",
+      "name": "Novodevichy Convent",
+      "amount": 30000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/7/afternoon_2",
+      "name": "Sparrow Hills",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/7/evening",
+      "name": "Kolomenskoye Park",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/8/morning_1",
+      "name": "Pushkin Museum",
+      "amount": 30000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/8/afternoon_1",
+      "name": "Christ the Savior Cathedral",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/8/afternoon_2",
+      "name": "Zaryadye Park",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/8/evening",
+      "name": "Tverskaya Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/9/morning_1",
+      "name": "Moscow Zoo",
+      "amount": 20000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/9/afternoon_1",
+      "name": "Victory Park",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/9/afternoon_2",
+      "name": "Sokolniki Park",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/9/evening",
+      "name": "Izmailovo Kremlin",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/10/morning_1",
+      "name": "All-Russian Exhibition Centre",
+      "amount": 20000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "moscow/10/afternoon_1",
+      "name": "Ostankino Tower",
+      "amount": 30000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/10/afternoon_2",
+      "name": "VDNKh Park",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "moscow/10/evening",
+      "name": "Kuznetsky Most Street",
+      "amount": 0,
+      "duration_minutes": 120
+    },
+    {
+      "key": "bac-kinh/stay",
+      "name": "Wangfujing District",
+      "amount": 1200000,
+      "duration_minutes": 1440
+    },
+    {
+      "key": "moscow/stay",
+      "name": "Tverskoy District",
+      "amount": 1500000,
+      "duration_minutes": 1440
+    },
+    {
+      "key": "leg/1",
+      "name": "Hanoi to Beijing Flight",
+      "amount": 5000000,
+      "duration_minutes": 240
+    },
+    {
+      "key": "leg/2",
+      "name": "Beijing to Moscow Flight",
+      "amount": 8000000,
+      "duration_minutes": 480
+    },
+    {
+      "key": "leg/3",
+      "name": "Moscow to Hanoi Flight",
+      "amount": 7000000,
+      "duration_minutes": 600
+    }
+  ],
+  "cities": []
+}

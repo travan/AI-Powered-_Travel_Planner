@@ -4,23 +4,33 @@ import { MockAIProvider } from '../../../../../packages/ai/src/providers/mock.js
 
 // Mock the providers
 vi.mock('../../../../../packages/ai/src/providers/openai.js', () => ({
-  OpenAIProvider: vi.fn().mockImplementation((key: string) => ({ type: 'openai', key })),
+  OpenAIProvider: vi.fn().mockImplementation(function (key: string) {
+    return { type: 'openai', key };
+  }),
 }));
 
 vi.mock('../../../../../packages/ai/src/providers/gemini.js', () => ({
-  GeminiProvider: vi.fn().mockImplementation((key: string) => ({ type: 'gemini', key })),
+  GeminiProvider: vi.fn().mockImplementation(function (key: string) {
+    return { type: 'gemini', key };
+  }),
 }));
 
 vi.mock('../../../../../packages/ai/src/providers/claude.js', () => ({
-  ClaudeProvider: vi.fn().mockImplementation((key: string) => ({ type: 'claude', key })),
+  ClaudeProvider: vi.fn().mockImplementation(function (key: string) {
+    return { type: 'claude', key };
+  }),
 }));
 
 vi.mock('../../../../../packages/ai/src/providers/ollama.js', () => ({
-  OllamaProvider: vi.fn().mockImplementation((options: object) => ({ type: 'ollama', options })),
+  OllamaProvider: vi.fn().mockImplementation(function (options: object) {
+    return { type: 'ollama', options };
+  }),
 }));
 
 vi.mock('../../../../../packages/ai/src/providers/mock.js', () => ({
-  MockAIProvider: vi.fn().mockImplementation(() => ({ type: 'mock' })),
+  MockAIProvider: vi.fn().mockImplementation(function () {
+    return { type: 'mock' };
+  }),
 }));
 
 describe('createAIProvider', () => {

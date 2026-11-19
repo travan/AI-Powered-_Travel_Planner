@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test-fixtures";
 import { injectWebMockAuthSession } from "./helpers/e2e-helpers";
 
 test.describe("web desktop nav", () => {

@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test-fixtures";
 import { API_BASE_URL } from "./helpers/e2e-helpers";
 
 const tripId = "11111111-1111-4111-8111-111111111111";

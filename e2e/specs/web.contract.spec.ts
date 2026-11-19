@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test } from "./helpers/test-fixtures";
 import { cachedScenario, queuedScenario } from "../fixtures/index.mjs";
 import {
   expectItineraryPage,

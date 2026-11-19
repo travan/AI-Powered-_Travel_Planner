@@ -6,12 +6,13 @@ import {
   itineraryRouteIssues,
   reconcileBudget,
 } from "../enrichment/travel-enrichment.js";
-import { blockingCatalogIssues } from "../application/catalog-itinerary.js";
 import { generationError } from "./generation-error.js";
 import {
   matchesHours,
+  planningWarning,
   venueIdentity,
   type Snapshot,
+  type Item,
   type SlotDay,
 } from "./planning-data.js";
 const { upgradeJourneyPlan } =
@@ -33,32 +34,44 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
       : slot.coveredBy
         ? snapshot.items[slot.coveredBy]
         : undefined;
-    const amount = slot.coveredBy ? 0 : (item?.amount ?? 0);
+    const amount = slot.coveredBy || !slot.itemKey ? 0 : (item?.amount ?? null);
     if (slot.itemKey && (!item || item.amount === null))
-      generationError("PLANNING_DATA_INSUFFICIENT", "unpriced_slot");
+      planningWarning(
+        snapshot,
+        "PLANNING_ITEM_INCOMPLETE",
+        `Chưa có giá cho ${item?.name ?? slot.itemKey}.`,
+        `Price is missing for ${item?.name ?? slot.itemKey}.`,
+      );
     if (item && !matchesHours(item.hours, slot, day.date))
-      generationError(
-        "PLANNING_DATA_INSUFFICIENT",
-        "schedule_constraints_unsatisfied",
+      planningWarning(
+        snapshot,
+        "SCHEDULE_CONFLICT",
+        `Cần xác nhận giờ mở cửa của ${item.name}.`,
+        `Confirm opening hours for ${item.name}.`,
       );
     const booked = p.stay_preferences.booked_name;
     const name =
       slot.displayName ??
       item?.name ??
-      (slot.kind === "check_in" || slot.kind === "check_out"
-        ? (booked ??
-          stay?.name ??
-          (vi ? "Chỗ ở dự kiến" : "Planned accommodation"))
-        : day.day === input.num_days
-          ? vi
-            ? "Di chuyển tới điểm kết thúc hành trình"
-            : "Transfer to the final journey endpoint"
-          : vi
-            ? "Trở về chỗ ở"
-            : "Return to accommodation");
+      (slot.itemKey
+        ? vi
+          ? "Mục dự kiến — chưa đủ thông tin địa điểm"
+          : "Planned item — location details pending"
+        : slot.kind === "check_in" || slot.kind === "check_out"
+          ? (booked ??
+            stay?.name ??
+            (vi ? "Chỗ ở dự kiến" : "Planned accommodation"))
+          : day.day === input.num_days
+            ? vi
+              ? "Di chuyển tới điểm kết thúc hành trình"
+              : "Transfer to the final journey endpoint"
+            : vi
+              ? "Trở về chỗ ở"
+              : "Return to accommodation");
     return {
       name,
       main_transport: !!slot.coveredBy,
+      ...(slot.duringTransport ? { during_transport: true } : {}),
       kind: slot.kind,
       meal_slot: slot.meal_slot,
       time: slot.time,
@@ -95,9 +108,11 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
         status: "estimated",
         basis: "planning_estimate",
         assumption:
-          (slot.coveredBy
-            ? "Included in the main travel budget; duration is a provisional allowance. Confirm the actual service and local arrival/departure times."
-            : item?.assumption) ??
+          (slot.duringTransport
+            ? "Separate meal allowance during main travel, not a destination restaurant visit or a guaranteed onboard meal. Arrange food separately; not included in the main fare estimate."
+            : slot.coveredBy
+              ? "Included in the main travel budget; duration is a provisional allowance. Confirm the actual service and local arrival/departure times."
+              : item?.assumption) ??
           (slot.kind === "check_in" || slot.kind === "check_out"
             ? "Room charges are counted in the accommodation budget."
             : "Included in the daily local or main travel allowance; no extra charge."),
@@ -108,7 +123,12 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
   for (const activity of activities.filter((a) => a.kind === "visit")) {
     const identity = venueIdentity(activity.name);
     if (seen.has(identity))
-      generationError("AI_RESPONSE_INVALID", "duplicate_place");
+      planningWarning(
+        snapshot,
+        "REPEATED_PLACE",
+        `Địa điểm ${activity.name} bị lặp; có thể thay bằng địa điểm khác.`,
+        `${activity.name} is repeated; consider another venue.`,
+      );
     seen.add(identity);
   }
   return {
@@ -137,9 +157,16 @@ export function completePlan(snapshot: Snapshot): Itinerary {
       .slice(0, -1)
       .filter((day) => day.destination === d.selected).length;
     if (!nights || p.stay_preferences.type === "none") return [];
-    const item = snapshot.items[`${d.selected}/stay`];
-    if (!item || item.amount === null)
-      generationError("PLANNING_DATA_INSUFFICIENT", "lodging_price_missing");
+    const item: Item = snapshot.items[`${d.selected}/stay`] ?? {
+      name:
+        input.locale === "vi"
+          ? "Chưa chọn chỗ ở"
+          : "Accommodation not selected",
+      amount: null,
+      source: "ai_suggestion",
+      scope: "room_night",
+      assumption: "Price not available; confirm before booking.",
+    };
     return [
       {
         name: item.name,
@@ -155,7 +182,7 @@ export function completePlan(snapshot: Snapshot): Itinerary {
         city: d.city!.name.en ?? d.city!.slug,
         rooms: p.stay_preferences.rooms,
         nights,
-        nightly_estimate: item.amount,
+        nightly_estimate: item.amount ?? undefined,
         estimate_basis: "planning_estimate" as const,
         estimate_assumption: item.assumption,
         price_per_night: "",
@@ -186,12 +213,11 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     restaurants: [],
     suggestions: [],
     transport_summary: snapshot.legs.map((leg) => {
-      const item = snapshot.items[leg.key];
-      if (!item || item.amount === null)
-        generationError(
-          "PLANNING_DATA_INSUFFICIENT",
-          "main_travel_price_missing",
-        );
+      const item = snapshot.items[leg.key] ?? {
+        amount: null,
+        scope: "person" as const,
+        assumption: "Travel price is missing; confirm before booking.",
+      };
       return {
         segment: `${label(leg.from!)} → ${label(leg.to!)}`,
         from: label(leg.from!),
@@ -240,9 +266,11 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     const local =
       snapshot.items[`${snapshot.destinations[0]!.selected}/local/daily`];
     if (local?.amount == null)
-      generationError(
-        "PLANNING_DATA_INSUFFICIENT",
-        "main_travel_price_missing",
+      planningWarning(
+        snapshot,
+        "PLANNING_ITEM_INCOMPLETE",
+        "Chưa đủ dự toán di chuyển nội thành.",
+        "Local transport estimates are incomplete.",
       );
     plan.transport_summary.push({
       segment: plan.title,
@@ -317,25 +345,11 @@ export function completePlan(snapshot: Snapshot): Itinerary {
           : `Some lodging estimates exceed ${nightlyLimit} ${input.currency} per room per night.`,
     });
   if (input.budget !== undefined && !enriched.budget_breakdown.complete) {
-    generationError("PLANNING_DATA_INSUFFICIENT", "budget_incomplete");
-  }
-  const blocking = enriched.issues.filter(
-    (i) => i.severity === "error" || blockingCatalogIssues.has(i.code),
-  );
-  if (blocking.length) {
-    const day = enriched.days.find((d) => d.id === blocking[0]!.day_id);
-    generationError(
-      "PLANNING_DATA_INSUFFICIENT",
-      "schedule_constraints_unsatisfied",
-      {
-        ...(day ? { day: day.day_number } : {}),
-        ...Object.fromEntries(
-          blocking.slice(0, 5).flatMap((issue, i) => [
-            [`issue_${i + 1}_code`, issue.code],
-            [`issue_${i + 1}_slot`, "day"],
-          ]),
-        ),
-      },
+    planningWarning(
+      snapshot,
+      "BUDGET_INCOMPLETE",
+      "Dự toán chưa đầy đủ; tổng hiện có chưa bao gồm các khoản chưa xác định.",
+      "The budget is incomplete; current totals exclude unresolved costs.",
     );
   }
   if (p.dining_preferences.independent_only)
@@ -352,7 +366,12 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     for (const a of day.activities.filter((a) => a.kind === "visit")) {
       const id = `${day.city_slug}:${venueIdentity(a.name)}`;
       if (visits.has(id))
-        generationError("AI_RESPONSE_INVALID", "duplicate_place");
+        planningWarning(
+          snapshot,
+          "REPEATED_PLACE",
+          `Địa điểm ${a.name} bị lặp trong hành trình; cần kiểm tra và thay thế nếu muốn.`,
+          `${a.name} repeats across the trip; review and replace if needed.`,
+        );
       visits.add(id);
     }
   if (Object.values(snapshot.items).some((i) => i.source === "ai_suggestion"))
@@ -364,5 +383,8 @@ export function completePlan(snapshot: Snapshot): Itinerary {
           ? "Một số địa điểm và giá là gợi ý AI chưa kiểm chứng; cần xác nhận trước khi đặt."
           : "Some places and prices are unverified AI suggestions; confirm before booking.",
     });
+  enriched.issues = [...enriched.issues, ...(snapshot.warnings ?? [])].map(
+    (issue) => ({ ...issue, severity: "warning" as const }),
+  );
   return enriched;
 }
