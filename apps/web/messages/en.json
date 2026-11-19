@@ -1022,6 +1022,8 @@
     "OUTBOUND_MISSING": "The outbound segment needs more information.",
     "RETURN_MISSING": "The return segment needs more information.",
     "OVER_BUDGET": "Estimated cost exceeds the budget by {amount} {currency}.",
+    "MEAL_ESTIMATE_OVER_BUDGET": "Some meal estimates exceed {amount} {currency} per person per meal.",
+    "STAY_ESTIMATE_OVER_BUDGET": "Some lodging estimates exceed {amount} {currency} per room per night.",
     "TRAVEL_CONFLICT": "{activity}: overlaps travel or its time buffer.",
     "OVERLAP": "{activity}: overlaps the previous item.",
     "REQUIREMENTS_UNVERIFIED": "Verify required criteria: {criteria}.",

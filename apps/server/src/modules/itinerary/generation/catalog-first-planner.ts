@@ -7,6 +7,7 @@ import {
 import {
   createSupplementProvider,
   destinationContext,
+  PlanningGenerationError,
   supplementConfig,
   type SupplementProvider,
 } from "@travel/ai";
@@ -22,19 +23,21 @@ import {
   type SqlClient,
 } from "../../../database/database.tokens.js";
 import { workerRequestContext } from "../../../cloudflare/request-context.js";
+import { logEvent } from "../../../observability/logger.js";
 import { GenerationStore } from "./generation.store.js";
 import { generationInput, generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
+import { fallbackAllowed, fallbackSources, simulateCanaryQuota, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
 import {
   prepareSnapshot,
   applySupplement,
   scheduleTravel,
-  ensureMandatoryBudget,
   validateSupplementRequirements,
   type Snapshot,
   type Destination,
 } from "./planning-data.js";
 import { assembleDay, completePlan } from "./planning-assembler.js";
+import { supplementBudget } from "./planning-budget.js";
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 const {
   countryDestinationReference,
@@ -80,6 +83,24 @@ const supplementSchema = {
           },
           amount: { type: "number", minimum: 0 },
           duration_minutes: { type: "integer", minimum: 15, maximum: 1440 },
+          alternatives: {
+            type: "array",
+            maxItems: 2,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "amount", "duration_minutes"],
+              properties: {
+                name: { type: "string" },
+                amount: { type: "number", minimum: 0 },
+                duration_minutes: {
+                  type: "integer",
+                  minimum: 15,
+                  maximum: 1440,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -191,7 +212,6 @@ export class CatalogFirstPlanner {
       );
     }
     const state = snapshot as Snapshot;
-    ensureMandatoryBudget(state);
     if (state.needs.length || state.destinations.some((d) => !d.city)) {
       await options.onStage?.("supplement");
       const schema = structuredClone(supplementSchema);
@@ -255,11 +275,12 @@ export class CatalogFirstPlanner {
         "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
         "For a stay without fixed_name, name a real, specific lodging neighborhood/district within the selected city; never return 'Hotel in <city>' or claim an unverified property is booked. The amount is the room/night allowance in that area, not a property quote. For meals/cafes use a specific venue or named dining area. All sightseeing visits must be distinct real venues/areas across days, not repeated names or generic sightseeing. " +
         "Return cities only for destinations whose city is missing; otherwise cities=[]. cities[].country must be the exact two-letter ISO code from the destination context, never the country name. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Estimate every mandatory fare and stay independently at realistic positive prices even when their sum exceeds total_group_budget. The server decides budget feasibility. Never reduce or zero fares to fit the requested budget; an over-budget estimate is a valid response, free unconfirmed international travel is not.\n` +
+        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Prioritize total_group_budget when selecting options. Use budget_allocation.targets to select affordable real options BEFORE estimating prices. Multiply each amount by group_units and keep the sum within remaining_before_contingency. Category targets can be redistributed to prioritize the combined budget. If no realistic compatible option fits, still return the real estimated costs for the best available plan; the server will show a budget warning rather than fail the request. Prefer free sightseeing, inexpensive dining areas, budget lodging districts and economical travel compatible with transport preferences. If a primary option exceeds its target and has no fixed_name or fixed_amount, supply up to two cheaper real alternatives with their own names, amounts and travel durations; the server will select the cheapest compatible option. Use alternatives=[] for already affordable or fixed items. When no total_group_budget is supplied, follow traveler preferences and use alternatives=[]. Do not lower the price of the same option just to fit a target, invent free mandatory travel, change confirmed costs or violate required preferences.\n` +
         "";
       const context = {
         currency: state.input.currency,
         total_group_budget: state.input.budget,
+        budget_allocation: supplementBudget(state),
         people: state.input.num_travelers,
         days: state.input.num_days,
         rooms: state.input.planning!.stay_preferences.rooms,
@@ -314,32 +335,47 @@ export class CatalogFirstPlanner {
       const workerContext = workerRequestContext.getStore();
       const binding = workerContext?.rawAi ?? workerContext?.ai;
       let provider: SupplementProvider | undefined;
+      let sources: FallbackSource[] = [];
       const raw = await this.store.once(
         job.generation_id,
-        async () => {
+        async (signal) => {
           provider ??= createSupplementProvider({
             workersAI: binding,
             config: state.ai_config,
           });
-          try {
-            return await provider.supplementRaw(
-              prompt,
-              state.input.locale,
-              schema,
-            );
-          } finally {
-            for (const usage of provider.getUsage()) options.onUsage?.(usage);
-            await this.store
-              .recordUsage?.(job.generation_id, provider.getUsage())
-              .catch(() => {});
-          }
+          let recorded = 0;
+          return supplementWithFallback({
+            primary: provider,
+            fallbacks: sources.map((source) => ({ id: source.id, create: () => {
+              const key = process.env[source.key_env]?.trim();
+              if (!key) throw new HttpException({ code: "AI_PROVIDER_CONFIGURATION_INVALID" }, 503);
+              return createSupplementProvider({ config: { provider: source.provider, model: source.model }, apiKey: key });
+            }})),
+            prompt, locale: state.input.locale, schema, signal,
+            onUsage: async (usage) => {
+              for (const item of usage.slice(recorded)) options.onUsage?.(item);
+              recorded = usage.length;
+              await this.store.recordUsage?.(job.generation_id, usage).catch(() => {});
+            },
+          });
         },
         () => {
           state.ai_config ??= supplementConfig();
+          const allowFallback = fallbackAllowed(options.userId, process.env.AI_FALLBACK_CANARY_ONLY, process.env.PLANNING_CANARY_USER_IDS);
+          sources = allowFallback ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS, Number(process.env.AI_FALLBACK_MAX_SOURCES ?? 5)).filter((source) => {
+            if (process.env[source.key_env]?.trim()) return true;
+            logEvent("journey.ai_fallback_unconfigured", "warn", { sourceId: source.id, code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+            return false;
+          }) : [];
           provider = createSupplementProvider({
             workersAI: binding,
             config: state.ai_config,
           });
+          if (state.ai_config.provider === "cloudflare" && sources.length && simulateCanaryQuota(options.userId, process.env))
+            provider = {
+              supplementRaw: async () => { throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, "cloudflare"); },
+              getUsage: () => [{ operation: "detail", provider: "cloudflare", model: "canary-simulated-quota", input_tokens: null, output_tokens: null, total_tokens: null, outcome: "quota_rejected" }],
+            };
         },
       );
       let response: unknown;
@@ -353,7 +389,6 @@ export class CatalogFirstPlanner {
         if (error instanceof HttpException) throw error;
         generationError("AI_RESPONSE_INVALID", "supplement_invalid");
       }
-      ensureMandatoryBudget(state);
       validateSupplementRequirements(state);
       const proposals = (
         response as {
@@ -471,9 +506,7 @@ export class CatalogFirstPlanner {
     return (
       plan.days.length === (input.num_days ?? 1) &&
       !plan.issues?.some(
-        (i) =>
-          i.severity === "error" ||
-          ["OVER_BUDGET", "BUDGET_INCOMPLETE"].includes(i.code),
+        (i) => i.severity === "error" || i.code === "BUDGET_INCOMPLETE",
       ) &&
       plan.days.every(
         (d) =>

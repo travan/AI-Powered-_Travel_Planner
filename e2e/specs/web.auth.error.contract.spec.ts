@@ -26,7 +26,8 @@ async function injectSignUpError(page: import("@playwright/test").Page, scenario
 
 test.describe("web auth error normalization contract", () => {
   test("signup with duplicate email shows normalized error message", async ({ page }) => {
-    await page.goto("/signup");
+    // Form assertions should not wait for third-party decorative images/fonts.
+    await page.goto("/signup", { waitUntil: "domcontentloaded" });
     await injectSignUpError(page, {
       message: "User already registered",
       code: "user_already_exists",
@@ -43,7 +44,7 @@ test.describe("web auth error normalization contract", () => {
   });
 
   test("signup with invalid email format shows normalized error message", async ({ page }) => {
-    await page.goto("/signup");
+    await page.goto("/signup", { waitUntil: "domcontentloaded" });
     await injectSignUpError(page, {
       message: "Email address is invalid",
       code: "invalid_email",

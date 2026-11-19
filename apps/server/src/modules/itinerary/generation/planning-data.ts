@@ -421,7 +421,7 @@ export function prepareSnapshot(
       destinations.find((d) => d.selected === to)?.city?.slug ?? placeKey(to);
     const estimate = destinations
       .flatMap((d) => d.city?.activities ?? [])
-      .find(
+      .filter(
         (a) =>
           trusted(a) &&
           a.category === "transport" &&
@@ -429,7 +429,8 @@ export function prepareSnapshot(
           a.currency === input.currency &&
           a.estimated_cost !== null &&
           a.estimated_cost >= 0,
-      );
+      )
+      .sort((a, b) => a.estimated_cost! - b.estimated_cost!)[0];
     add(
       leg,
       confirmed !== undefined
@@ -475,7 +476,39 @@ export function applySupplement(snapshot: Snapshot, response: unknown) {
         typeof r === "object" &&
         (r as { key?: unknown }).key === need.key,
     );
-    const row = matches[0];
+    let row = matches[0];
+    // Alternatives are different proposed options with their own prices. Never
+    // make an existing quote appear affordable by clamping its amount.
+    if (
+      row &&
+      need.fixed_name === undefined &&
+      need.fixed_amount === undefined &&
+      Array.isArray(row.alternatives)
+    ) {
+      const candidates = [row, ...row.alternatives.slice(0, 2)] as Record<
+        string,
+        unknown
+      >[];
+      const valid = candidates.filter(
+        (candidate) =>
+          !(
+            !candidate ||
+            typeof candidate !== "object" ||
+            typeof candidate.name !== "string" ||
+            !candidate.name.trim() ||
+            candidate.name.length > 200 ||
+            typeof candidate.amount !== "number" ||
+            !Number.isFinite(candidate.amount) ||
+            candidate.amount < 0 ||
+            (candidate.amount === 0 && need.kind !== "visit") ||
+            (need.kind === "leg" &&
+              (!Number.isInteger(candidate.duration_minutes) ||
+                Number(candidate.duration_minutes) < 15 ||
+                Number(candidate.duration_minutes) > 1440))
+          ),
+      );
+      row = valid.sort((a, b) => Number(a.amount) - Number(b.amount))[0] ?? row;
+    }
     if (
       matches.length !== 1 ||
       !row ||
@@ -501,22 +534,6 @@ export function applySupplement(snapshot: Snapshot, response: unknown) {
         Number(row.duration_minutes) > 1440)
     )
       throw new Error("main travel duration missing");
-    const planning = snapshot.input.planning!;
-    if (
-      need.kind === "meal" &&
-      planning.dining_preferences.per_person_budget !== undefined &&
-      row.amount > planning.dining_preferences.per_person_budget
-    )
-      generationError("PLANNING_BUDGET_UNSATISFIABLE", "meal_budget_exceeded");
-    if (
-      need.kind === "stay" &&
-      planning.stay_preferences.nightly_budget !== undefined &&
-      row.amount > planning.stay_preferences.nightly_budget
-    )
-      generationError(
-        "PLANNING_BUDGET_UNSATISFIABLE",
-        "nightly_budget_exceeded",
-      );
     snapshot.items[need.key] = {
       ...old,
       name:
@@ -584,32 +601,6 @@ export function validateSupplementRequirements(snapshot: Snapshot) {
     snapshot.needs.some((n) => n.kind === "meal" && !snapshot.items[n.key]?.id)
   )
     generationError("PLANNING_DATA_INSUFFICIENT", "required_dining_unverified");
-}
-
-export function ensureMandatoryBudget(snapshot: Snapshot) {
-  if (snapshot.input.budget === undefined) return;
-  const people = snapshot.input.num_travelers;
-  let minimum = 0;
-  for (const leg of snapshot.legs) {
-    const item = snapshot.items[leg.key];
-    if (item?.amount != null)
-      minimum += item.amount * (item.scope === "person" ? people : 1);
-  }
-  for (const dest of snapshot.destinations) {
-    const item = snapshot.items[`${dest.selected}/stay`];
-    if (item?.amount != null)
-      minimum +=
-        item.amount *
-        snapshot.input.planning!.stay_preferences.rooms *
-        snapshot.schedule
-          .slice(0, -1)
-          .filter((d) => d.destination === dest.selected).length;
-  }
-  if (minimum * 1.1 > snapshot.input.budget)
-    generationError(
-      "PLANNING_BUDGET_UNSATISFIABLE",
-      "mandatory_travel_and_stay_exceed_budget",
-    );
 }
 
 /** Reserve main travel before placing sightseeing; charges stay in transport_summary. */

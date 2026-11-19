@@ -107,6 +107,45 @@ describe("journey summary route", () => {
 });
 
 describe("booking review messages", () => {
+  it.each(["en", "vi"])(
+    "shows the result, budget and overage as a warning in %s",
+    (locale) => {
+      const planning = createPlanningCriteria();
+      planning.budget = { currency: "VND", total: 20000000 };
+      const plan = {
+        planning,
+        days: [{ city: "Hanoi" }],
+        num_days: 1,
+        total_cost: 25000000,
+        currency: "VND",
+        issues: [
+          {
+            code: "OVER_BUDGET",
+            severity: "warning",
+            params: { amount: 5000000, currency: "VND" },
+          },
+        ],
+      } as Itinerary;
+      render(
+        <LanguageProvider initialLocale={locale}>
+          <JourneySummary plan={plan} />
+        </LanguageProvider>,
+      );
+      const text = screen.getByRole("region").textContent!;
+      expect(text).toContain((25000000).toLocaleString(locale));
+      expect(text).toContain((20000000).toLocaleString(locale));
+      expect(text).toContain((5000000).toLocaleString(locale));
+      expect(text).toContain(
+        locale === "vi"
+          ? "Chi phí dự kiến vượt ngân sách"
+          : "Estimated cost exceeds the budget",
+      );
+      expect(text).not.toContain(
+        locale === "vi" ? "Cần sửa:" : "Needs fixing:",
+      );
+    },
+  );
+
   it("omits internal diagnostics while keeping actionable conflicts", () => {
     const plan = {
       days: [],

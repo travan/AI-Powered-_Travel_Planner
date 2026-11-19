@@ -40,7 +40,10 @@ const nextConfig: NextConfig = {
       source: "/((?!api/|_next/).*)",
       headers: [{
         key: "Content-Security-Policy-Report-Only",
-        value: "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https:",
+        // Static App Router pages contain inline hydration scripts. A strict
+        // nonce policy requires dynamic rendering; keep this report-only policy
+        // compatible with the rendering strategy and the icon stylesheet.
+        value: `default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:${process.env.NODE_ENV === "development" ? " ws: wss:" : ""}`,
       }],
     }];
   },

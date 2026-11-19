@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { verifyPlanningBindings } from "../../scripts/check-planning-bindings.mjs";
+import { verifyFallbackSecrets, verifyPlanningBindings } from "../../scripts/check-planning-bindings.mjs";
 const config = {
   name: "staging",
   vars: { PLANNING_V2_PERCENT: "100" },
@@ -31,6 +31,11 @@ function api(bindings = [binding], consumers = [consumer]) {
   );
 }
 describe("deployed planning resources", () => {
+  it("requires fallback credentials to be encrypted Worker secrets", () => {
+    const configured = { vars: { AI_FALLBACK_PROVIDERS: JSON.stringify([{ id: "gemini-1", key_env: "GEMINI_API_KEY" }]) } };
+    expect(() => verifyFallbackSecrets(configured, { bindings: [{ type: "plain_text", name: "GEMINI_API_KEY" }] })).toThrow("encrypted Worker secret");
+    expect(() => verifyFallbackSecrets(configured, { bindings: [{ type: "secret_text", name: "GEMINI_API_KEY" }] })).not.toThrow();
+  });
   it("checks the real producer and consumer settings", async () => {
     await expect(
       verifyPlanningBindings(config, api()),

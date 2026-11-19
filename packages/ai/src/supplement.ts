@@ -53,6 +53,7 @@ export function createSupplementProvider(
     workersAI?: WorkersAIBinding;
     config?: SupplementConfig;
     request?: typeof fetch;
+    apiKey?: string;
   } = {},
 ): SupplementProvider {
   const config = options.config ?? supplementConfig();
@@ -62,10 +63,10 @@ export function createSupplementProvider(
     return new CloudflareAIProvider(options.workersAI, config.model);
   }
   const keyName = settings[config.provider].key;
-  const key = keyName && process.env[keyName]?.trim();
+  const key = options.apiKey?.trim() || (keyName && process.env[keyName]?.trim());
   if (!key || key === "..." || key.includes("placeholder"))
     throw new PlanningGenerationError("AI_PROVIDER_CONFIGURATION_INVALID");
-  return new HttpSupplementProvider(config, key, options.request ?? fetch);
+  return new HttpSupplementProvider(config, key, options.request ?? globalThis.fetch.bind(globalThis));
 }
 
 class HttpSupplementProvider implements SupplementProvider {
@@ -126,7 +127,7 @@ class HttpSupplementProvider implements SupplementProvider {
           maxOutputTokens: 6000,
           temperature: 0.2,
           responseMimeType: "application/json",
-          responseJsonSchema: schema,
+          responseJsonSchema: geminiSupplementSchema(schema),
         },
       };
     } else {
@@ -146,6 +147,11 @@ class HttpSupplementProvider implements SupplementProvider {
       };
     }
     const started = Date.now();
+    let providerStatus: number | undefined;
+    let providerReason: AiTokenUsage["provider_reason"];
+    let providerResponseType: AiTokenUsage["provider_response_type"];
+    let providerOrigin: AiTokenUsage["provider_origin"];
+    let providerApiStatus: AiTokenUsage["provider_api_status"];
     try {
       const response = await this.request(url, {
         method: "POST",
@@ -155,6 +161,20 @@ class HttpSupplementProvider implements SupplementProvider {
       });
       if (!response.ok) {
         const text = await response.text();
+        providerStatus = response.status;
+        providerResponseType = /^\s*[{[]/.test(text) ? "json" : /^\s*(?:<!doctype|<html)/i.test(text) ? "html" : "other";
+        try { providerOrigin = response.url ? (new URL(response.url).hostname === new URL(url).hostname ? "expected" : "unexpected") : "unknown"; } catch { providerOrigin = "unknown"; }
+        if (providerResponseType === "json") {
+          try {
+            const value = JSON.parse(text)?.error?.status;
+            if (typeof value === "string") providerApiStatus = ["NOT_FOUND", "INVALID_ARGUMENT", "PERMISSION_DENIED", "UNAUTHENTICATED", "RESOURCE_EXHAUSTED"].includes(value) ? value as AiTokenUsage["provider_api_status"] : "OTHER";
+          } catch { /* retain only the response type */ }
+        }
+        providerReason = /API_KEY_INVALID|API key not valid/i.test(text) ? "invalid_api_key" :
+          /API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED/i.test(text) ? "api_key_restricted" :
+          provider === "gemini" && response.status === 400 && /schema[^\n]{0,200}(?:too complex|exceeds.{0,60}(?:complexity|nesting|depth|limit|maximum))|(?:complexity|nesting depth)[^\n]{0,100}schema/i.test(text) ? "schema_complexity" :
+          provider === "gemini" && response.status === 400 && /(?:schema|responseJsonSchema)[^\n]{0,200}(?:unsupported|not supported|unknown field|invalid field)|(?:unsupported|not supported|unknown field)[^\n]{0,100}(?:schema|responseJsonSchema)/i.test(text) ? "schema_unsupported" :
+          response.status === 404 ? (/model[^\n]{0,200}not found|not found[^\n]{0,200}model/i.test(text) ? "model_not_found" : "endpoint_not_found") : response.status === 400 ? "request_rejected" : undefined;
         let code: PlanningGenerationError["code"] = "AI_UNAVAILABLE";
         if (response.status === 401 || response.status === 403)
           code = "AI_AUTH_INVALID";
@@ -217,6 +237,11 @@ class HttpSupplementProvider implements SupplementProvider {
             : result.choices?.[0]?.message?.content;
       return { response: content ?? "" };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const diagnostic = error instanceof PlanningGenerationError ? undefined :
+        /illegal invocation|incorrect this reference/i.test(message) ? "invalid_fetch_context" as const :
+        error instanceof SyntaxError ? "response_parse_error" as const :
+        error instanceof Error && /timeout|abort/i.test(error.name) ? "timeout" as const : "transport_error" as const;
       if (!this.usage.length)
         this.usage.push({
           provider,
@@ -226,6 +251,12 @@ class HttpSupplementProvider implements SupplementProvider {
           output_tokens: null,
           total_tokens: null,
           duration_ms: Date.now() - started,
+          ...(diagnostic ? { diagnostic_code: diagnostic } : {}),
+          ...(providerStatus ? { provider_status: providerStatus } : {}),
+          ...(providerReason ? { provider_reason: providerReason } : {}),
+          ...(providerResponseType ? { provider_response_type: providerResponseType } : {}),
+          ...(providerOrigin ? { provider_origin: providerOrigin } : {}),
+          ...(providerApiStatus ? { provider_api_status: providerApiStatus } : {}),
           outcome:
             error instanceof PlanningGenerationError &&
             error.code === "AI_QUOTA_EXHAUSTED"
@@ -236,4 +267,18 @@ class HttpSupplementProvider implements SupplementProvider {
       throw new PlanningGenerationError("AI_RESULT_UNKNOWN");
     }
   }
+}
+
+/** Keep Gemini's output grammar bounded as the number of requested items grows.
+ * The application validates every key and price after receiving the response. */
+function geminiSupplementSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const result = structuredClone(schema);
+  const properties = result.properties as Record<string, any> | undefined;
+  const items = properties?.items;
+  if (items && typeof items === "object") {
+    delete items.minItems;
+    delete items.maxItems;
+    if (items.items && typeof items.items === "object") delete items.items.anyOf;
+  }
+  return result;
 }

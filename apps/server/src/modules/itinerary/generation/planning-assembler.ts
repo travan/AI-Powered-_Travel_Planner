@@ -280,21 +280,42 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     ...itineraryQuality(enriched, input),
   ];
   enriched.issues = [...(enriched.issues ?? []), ...quality];
-  if (enriched.issues.some((i) => i.code === "OVER_BUDGET"))
-    generationError(
-      "PLANNING_BUDGET_UNSATISFIABLE",
-      "group_total_exceeds_budget",
-      {
-        budget_total: input.budget ?? 0,
-        estimated_total: enriched.budget_breakdown.total,
-        accommodation: enriched.budget_breakdown.accommodation,
-        food: enriched.budget_breakdown.food,
-        activities: enriched.budget_breakdown.activities,
-        transport: enriched.budget_breakdown.transport,
-        contingency: enriched.budget_breakdown.contingency,
-        currency: enriched.currency,
-      },
-    );
+  const mealLimit = p.dining_preferences.per_person_budget;
+  if (
+    mealLimit !== undefined &&
+    enriched.days.some((day) =>
+      day.activities.some(
+        (activity) =>
+          activity.kind === "meal" &&
+          (activity.price?.amount ?? activity.cost ?? 0) > mealLimit,
+      ),
+    )
+  )
+    enriched.issues.push({
+      code: "MEAL_ESTIMATE_OVER_BUDGET",
+      severity: "warning",
+      params: { amount: mealLimit, currency: input.currency },
+      message:
+        input.locale === "vi"
+          ? `Một số bữa ăn có dự toán vượt mức ${mealLimit} ${input.currency}/người/bữa.`
+          : `Some meal estimates exceed ${mealLimit} ${input.currency} per person per meal.`,
+    });
+  const nightlyLimit = p.stay_preferences.nightly_budget;
+  if (
+    nightlyLimit !== undefined &&
+    enriched.hotels.some(
+      (hotel) => (hotel.nightly_estimate ?? 0) > nightlyLimit,
+    )
+  )
+    enriched.issues.push({
+      code: "STAY_ESTIMATE_OVER_BUDGET",
+      severity: "warning",
+      params: { amount: nightlyLimit, currency: input.currency },
+      message:
+        input.locale === "vi"
+          ? `Một số chỗ ở có dự toán vượt mức ${nightlyLimit} ${input.currency}/phòng/đêm.`
+          : `Some lodging estimates exceed ${nightlyLimit} ${input.currency} per room per night.`,
+    });
   if (input.budget !== undefined && !enriched.budget_breakdown.complete) {
     generationError("PLANNING_DATA_INSUFFICIENT", "budget_incomplete");
   }

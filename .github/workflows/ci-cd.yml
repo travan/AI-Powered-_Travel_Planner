@@ -259,6 +259,9 @@ jobs:
       PLANNING_CANARY_EMAIL: ${{ secrets.PLANNING_CANARY_EMAIL }}
       PLANNING_CANARY_PASSWORD: ${{ secrets.PLANNING_CANARY_PASSWORD }}
       DEPLOY_AI_PROVIDER: ${{ vars.AI_PROVIDER || 'cloudflare' }}
+      DEPLOY_AI_FALLBACK_PROVIDERS: ${{ vars.AI_FALLBACK_PROVIDERS }}
+      DEPLOY_AI_FALLBACK_MAX_SOURCES: ${{ vars.AI_FALLBACK_MAX_SOURCES || '5' }}
+      DEPLOY_AI_FALLBACK_CANARY_ONLY: ${{ vars.AI_FALLBACK_CANARY_ONLY }}
       CLOUDFLARE_AI_MODEL: ${{ vars.CLOUDFLARE_AI_MODEL }}
       ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
@@ -345,6 +348,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/provision-planning-queues.mjs
+
+      - name: Check encrypted fallback secrets before deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/check-planning-bindings.mjs --secrets-only
 
       # Bundle before touching the database; Wrangler also validates the bindings.
       - name: Validate Worker bundle

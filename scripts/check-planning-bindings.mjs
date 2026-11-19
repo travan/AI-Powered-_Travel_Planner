@@ -4,6 +4,15 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
+export function verifyFallbackSecrets(config, settings) {
+  const fallbacks = config.vars?.AI_FALLBACK_PROVIDERS
+    ? JSON.parse(config.vars.AI_FALLBACK_PROVIDERS)
+    : [];
+  for (const source of fallbacks)
+    assert.ok(settings.bindings?.some((b) => b.type === "secret_text" && b.name === source.key_env),
+      `Fallback source ${source.id} requires an encrypted Worker secret`);
+}
+
 export async function verifyPlanningBindings(config, api) {
   if (
     Number(config.vars?.PLANNING_V2_PERCENT ?? 0) === 0 &&
@@ -31,6 +40,7 @@ export async function verifyPlanningBindings(config, api) {
   const settings = await api(
     `/workers/scripts/${encodeURIComponent(config.name)}/settings`,
   );
+  verifyFallbackSecrets(config, settings);
   const binding = settings.bindings?.find(
     (b) => b.type === "queue" && b.name === "JOURNEY_QUEUE",
   );
@@ -73,7 +83,7 @@ if (
   );
   assert.ok(!error, "Invalid Worker configuration");
   let token;
-  await verifyPlanningBindings(config, async (resource) => {
+  const api = async (resource) => {
     token ??= await cloudflareApiToken();
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${config.account_id}${resource}`,
@@ -90,6 +100,14 @@ if (
       "Unable to verify deployed Cloudflare resources",
     );
     return body.result;
-  });
-  console.log("Planning Queue deployment bindings verified (or v2 disabled).");
+  };
+  if (process.argv.includes("--secrets-only")) {
+    const fallbacks = JSON.parse(config.vars?.AI_FALLBACK_PROVIDERS || "[]");
+    if (fallbacks.length)
+      verifyFallbackSecrets(config, await api(`/workers/scripts/${encodeURIComponent(config.name)}/settings`));
+    console.log("Fallback secret bindings verified.");
+  } else {
+    await verifyPlanningBindings(config, api);
+    console.log("Planning Queue deployment bindings verified (or v2 disabled).");
+  }
 }

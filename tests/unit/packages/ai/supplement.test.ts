@@ -6,7 +6,7 @@ import {
 import { destinationContext } from "../../../../packages/ai/src/destination-context";
 import { malaysiaSingaporeRequest } from "../../fixtures/malaysia-singapore-request";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const schema = {
   type: "object",
   properties: { cities: { type: "array" }, items: { type: "array" } },
@@ -15,6 +15,62 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it.each([
+    ["A schema in GenerationConfig exceeds the maximum allowed nesting depth.", "schema_complexity"],
+    ["responseJsonSchema has an unsupported field", "schema_unsupported"],
+    ["The request contains private traveler data", "request_rejected"],
+  ])("classifies Gemini request errors without storing provider text", async (message, reason) => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message } }), { status: 400 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "test-key", request });
+    await expect(adapter.supplementRaw("private prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_reason: reason, provider_api_status: "INVALID_ARGUMENT" }]);
+    expect(JSON.stringify(adapter.getUsage())).not.toContain(message);
+  });
+  it("bounds Gemini schema complexity without mutating the original constraints", async () => {
+    const complex = { type: "object", properties: { items: { type: "array", minItems: 80, maxItems: 80, items: { type: "object", properties: { key: { type: "string" }, amount: { type: "number", minimum: 0 } }, anyOf: [{ properties: { key: { enum: ["meal-1", "meal-2"] } } }] } } } };
+    const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "test-key", request });
+    await adapter.supplementRaw("prompt", "vi", complex);
+    const body = JSON.parse((request.mock.calls as unknown as [string, RequestInit][])[0]![1].body as string);
+    const itemSchema = body.generationConfig.responseJsonSchema.properties.items;
+    expect(itemSchema).not.toHaveProperty("minItems");
+    expect(itemSchema).not.toHaveProperty("maxItems");
+    expect(itemSchema.items).not.toHaveProperty("anyOf");
+    expect(itemSchema.items.properties.amount.minimum).toBe(0);
+    expect(complex.properties.items.items.anyOf).toHaveLength(1);
+    expect(complex.properties.items.minItems).toBe(80);
+  });
+  it("does not label every HTTP 404 as a missing model", async () => {
+    const request = vi.fn(async () => new Response("<html>Not found</html>", { status: 404 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_status: 404, provider_reason: "endpoint_not_found", provider_response_type: "html" }]);
+  });
+  it("records a safe invalid-key diagnosis without retaining provider response text", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ error: { message: "API key not valid", reason: "API_KEY_INVALID", private: "do-not-record" } }), { status: 400 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "example-key", request });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_status: 400, provider_reason: "invalid_api_key" }]);
+    expect(JSON.stringify(adapter.getUsage())).not.toContain("do-not-record");
+  });
+  it("binds the runtime fetch to the global scope", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    const runtimeFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    });
+    vi.stubGlobal("fetch", runtimeFetch);
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" } });
+    await expect(adapter.supplementRaw("prompt", "vi", schema)).resolves.toEqual({ response: content });
+    expect(runtimeFetch).toHaveBeenCalledOnce();
+  });
+  it("uses the selected account key instead of the provider default", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "default-test-key");
+    const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test-model" }, apiKey: "second-test-key", request });
+    await adapter.supplementRaw("prompt", "vi", schema);
+    expect((request.mock.calls[0]![1] as RequestInit).headers).toMatchObject({ "x-goog-api-key": "second-test-key" });
+  });
   it.each(["claude", "openai", "gemini"] as const)(
     "%s supplies structured data, preserves raw content and records usage",
     async (provider) => {

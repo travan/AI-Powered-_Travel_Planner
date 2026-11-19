@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { parseFallbackSources } from "../../../packages/ai/fallback-config.mjs";
 
 const target = process.argv[2];
 if (!["staging", "production"].includes(target))
@@ -59,6 +60,12 @@ if (
 )
   throw new Error("Unsupported deployment AI provider");
 config.vars.AI_PROVIDER = provider;
+const fallback = target === "production" ? (process.env.DEPLOY_AI_FALLBACK_PROVIDERS ?? "") : "";
+const maxFallbacks = Number(process.env.DEPLOY_AI_FALLBACK_MAX_SOURCES ?? 5);
+parseFallbackSources(fallback, maxFallbacks);
+config.vars.AI_FALLBACK_PROVIDERS = fallback;
+config.vars.AI_FALLBACK_MAX_SOURCES = String(maxFallbacks);
+config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "false" ? "false" : "true";
 for (const key of [
   "CLOUDFLARE_AI_MODEL",
   "ANTHROPIC_MODEL",

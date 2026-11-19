@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GenerationStore } from "../../../../../../apps/server/src/modules/itinerary/generation/generation.store";
 import { JourneyService } from "../../../../../../apps/server/src/modules/itinerary/journey/journey.service";
 import { PlanningGenerationError } from "../../../../../../packages/ai/src/providers/planning-generation-error";
+import { supplementWithFallback } from "../../../../../../apps/server/src/modules/itinerary/generation/supplement-fallback";
 
 // A durable ledger and a single global slot across independently constructed workers.
 function database() {
@@ -54,6 +55,32 @@ function database() {
 }
 afterEach(() => vi.useRealTimers());
 describe("generation dispatch durability", () => {
+  it("replays the stored fallback response without dispatching either provider twice", async () => {
+    const db = database();
+    const store = new GenerationStore({} as never, db.sql);
+    const primary = { supplementRaw: vi.fn(async () => { throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, "cloudflare"); }), getUsage: () => [] };
+    const secondary = { supplementRaw: vi.fn(async () => ({ response: { ok: true } })), getUsage: () => [] };
+    const work = (signal: AbortSignal) => supplementWithFallback({ primary, fallbacks: [{ id: "gemini", create: () => secondary }], signal, prompt: "", locale: "vi", schema: {}, onUsage: async () => {} });
+    expect(await store.once("g", work)).toEqual({ response: { ok: true } });
+    expect(await store.once("g", work)).toEqual({ response: { ok: true } });
+    expect(primary.supplementRaw).toHaveBeenCalledOnce();
+    expect(secondary.supplementRaw).toHaveBeenCalledOnce();
+  });
+  it("never starts a fallback after a late primary quota rejection", async () => {
+    vi.useFakeTimers();
+    const db = database();
+    const store = new GenerationStore({} as never, db.sql);
+    let rejectPrimary!: (error: Error) => void;
+    const fallback = vi.fn();
+    const primary = { supplementRaw: () => new Promise<never>((_, reject) => { rejectPrimary = reject; }), getUsage: () => [] };
+    const result = expect(store.once("g", (signal) => supplementWithFallback({ primary, fallbacks: [{ id: "g1", create: fallback }], signal, prompt: "", locale: "vi", schema: {}, onUsage: async () => {} }))).rejects.toMatchObject({ response: { code: "AI_RESULT_UNKNOWN" } });
+    await vi.advanceTimersByTimeAsync(120001);
+    await result;
+    rejectPrimary(new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, "cloudflare"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(db.row?.state).toBe("unknown");
+  });
   it("does not reserve a ticket or inference slot when provider preflight fails", async () => {
     const db = database();
     const store = new GenerationStore({} as never, db.sql);

@@ -133,7 +133,11 @@ try {
       issues: result.result.issues,
     };
     assert.equal(result.result.days.length, dto.num_days);
-    assert.ok(result.result.total_cost <= dto.budget!);
+    assert.ok(Number.isFinite(result.result.total_cost) && result.result.total_cost > 0);
+    if (result.result.total_cost > dto.budget!)
+      assert.ok(result.result.issues?.some((issue) => issue.code === "OVER_BUDGET" &&
+        issue.severity === "warning" && issue.params?.currency === result.result.currency &&
+        issue.params?.amount === result.result.total_cost - dto.budget!));
   } catch (error) {
     outcome = {
       status: "failed",

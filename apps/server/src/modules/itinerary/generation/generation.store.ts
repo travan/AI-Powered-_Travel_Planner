@@ -154,7 +154,7 @@ export class GenerationStore {
 
   async once<T>(
     generation: string,
-    work: () => Promise<T>,
+    work: (signal: AbortSignal) => Promise<T>,
     preflight?: () => void,
   ): Promise<T> {
     const existing = await this.sql.query<{
@@ -192,15 +192,19 @@ export class GenerationStore {
       return this.once(generation, work, preflight);
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
     try {
       const pending = Promise.resolve()
-        .then(work)
+        .then(() => work(controller.signal))
         .finally(() => release().catch(() => {}));
       const value = await Promise.race([
         pending,
         new Promise<never>((_, reject) => {
           timer = setTimeout(
-            () => reject(new HttpException({ code: "AI_RESULT_UNKNOWN" }, 422)),
+            () => {
+              controller.abort();
+              reject(new HttpException({ code: "AI_RESULT_UNKNOWN" }, 422));
+            },
             120_000,
           );
           timer.unref?.();

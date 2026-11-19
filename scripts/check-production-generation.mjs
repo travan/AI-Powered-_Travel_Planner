@@ -17,11 +17,14 @@ export function validateCanaryPlan(plan, request) {
   assert.equal(plan.days?.length, request.num_days, "Wrong day count");
   assert.equal(plan.currency, request.currency, "Wrong currency");
   assert.ok(
-    Number.isFinite(plan.total_cost) &&
-      plan.total_cost > 0 &&
-      plan.total_cost <= request.budget,
-    "Invalid or over-budget successful plan",
+    Number.isFinite(plan.total_cost) && plan.total_cost > 0,
+    "Invalid successful plan cost",
   );
+  if (request.budget !== undefined && plan.total_cost > request.budget)
+    assert.ok(plan.issues?.some((issue) => issue.code === "OVER_BUDGET" &&
+      issue.severity === "warning" && issue.params?.currency === plan.currency &&
+      issue.params?.amount === plan.total_cost - request.budget),
+    "Over-budget plan is missing an accurate warning");
   assert.equal(plan.budget_breakdown?.complete, true, "Incomplete budget");
   const breakdown = plan.budget_breakdown;
   const costs = [
@@ -192,6 +195,8 @@ export async function runProductionCanary({
   request = fetch,
   sleep = delay,
   output = "test-results/production-generation",
+  testCases,
+  expectedProvider,
 }) {
   assert.ok(
     base && new URL(base).protocol === "https:",
@@ -214,7 +219,9 @@ export async function runProductionCanary({
     "Unexpected rollout percentage",
   );
   const session = await canarySession(base, { request });
-  const cases = await planningCanaryCases();
+  const cases = testCases ?? await planningCanaryCases();
+  const selectedCases = cases.filter((test) => mode === "compare" ? test.compare !== false : test.promoted === true);
+  assert.ok(selectedCases.length > 0, "No production canary cases configured");
   const reports = [];
   await fs.mkdir(output, { recursive: true });
   const save = () =>
@@ -236,7 +243,7 @@ export async function runProductionCanary({
   try {
     // Establish V2 results before spending tokens on the legacy baseline.
     for (const pipeline of mode === "compare" ? [2, 1] : [2]) {
-      for (const test of mode === "compare" ? cases.slice(0, 3) : cases.filter((test) => ["short-da-nang", "ha-giang"].includes(test.id))) {
+      for (const test of selectedCases) {
         const started = Date.now();
         const row = {
           case: test.id,
@@ -300,8 +307,12 @@ export async function runProductionCanary({
             pipeline,
             "Job used the wrong pipeline",
           );
-          if (pipeline === 2)
-            assert.ok(row.calls <= 1, "V2 dispatched AI more than once");
+          if (expectedProvider)
+            assert.equal(job.provider, expectedProvider, "Job used the wrong AI provider");
+          if (pipeline === 2) {
+            const usage = job.ai_usage ?? [];
+            assert.ok(usage.length <= 21 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected"), "Unexpected V2 provider dispatches");
+          }
           let validationError;
           if (job.status === "complete") {
             const result = await session.json(
@@ -343,7 +354,7 @@ export async function runProductionCanary({
     }
     const v2 = reports.filter((row) => row.pipeline === 2);
     assert.ok(
-      v2.length === (mode === "compare" ? 3 : 2) &&
+      v2.length === selectedCases.length &&
         v2.every((row) =>
           ["complete", "constraint_rejected"].includes(row.status),
         ),
@@ -356,8 +367,9 @@ export async function runProductionCanary({
 }
 
 const total = (calls = [], field) =>
-  calls.length && calls.every((call) => Number.isFinite(call[field]))
-    ? calls.reduce((sum, call) => sum + call[field], 0)
+  calls.some((call) => call.model !== "canary-simulated-quota") &&
+  calls.filter((call) => call.model !== "canary-simulated-quota").every((call) => Number.isFinite(call[field]))
+    ? calls.filter((call) => call.model !== "canary-simulated-quota").reduce((sum, call) => sum + call[field], 0)
     : null;
 export function summarize(rows) {
   return Object.fromEntries(

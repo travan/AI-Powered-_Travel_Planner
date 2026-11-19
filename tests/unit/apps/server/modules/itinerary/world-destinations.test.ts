@@ -216,7 +216,7 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
         ),
       ).toBe(true);
       expect(payload.messages[1].content).toContain(
-        "even when their sum exceeds total_group_budget",
+        "Prioritize total_group_budget when selecting options",
       );
       expect(s.cityService.remember).not.toHaveBeenCalled();
     },
