@@ -5,7 +5,6 @@ import {
   scheduleTravel,
   type Snapshot,
   applySupplement,
-  ensureMandatoryBudget,
   validateSupplementRequirements,
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-data";
 import {
@@ -21,6 +20,7 @@ import { generationInput } from "../../../../../../apps/server/src/modules/itine
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 function fixture() {
   vi.stubEnv("AI_PROVIDER", "cloudflare");
@@ -149,7 +149,7 @@ describe("catalog-first generation v2", () => {
       }),
     ).toThrow("missing mandatory cost");
   });
-  it("rejects the recorded real-model estimate because mandatory group travel/stay exceeds 20m VND", () => {
+  it("retains the recorded real-model estimate even when mandatory travel/stay exceeds budget", () => {
     const { input } = fixture();
     const snapshot = prepareSnapshot(
       input,
@@ -159,17 +159,8 @@ describe("catalog-first generation v2", () => {
       })),
     );
     applySupplement(snapshot, realSupplement);
-    try {
-      ensureMandatoryBudget(snapshot);
-      throw Error("must reject budget");
-    } catch (error) {
-      expect(
-        (error as { getResponse: () => unknown }).getResponse(),
-      ).toMatchObject({
-        code: "PLANNING_BUDGET_UNSATISFIABLE",
-        params: { reason: "mandatory_travel_and_stay_exceed_budget" },
-      });
-    }
+    expect(snapshot.items["country-my/stay"]!.amount).toBe(1500000);
+    expect(snapshot.items["leg/1"]!.amount).toBe(2000000);
   });
   it("assembles the ten-day FE payload entirely from priced DB data", () => {
     const { input, destinations } = fixture();
@@ -336,12 +327,76 @@ describe("catalog-first generation v2", () => {
     expect(store.save).toHaveBeenCalledTimes(12);
   });
 
-  it("fails closed on a missing price or an over-budget complete plan", () => {
+  it.each([true, false])("honors the canary allowlist when the primary quota is exhausted (allowed=%s)", async (allowed) => {
+    const { dto, cities } = fixture();
+    cities[0]!.activities = [];
+    vi.stubEnv("AI_FALLBACK_CANARY_ONLY", "true");
+    vi.stubEnv("PLANNING_CANARY_USER_IDS", "canary");
+    vi.stubEnv("GEMINI_API_KEY_TEST", "test-only-gemini-key");
+    vi.stubEnv("AI_FALLBACK_PROVIDERS", JSON.stringify([
+      { id: "gemini-test", provider: "gemini", model: "test-model", key_env: "GEMINI_API_KEY_TEST" },
+    ]));
+    const request = vi.fn(async (_url, init) => {
+      const prompt = JSON.parse(init.body).contents[0].parts[0].text;
+      const context = JSON.parse(prompt.split("\n").at(-1));
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({
+          cities: [],
+          items: context.missing.map((need) => ({
+            key: need.key,
+            name: need.fixed_name ?? `Suggestion ${need.key}`,
+            amount: need.key.includes("stay") ? 300000 : 10000,
+            duration_minutes: 60,
+          })),
+        }) }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+      }));
+    });
+    vi.stubGlobal("fetch", request);
+    const binding = { run: vi.fn(async () => { throw new Error("daily quota exhausted"); }) };
+    const store = {
+      checkpoint: vi.fn(), save: vi.fn(), recordUsage: vi.fn(async () => {}),
+      once: vi.fn(async (_id, work, preflight) => {
+        preflight();
+        return work(new AbortController().signal);
+      }),
+    };
+    const planner = new CatalogFirstPlanner(
+      store as never,
+      {
+        byCountry: async (country) => cities.filter((city) => city.country === country),
+        findForPlanning: async (slug) => cities.find((city) => city.slug === slug),
+      } as never,
+      { findReusable: vi.fn().mockResolvedValue(null), createComplete: vi.fn().mockResolvedValue("plan-id") } as never,
+      { query: vi.fn().mockResolvedValue({ rows: [] }) },
+    );
+    const result = workerRequestContext.run({ pool: {} as never, ai: binding }, () => planner.generate({
+      userId: allowed ? "canary" : "ordinary-user", dto,
+      job: { id: "job", generation_id: "generation", claim_token: "claim" },
+    }));
+    if (allowed) {
+      await expect(result).resolves.toMatchObject({ itinerary_id: "plan-id" });
+      expect(request).toHaveBeenCalledOnce();
+      expect(request.mock.calls[0][1].headers["x-goog-api-key"]).toBe("test-only-gemini-key");
+      expect(store.recordUsage.mock.lastCall?.[1]).toMatchObject([
+        { source_id: "primary", outcome: "quota_rejected" },
+        { source_id: "gemini-test", provider: "gemini", total_tokens: 30, outcome: "received" },
+      ]);
+    } else {
+      await expect(result).rejects.toMatchObject({ code: "AI_QUOTA_EXHAUSTED" });
+      expect(request).not.toHaveBeenCalled();
+    }
+    expect(binding.run).toHaveBeenCalledOnce();
+  });
+
+  it("returns an over-budget plan with a warning while still rejecting a missing mandatory price", () => {
     const { input, destinations } = fixture();
     const snapshot = prepareSnapshot(input, destinations);
     snapshot.days = snapshot.schedule.map((d) => assembleDay(snapshot, d));
     snapshot.items["leg/1"]!.amount = 20000000;
-    expect(() => completePlan(snapshot)).toThrow();
+    const plan = completePlan(snapshot);
+    expect(plan.total_cost).toBeGreaterThan(input.budget!);
+    expect(plan.issues).toContainEqual(expect.objectContaining({ code: "OVER_BUDGET", severity: "warning" }));
     snapshot.items["leg/1"]!.amount = null;
     expect(() => completePlan(snapshot)).toThrow();
   });

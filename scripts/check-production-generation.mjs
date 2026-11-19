@@ -17,11 +17,14 @@ export function validateCanaryPlan(plan, request) {
   assert.equal(plan.days?.length, request.num_days, "Wrong day count");
   assert.equal(plan.currency, request.currency, "Wrong currency");
   assert.ok(
-    Number.isFinite(plan.total_cost) &&
-      plan.total_cost > 0 &&
-      plan.total_cost <= request.budget,
-    "Invalid or over-budget successful plan",
+    Number.isFinite(plan.total_cost) && plan.total_cost > 0,
+    "Invalid successful plan cost",
   );
+  if (request.budget !== undefined && plan.total_cost > request.budget)
+    assert.ok(plan.issues?.some((issue) => issue.code === "OVER_BUDGET" &&
+      issue.severity === "warning" && issue.params?.currency === plan.currency &&
+      issue.params?.amount === plan.total_cost - request.budget),
+    "Over-budget plan is missing an accurate warning");
   assert.equal(plan.budget_breakdown?.complete, true, "Incomplete budget");
   const breakdown = plan.budget_breakdown;
   const costs = [

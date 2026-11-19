@@ -11,7 +11,14 @@ import path from "node:path";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("production generation gate", () => {
-  it("runs exactly six fresh jobs, verifies V2 first, and records a failed V1 baseline without inventing V1 success", async () => {
+  it.each([undefined, { amount: 1, currency: "VND" }, { amount: 100, currency: "USD" }])("rejects an over-budget success without an accurate warning (%j)", (params) => {
+    expect(() => validateCanaryPlan({
+      days: [], currency: "VND", total_cost: 200,
+      issues: params ? [{ code: "OVER_BUDGET", severity: "warning", params }] : [],
+    }, { num_days: 0, currency: "VND", budget: 100 })).toThrow("Over-budget plan is missing an accurate warning");
+  });
+
+  it.each([false, true])("runs exactly six fresh jobs and accepts complete results with accurate budget warnings (overBudget=%s)", async (overBudget) => {
     vi.stubEnv("PLANNING_CANARY_EMAIL", "ci@example.test");
     vi.stubEnv("PLANNING_CANARY_PASSWORD", "test-password");
     const directory = await fs.mkdtemp(
@@ -128,17 +135,19 @@ describe("production generation gate", () => {
           ),
           "Hà Nội",
         ];
+        const total = overBudget ? input.budget + 1000000 : 1000000;
         result = {
           itineraries: [
             {
               days,
               city_catalog: catalog,
               currency: "VND",
-              total_cost: 1000000,
+              total_cost: total,
+              issues: overBudget ? [{ code: "OVER_BUDGET", severity: "warning", params: { amount: 1000000, currency: "VND" } }] : [],
               budget_breakdown: {
                 complete: true,
-                total: 1000000,
-                accommodation: 500000,
+                total,
+                accommodation: total - 500000,
                 food: 300000,
                 activities: 100000,
                 transport: 100000,

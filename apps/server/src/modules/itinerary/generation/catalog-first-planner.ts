@@ -32,12 +32,12 @@ import {
   prepareSnapshot,
   applySupplement,
   scheduleTravel,
-  ensureMandatoryBudget,
   validateSupplementRequirements,
   type Snapshot,
   type Destination,
 } from "./planning-data.js";
 import { assembleDay, completePlan } from "./planning-assembler.js";
+import { supplementBudget } from "./planning-budget.js";
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 const {
   countryDestinationReference,
@@ -83,6 +83,24 @@ const supplementSchema = {
           },
           amount: { type: "number", minimum: 0 },
           duration_minutes: { type: "integer", minimum: 15, maximum: 1440 },
+          alternatives: {
+            type: "array",
+            maxItems: 2,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "amount", "duration_minutes"],
+              properties: {
+                name: { type: "string" },
+                amount: { type: "number", minimum: 0 },
+                duration_minutes: {
+                  type: "integer",
+                  minimum: 15,
+                  maximum: 1440,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -194,7 +212,6 @@ export class CatalogFirstPlanner {
       );
     }
     const state = snapshot as Snapshot;
-    ensureMandatoryBudget(state);
     if (state.needs.length || state.destinations.some((d) => !d.city)) {
       await options.onStage?.("supplement");
       const schema = structuredClone(supplementSchema);
@@ -258,11 +275,12 @@ export class CatalogFirstPlanner {
         "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
         "For a stay without fixed_name, name a real, specific lodging neighborhood/district within the selected city; never return 'Hotel in <city>' or claim an unverified property is booked. The amount is the room/night allowance in that area, not a property quote. For meals/cafes use a specific venue or named dining area. All sightseeing visits must be distinct real venues/areas across days, not repeated names or generic sightseeing. " +
         "Return cities only for destinations whose city is missing; otherwise cities=[]. cities[].country must be the exact two-letter ISO code from the destination context, never the country name. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Estimate every mandatory fare and stay independently at realistic positive prices even when their sum exceeds total_group_budget. The server decides budget feasibility. Never reduce or zero fares to fit the requested budget; an over-budget estimate is a valid response, free unconfirmed international travel is not.\n` +
+        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Prioritize total_group_budget when selecting options. Use budget_allocation.targets to select affordable real options BEFORE estimating prices. Multiply each amount by group_units and keep the sum within remaining_before_contingency. Category targets can be redistributed to prioritize the combined budget. If no realistic compatible option fits, still return the real estimated costs for the best available plan; the server will show a budget warning rather than fail the request. Prefer free sightseeing, inexpensive dining areas, budget lodging districts and economical travel compatible with transport preferences. If a primary option exceeds its target and has no fixed_name or fixed_amount, supply up to two cheaper real alternatives with their own names, amounts and travel durations; the server will select the cheapest compatible option. Use alternatives=[] for already affordable or fixed items. When no total_group_budget is supplied, follow traveler preferences and use alternatives=[]. Do not lower the price of the same option just to fit a target, invent free mandatory travel, change confirmed costs or violate required preferences.\n` +
         "";
       const context = {
         currency: state.input.currency,
         total_group_budget: state.input.budget,
+        budget_allocation: supplementBudget(state),
         people: state.input.num_travelers,
         days: state.input.num_days,
         rooms: state.input.planning!.stay_preferences.rooms,
@@ -371,7 +389,6 @@ export class CatalogFirstPlanner {
         if (error instanceof HttpException) throw error;
         generationError("AI_RESPONSE_INVALID", "supplement_invalid");
       }
-      ensureMandatoryBudget(state);
       validateSupplementRequirements(state);
       const proposals = (
         response as {
@@ -489,9 +506,7 @@ export class CatalogFirstPlanner {
     return (
       plan.days.length === (input.num_days ?? 1) &&
       !plan.issues?.some(
-        (i) =>
-          i.severity === "error" ||
-          ["OVER_BUDGET", "BUDGET_INCOMPLETE"].includes(i.code),
+        (i) => i.severity === "error" || i.code === "BUDGET_INCOMPLETE",
       ) &&
       plan.days.every(
         (d) =>

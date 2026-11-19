@@ -1022,6 +1022,8 @@
     "OUTBOUND_MISSING": "Chặng từ điểm xuất phát chưa đủ dữ liệu, cần bổ sung.",
     "RETURN_MISSING": "Chặng về điểm kết thúc chưa đủ dữ liệu, cần bổ sung.",
     "OVER_BUDGET": "Chi phí dự kiến vượt ngân sách {amount} {currency}.",
+    "MEAL_ESTIMATE_OVER_BUDGET": "Một số bữa ăn có dự toán vượt mức {amount} {currency}/người/bữa.",
+    "STAY_ESTIMATE_OVER_BUDGET": "Một số chỗ ở có dự toán vượt mức {amount} {currency}/phòng/đêm.",
     "TRAVEL_CONFLICT": "{activity}: trùng giờ di chuyển hoặc khoảng dự phòng.",
     "OVERLAP": "{activity}: thời gian chồng với mục trước.",
     "REQUIREMENTS_UNVERIFIED": "Cần xác minh tiêu chí bắt buộc: {criteria}.",

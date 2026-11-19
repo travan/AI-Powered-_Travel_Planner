@@ -1,4 +1,6 @@
 export { destinationContext } from "./destination-context.js";
+export { parseFallbackSources } from "../fallback-config.mjs";
+export type { FallbackSource } from "../fallback-config.mjs";
 export { createSupplementProvider, supplementConfig } from "./supplement.js";
 export type {
   SupplementProvider,

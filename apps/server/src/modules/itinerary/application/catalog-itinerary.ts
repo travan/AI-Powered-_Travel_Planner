@@ -53,7 +53,6 @@ export const blockingCatalogIssues = new Set([
   "SCHEDULE_CONFLICT",
   "SCHEDULE_DETAILS_MISSING",
   "REPEATED_PLACE",
-  "OVER_BUDGET",
 ]);
 const stale = 180 * 86_400_000;
 const trusted = (row: { source: string; last_verified_at?: string }) =>

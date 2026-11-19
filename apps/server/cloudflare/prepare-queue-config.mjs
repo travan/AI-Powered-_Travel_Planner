@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { parseFallbackSources } from "../../../packages/ai/fallback-config.mjs";
 
 const target = process.argv[2];
 if (!["staging", "production"].includes(target))
@@ -61,23 +62,7 @@ if (
 config.vars.AI_PROVIDER = provider;
 const fallback = target === "production" ? (process.env.DEPLOY_AI_FALLBACK_PROVIDERS ?? "") : "";
 const maxFallbacks = Number(process.env.DEPLOY_AI_FALLBACK_MAX_SOURCES ?? 5);
-if (!Number.isInteger(maxFallbacks) || maxFallbacks < 1 || maxFallbacks > 20)
-  throw new Error("AI fallback limit must be between 1 and 20");
-if (fallback) {
-  let sources;
-  try { sources = JSON.parse(fallback); } catch { throw new Error("Invalid AI_FALLBACK_PROVIDERS JSON"); }
-  if (!Array.isArray(sources) || sources.length > maxFallbacks) throw new Error("Invalid fallback sources");
-  const names = new Set();
-  const prefixes = { gemini: "GEMINI_API_KEY", openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY" };
-  for (const source of sources) {
-    const prefix = Object.hasOwn(prefixes, source?.provider ?? "") ? prefixes[source.provider] : undefined;
-    if (!prefix || typeof source.id !== "string" || source.id === "primary" || !/^[a-z0-9_-]{1,40}$/.test(source.id) || names.has(source.id) ||
-        typeof source.model !== "string" || !/^[a-zA-Z0-9._:/-]{1,120}$/.test(source.model) ||
-        typeof source.key_env !== "string" || !new RegExp(`^${prefix}(?:_[A-Z0-9_]{1,30})?$`).test(source.key_env))
-      throw new Error("Invalid fallback source");
-    names.add(source.id);
-  }
-}
+parseFallbackSources(fallback, maxFallbacks);
 config.vars.AI_FALLBACK_PROVIDERS = fallback;
 config.vars.AI_FALLBACK_MAX_SOURCES = String(maxFallbacks);
 config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "false" ? "false" : "true";
