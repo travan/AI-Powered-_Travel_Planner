@@ -352,7 +352,7 @@ jobs:
       - name: Check encrypted fallback secrets before deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: node scripts/check-fallback-secrets.mjs
+        run: node scripts/check-planning-bindings.mjs --secrets-only
 
       # Bundle before touching the database; Wrangler also validates the bindings.
       - name: Validate Worker bundle

@@ -2,9 +2,9 @@
 
 ## Release contract
 
-No staging environment is required. The production workflow runs technical checks and three real-model candidate cases against an isolated local test database, deploys the candidate with `PLANNING_V2_PERCENT=0`, compares three cases on each pipeline through the production API, and promotes to 100% only if V2 passes. Producer, consumer, DLQ and global AI concurrency start at one. The final smoke uses the ordinary API without a pipeline override.
+No staging environment is required. The original V1/V2 rollout procedure below starts at `PLANNING_V2_PERCENT=0`; it is historical for the existing production rollout, which was already at 100% V2 when verified on 2026-11-19. For provider changes on the existing rollout, preserve the current percentage, restrict the candidate fallback to the dedicated CI account, and do not enable it for other users until real production canary cases pass. Verify the current setting before each deployment. Producer, consumer, DLQ and global AI concurrency start at one. A health check does not certify generation.
 
-Production jobs pin their pipeline. A failed canary blocks promotion; it never reroutes V2 jobs to V1. Existing pinned jobs retain their Queue, checkpoint and ledger. Set the percentage back to zero to stop new general V2 admissions while investigating; retain Queue bindings to finish admitted work. The bounded canary does not certify 100-account capacity or a population success rate.
+Production jobs pin their pipeline. A failed canary blocks promotion; it never reroutes V2 jobs to V1. Existing pinned jobs retain their Queue, checkpoint and ledger. Do not switch new jobs back to V1 as an automatic recovery step. The bounded canary does not certify 100-account capacity or a population success rate.
 
 ## Configuration
 
@@ -85,3 +85,110 @@ Web disables legacy retry until a known reset. A consumed V2 quota ticket is nev
 ## City resolution availability
 
 City lookup keeps Nominatim as primary and uses the OSM-backed [Photon API](https://github.com/komoot/photon/blob/master/docs/api-v1.md) when primary lookup is unavailable or returns no candidates. City types, ISO country, coordinates and OSM identifiers are validated before caching; only an offered cached source ID can become a canonical city. Venue lookup does not fail over. Explicit primary rate limiting is not bypassed. Photon has a separate shared one-request/second lease and the same 30-day cache. `PHOTON_BASE_URL` can point to a managed/self-hosted instance; the public demo has no availability guarantee. AI provider selection is unchanged by geocoder failover.
+
+## Configurable AI fallback sources
+
+V2 can use a configurable, ordered list of fallback sources after a
+definitive quota rejection. Cloudflare remains the default primary provider. A timeout,
+unknown result, authentication error or other provider error does not trigger
+another source. One durable dispatch ticket covers the complete sequence; a
+redelivered queue message does not repeat it.
+
+Configure the backend variable `AI_FALLBACK_PROVIDERS` as JSON. Each entry has a
+safe unique `id`, `provider`, `model` and `key_env` containing the **name** of a
+Worker secret, never the secret value. Example:
+
+```json
+[
+  {"id":"gemini-first","provider":"gemini","model":"CONFIGURED_GEMINI_MODEL","key_env":"GEMINI_API_KEY"},
+  {"id":"gemini-second","provider":"gemini","model":"CONFIGURED_GEMINI_MODEL","key_env":"GEMINI_API_KEY_2"},
+  {"id":"openai-example","provider":"openai","model":"CONFIGURED_MODEL","key_env":"OPENAI_API_KEY"}
+]
+```
+
+Replace each model placeholder with a model available to that account and test
+it before enabling fallback for all users. Model availability and free-tier
+limits can change independently of this application.
+
+Supported fallback providers are `gemini`, `openai`, and `claude`. Secret names
+must begin with `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`
+respectively, optionally followed by an uppercase suffix. Configure each as an
+encrypted secret on the `travel-planner-api` Worker. Set the GitHub Actions
+variable `AI_FALLBACK_PROVIDERS` to the same JSON so subsequent deployments keep
+the source list; manual deployment uses `DEPLOY_AI_FALLBACK_PROVIDERS`. Invalid
+configuration fails preflight. Deployment checks that every configured key is an
+encrypted Worker secret. If a secret later becomes unavailable, that source is
+skipped with a warning without preventing the primary provider from working.
+Set `AI_FALLBACK_CANARY_ONLY=true` to restrict fallback to the existing
+`PLANNING_CANARY_USER_IDS` allowlist during live verification. Other jobs still
+use the primary provider. After verification, set it to `false` to enable the
+configured sources for all new jobs.
+
+Source usage records include the source ID, provider, model and outcome, not the
+API key. Existing jobs with a recorded response reuse it; unknown outcomes never
+trigger fallback on resume. A free-tier key does not guarantee availability or
+that another account uses an independent quota. Provider billing and data-use
+policies must be checked for every configured account.
+
+The default limit is five sources; set `AI_FALLBACK_MAX_SOURCES` (or the GitHub
+Actions variable of the same name) to a value from 1 through 20 when more are
+needed. This bounds the number of provider calls without changing code.
+
+## Generate runtime and verification
+
+Production evidence below is a snapshot, not a guarantee of future availability.
+
+```mermaid
+flowchart LR
+  Client[Web / mobile] --> API[Generate API]
+  API --> Job[Job + durable dispatch]
+  Job --> Queue[Cloudflare Queue]
+  Queue --> V2[Catalog-first V2]
+  V2 --> Catalog[Destination and price catalog]
+  Catalog --> Need{Missing data?}
+  Need -->|yes| AI[Configured AI provider]
+  Need -->|no| Validate[Server assembly and validation]
+  AI --> Ledger[Usage + response checkpoint]
+  Ledger --> Validate
+  Validate --> Result[Itinerary or safe error]
+  Client -->|poll job| Result
+```
+
+Jobs retain their original pipeline; queued V1 jobs are not silently migrated. The catalog-first path uses existing catalog data and only requests missing data. Costs from AI are unverified estimates, not quotes. The server validates route, timing and costs. An unknown AI outcome must not trigger another inference. Queue and ledger recovery preserve the job rather than sending it through V1.
+
+## Baseline verified 2026-11-19
+
+| Item | Evidence |
+| --- | --- |
+| GitHub main | `1890cdc3a3e9fe618a7c5c36dc7653044ae9cb1d`, PR #45 merged. |
+| Open fallback PR | [#46](https://github.com/travan/AI-Powered-_Travel_Planner/pull/46), remote head `38d2346` at baseline. |
+| Worker health | Deploy commit `826996e`, V2 100%, Queue bound, one inference slot, Cloudflare primary. Health is not a generation test. |
+| Revision drift | `826996e` was not in PR #46 at baseline; it was subsequently pushed to that PR. Production later ran `d094d14`; verify the current deployment against the reviewed commit before release. |
+| Canary protection | Gemini fallback has been restricted to CI; verify actual Worker settings and source list before every deployment. Never print secrets. |
+
+## Known evidence
+
+| Finding | Status and limits |
+| --- | --- |
+| V1 job `8d40383b-8eaa-4be1-94d7-430c9b7344e4` | Historical V1 failure after 18 model calls. Exact validation slot was not available; see [V2 verification](../testing/catalog-first-generation-v2.md). |
+| Cloudflare V2 | CI Da Nang `43201635-1d2d-4360-bb87-1362b93dfac6` and Ha Giang `8c906691-2431-4583-a219-c65078b60cf1` completed in earlier real tests. These do not establish a population success rate. |
+| Gemini short route | Da Nang `c3a08efc-c8d9-4bb3-8dc9-a0884f9e70de` completed with Gemini 3.5 Flash Lite. |
+| Gemini service availability | Ha Giang `0120fe0f-3bf4-4fe9-9bb2-9bdaa78ca2a8` returned Google HTTP 503. An earlier 3.8 Flash request timed out; its outcome is unknown. |
+| Gemini international routes | Malaysia/Singapore `76e00b88-9217-421e-852f-370eee607edf` and China/Russia `49f0d6a9-838d-42af-a5d8-2b9baf40ba83` returned HTTP 400 INVALID_ARGUMENT. Exact rejected field was not retained. Schema complexity is a hypothesis, not an established root cause. |
+| Schema candidate | `826996e` simplifies the Gemini schema. A subsequent Malaysia/Singapore test `0d461cd5-cf27-42aa-8ea6-c6b0c4a2ab9e` received HTTP 503; it did not validate the schema fix. |
+| CI simulation | Three-city job `7cf7cd30-6e3f-471b-b69d-c13627182676` completed with Cloudflare despite intended simulated quota. Cause was not established. Always assert the actual provider before treating a test as Gemini evidence. |
+
+The later canary for `d094d14` completed Da Nang `2c997865-b776-474d-bfe8-6c4a970f7cd9` and Ha Giang `7c66d93c-ed0c-464d-bf2a-dd0b08725a36` with Gemini 3.5 Flash Lite. Malaysia/Singapore `809280a0-5950-4c51-a39b-84d332647184` returned Google HTTP 503, and the runner stopped before the other cases. This does not establish whether the schema change fixes the prior HTTP 400, and the Gemini rollout gate remains unmet. The 503 response came from the expected Google hostname; internal provider capacity is not observable from this application.
+
+## How to inspect a job
+
+1. On the app, open recent planning requests and record the job ID, status, pipeline and safe error. A failed generation is not proof that the model ran.
+2. In Cloudflare dashboard open Workers & Pages → `travel-planner-api` → Logs, then filter for the job ID and timestamp. Tail logs with the Wrangler version in the deployment runbook when dashboard access is available. Depending on retention and permissions, old logs may not be available.
+3. Compare durable job usage metadata: source ID, provider, model, status, token counts and duration. The CI runner records these in its reports. The synthetic `canary-simulated-quota` entry is not a real Cloudflare inference.
+4. Interpret 400 as a rejected request until a safe diagnostic proves more; 503 as provider unavailable; timeout as unknown; and quota exhaustion separately. Do not put raw prompts, model responses or credentials into logs or public errors.
+
+## Configuration and rollout
+
+`AI_PROVIDER` selects the primary; `AI_FALLBACK_PROVIDERS` lists ordered provider/model/secret-name entries. Actual API keys are Worker secrets, never request fields. CI-only is the safe default. Multiple supported model/key entries are configuration changes; a new provider protocol requires an implementation. Fallback follows a definitive quota rejection only; timeouts and uncertain outcomes do not trigger another call.
+
+The exact original Malaysia/Singapore request remains in `tests/fixtures/malaysia-singapore-request.json`; wide-budget and other route fixtures are separate. Live tests submit sequentially with stable idempotency keys and no automatic retry. Promote Gemini beyond CI only after actual provider assertions and all required route validations pass. Preserve the current V2 percentage and Queue for existing jobs during investigation.

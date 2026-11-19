@@ -83,7 +83,7 @@ if (
   );
   assert.ok(!error, "Invalid Worker configuration");
   let token;
-  await verifyPlanningBindings(config, async (resource) => {
+  const api = async (resource) => {
     token ??= await cloudflareApiToken();
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${config.account_id}${resource}`,
@@ -100,6 +100,14 @@ if (
       "Unable to verify deployed Cloudflare resources",
     );
     return body.result;
-  });
-  console.log("Planning Queue deployment bindings verified (or v2 disabled).");
+  };
+  if (process.argv.includes("--secrets-only")) {
+    const fallbacks = JSON.parse(config.vars?.AI_FALLBACK_PROVIDERS || "[]");
+    if (fallbacks.length)
+      verifyFallbackSecrets(config, await api(`/workers/scripts/${encodeURIComponent(config.name)}/settings`));
+    console.log("Fallback secret bindings verified.");
+  } else {
+    await verifyPlanningBindings(config, api);
+    console.log("Planning Queue deployment bindings verified (or v2 disabled).");
+  }
 }
