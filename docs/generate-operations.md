@@ -42,6 +42,8 @@ Jobs retain their original pipeline; queued V1 jobs are not silently migrated. T
 | Schema candidate | `826996e` simplifies the Gemini schema. A subsequent Malaysia/Singapore test `0d461cd5-cf27-42aa-8ea6-c6b0c4a2ab9e` received HTTP 503; it did not validate the schema fix. |
 | CI simulation | Three-city job `7cf7cd30-6e3f-471b-b69d-c13627182676` completed with Cloudflare despite intended simulated quota. Cause was not established. Always assert the actual provider before treating a test as Gemini evidence. |
 
+The later canary for `d094d14` completed Da Nang `2c997865-b776-474d-bfe8-6c4a970f7cd9` and Ha Giang `7c66d93c-ed0c-464d-bf2a-dd0b08725a36` with Gemini 3.5 Flash Lite. Malaysia/Singapore `809280a0-5950-4c51-a39b-84d332647184` returned Google HTTP 503, and the runner stopped before the other cases. This does not establish whether the schema change fixes the prior HTTP 400, and the Gemini rollout gate remains unmet. The 503 response came from the expected Google hostname; internal provider capacity is not observable from this application.
+
 ## How to inspect a job
 
 1. On the app, open recent planning requests and record the job ID, status, pipeline and safe error. A failed generation is not proof that the model ran.

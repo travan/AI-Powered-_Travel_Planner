@@ -364,8 +364,9 @@ export async function runProductionCanary({
 }
 
 const total = (calls = [], field) =>
-  calls.length && calls.every((call) => Number.isFinite(call[field]))
-    ? calls.reduce((sum, call) => sum + call[field], 0)
+  calls.some((call) => call.model !== "canary-simulated-quota") &&
+  calls.filter((call) => call.model !== "canary-simulated-quota").every((call) => Number.isFinite(call[field]))
+    ? calls.filter((call) => call.model !== "canary-simulated-quota").reduce((sum, call) => sum + call[field], 0)
     : null;
 export function summarize(rows) {
   return Object.fromEntries(
