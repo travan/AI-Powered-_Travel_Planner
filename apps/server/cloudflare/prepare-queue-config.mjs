@@ -80,7 +80,7 @@ if (fallback) {
 }
 config.vars.AI_FALLBACK_PROVIDERS = fallback;
 config.vars.AI_FALLBACK_MAX_SOURCES = String(maxFallbacks);
-config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "true" ? "true" : "false";
+config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "false" ? "false" : "true";
 for (const key of [
   "CLOUDFLARE_AI_MODEL",
   "ANTHROPIC_MODEL",

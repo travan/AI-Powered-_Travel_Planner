@@ -3,7 +3,7 @@ import type { AiTokenUsage } from "@travel/types";
 
 export type FallbackSource = { id: string; provider: "gemini" | "openai" | "claude"; model: string; key_env: string };
 export function fallbackAllowed(userId: string, canaryOnly: string | undefined, allowlist: string | undefined): boolean {
-  return canaryOnly !== "true" || (allowlist ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(userId);
+  return canaryOnly === "false" || (allowlist ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(userId);
 }
 export function simulateCanaryQuota(userId: string, env: NodeJS.ProcessEnv): boolean {
   return env.AI_FALLBACK_CANARY_FORCE_QUOTA === "true" && env.AI_FALLBACK_CANARY_ONLY === "true" &&

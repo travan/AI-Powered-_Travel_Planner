@@ -15,6 +15,17 @@ const schema = {
 const content = '{"cities":[],"items":[]}';
 
 describe("single-dispatch supplement adapters", () => {
+  it.each([
+    ["A schema in GenerationConfig exceeds the maximum allowed nesting depth.", "schema_complexity"],
+    ["responseJsonSchema has an unsupported field", "schema_unsupported"],
+    ["The request contains private traveler data", "request_rejected"],
+  ])("classifies Gemini request errors without storing provider text", async (message, reason) => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message } }), { status: 400 }));
+    const adapter = createSupplementProvider({ config: { provider: "gemini", model: "test" }, apiKey: "test-key", request });
+    await expect(adapter.supplementRaw("private prompt", "vi", schema)).rejects.toMatchObject({ code: "AI_PROVIDER_CONFIGURATION_INVALID" });
+    expect(adapter.getUsage()).toMatchObject([{ provider_reason: reason, provider_api_status: "INVALID_ARGUMENT" }]);
+    expect(JSON.stringify(adapter.getUsage())).not.toContain(message);
+  });
   it("bounds Gemini schema complexity without mutating the original constraints", async () => {
     const complex = { type: "object", properties: { items: { type: "array", minItems: 80, maxItems: 80, items: { type: "object", properties: { key: { type: "string" }, amount: { type: "number", minimum: 0 } }, anyOf: [{ properties: { key: { enum: ["meal-1", "meal-2"] } } }] } } } };
     const request = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] })));

@@ -22,10 +22,20 @@ export async function planningCanaryCases() {
   haGiang.num_days = 7;
   haGiang.budget = haGiang.planning.budget.total = 100_000_000;
   haGiang.planning.dining_preferences.independent_only = false;
+  const route = (cities, days) => {
+    const request = structuredClone(wide);
+    request.cities = request.planning.journey.destinations = cities;
+    request.num_days = days;
+    request.planning.dining_preferences.independent_only = false;
+    return request;
+  };
   return [
     { id: "original-my-sg", request: original, allowConstraintFailure: true },
     { id: "wide-my-sg", request: wide, allowConstraintFailure: false },
     { id: "short-da-nang", request: short, allowConstraintFailure: false, promoted: true },
     { id: "ha-giang", request: haGiang, allowConstraintFailure: false, promoted: true, compare: false },
+    { id: "three-central-cities", request: route(["hue", "da-nang", "hoi-an"], 9), allowConstraintFailure: false, compare: false },
+    { id: "four-vietnamese-cities", request: route(["hue", "da-nang", "hoi-an", "nha-trang"], 12), allowConstraintFailure: false, compare: false },
+    { id: "china-russia", request: route(["country-cn", "country-ru"], 14), allowConstraintFailure: false, compare: false },
   ];
 }

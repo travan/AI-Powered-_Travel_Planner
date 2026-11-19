@@ -14,6 +14,8 @@ describe("configurable AI fallback", () => {
     expect(fallbackAllowed("ci", "true", "ci,other")).toBe(true);
     expect(fallbackAllowed("user", "true", "ci,other")).toBe(false);
     expect(fallbackAllowed("user", "false", "ci")).toBe(true);
+    expect(fallbackAllowed("user", undefined, "ci")).toBe(false);
+    expect(fallbackAllowed("ci", undefined, "ci")).toBe(true);
     const env = { AI_FALLBACK_CANARY_FORCE_QUOTA: "true", AI_FALLBACK_CANARY_ONLY: "true", PLANNING_CANARY_USER_IDS: "ci" };
     expect(simulateCanaryQuota("ci", env)).toBe(true);
     expect(simulateCanaryQuota("user", env)).toBe(false);

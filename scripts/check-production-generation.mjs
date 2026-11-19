@@ -192,6 +192,8 @@ export async function runProductionCanary({
   request = fetch,
   sleep = delay,
   output = "test-results/production-generation",
+  testCases,
+  expectedProvider,
 }) {
   assert.ok(
     base && new URL(base).protocol === "https:",
@@ -214,7 +216,7 @@ export async function runProductionCanary({
     "Unexpected rollout percentage",
   );
   const session = await canarySession(base, { request });
-  const cases = await planningCanaryCases();
+  const cases = testCases ?? await planningCanaryCases();
   const selectedCases = cases.filter((test) => mode === "compare" ? test.compare !== false : test.promoted === true);
   assert.ok(selectedCases.length > 0, "No production canary cases configured");
   const reports = [];
@@ -302,6 +304,8 @@ export async function runProductionCanary({
             pipeline,
             "Job used the wrong pipeline",
           );
+          if (expectedProvider)
+            assert.equal(job.provider, expectedProvider, "Job used the wrong AI provider");
           if (pipeline === 2) {
             const usage = job.ai_usage ?? [];
             assert.ok(usage.length <= 21 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected"), "Unexpected V2 provider dispatches");

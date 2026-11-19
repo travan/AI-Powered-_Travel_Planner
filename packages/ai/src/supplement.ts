@@ -172,6 +172,8 @@ class HttpSupplementProvider implements SupplementProvider {
         }
         providerReason = /API_KEY_INVALID|API key not valid/i.test(text) ? "invalid_api_key" :
           /API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED/i.test(text) ? "api_key_restricted" :
+          provider === "gemini" && response.status === 400 && /schema[^\n]{0,200}(?:too complex|exceeds.{0,60}(?:complexity|nesting|depth|limit|maximum))|(?:complexity|nesting depth)[^\n]{0,100}schema/i.test(text) ? "schema_complexity" :
+          provider === "gemini" && response.status === 400 && /(?:schema|responseJsonSchema)[^\n]{0,200}(?:unsupported|not supported|unknown field|invalid field)|(?:unsupported|not supported|unknown field)[^\n]{0,100}(?:schema|responseJsonSchema)/i.test(text) ? "schema_unsupported" :
           response.status === 404 ? (/model[^\n]{0,200}not found|not found[^\n]{0,200}model/i.test(text) ? "model_not_found" : "endpoint_not_found") : response.status === 400 ? "request_rejected" : undefined;
         let code: PlanningGenerationError["code"] = "AI_UNAVAILABLE";
         if (response.status === 401 || response.status === 403)
