@@ -1,0 +1,293 @@
+{
+  "items": [
+    {
+      "key": "mu-cang-chai/meal/breakfast",
+      "name": "Cafe Pho Co",
+      "amount": 20000,
+      "duration_minutes": 30
+    },
+    {
+      "key": "mu-cang-chai/local/daily",
+      "name": "Mu Cang Chai Local Transport",
+      "amount": 50000,
+      "duration_minutes": 120
+    },
+    {
+      "key": "mu-cang-chai/1/morning_1",
+      "name": "Mu Cang Chai Viewpoint",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/meal/lunch",
+      "name": "Com Ga Hai Nam",
+      "amount": 40000,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/1/afternoon_1",
+      "name": "Mu Cang Chai Rice Terraces",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/1/afternoon_2",
+      "name": "Mu Cang Chai Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/cafe/daily",
+      "name": "Cafe Giang",
+      "amount": 30000,
+      "duration_minutes": 30
+    },
+    {
+      "key": "mu-cang-chai/meal/dinner",
+      "name": "Restaurant 1991",
+      "amount": 60000,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/1/evening",
+      "name": "Mu Cang Chai Night Market",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/2/morning_1",
+      "name": "Khau Pha Pass",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/2/afternoon_1",
+      "name": "La Pan Tan Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/2/afternoon_2",
+      "name": "Che Cu Nha Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/2/evening",
+      "name": "Mu Cang Chai Town",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/3/morning_1",
+      "name": "Nam Co Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/3/afternoon_1",
+      "name": "Nang Nhen Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/3/afternoon_2",
+      "name": "Lung Cung Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/3/evening",
+      "name": "Mu Cang Chai Cultural Center",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/4/morning_1",
+      "name": "Pung Luong Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/4/afternoon_1",
+      "name": "De Xu Phanh Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/4/afternoon_2",
+      "name": "Na Mo Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/4/evening",
+      "name": "Mu Cang Chai Nightlife",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/5/morning_1",
+      "name": "Ta Xua Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/5/afternoon_1",
+      "name": "Bac Ha Market",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/5/afternoon_2",
+      "name": "Can Cau Market",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/5/evening",
+      "name": "Mu Cang Chai Sunset",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/6/morning_1",
+      "name": "Lung Cu Flagpole",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/6/afternoon_1",
+      "name": "Dong Van Karst Plateau",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/6/afternoon_2",
+      "name": "Meo Vac Town",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/6/evening",
+      "name": "Mu Cang Chai Stargazing",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/7/morning_1",
+      "name": "Nam Dam Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/7/afternoon_1",
+      "name": "Nam Pa Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/7/afternoon_2",
+      "name": "Nam Nhung Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/7/evening",
+      "name": "Mu Cang Chai Campfire",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/8/morning_1",
+      "name": "Nam Khao Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/8/afternoon_1",
+      "name": "Nam Mu Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/8/afternoon_2",
+      "name": "Nam Nga Village",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/8/evening",
+      "name": "Mu Cang Chai Nightlife",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/9/morning_1",
+      "name": "Ta Chi Nhu Mountain",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/9/afternoon_1",
+      "name": "Pung Luong Mountain",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/9/afternoon_2",
+      "name": "Khau Pha Mountain",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/9/evening",
+      "name": "Mu Cang Chai Stargazing",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/10/morning_1",
+      "name": "Mu Cang Chai Market",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/10/afternoon_1",
+      "name": "Mu Cang Chai Village",
+      "amount": 0,
+      "duration_minutes": 90
+    },
+    {
+      "key": "mu-cang-chai/10/afternoon_2",
+      "name": "Mu Cang Chai Rice Terraces",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/10/evening",
+      "name": "Mu Cang Chai Night Market",
+      "amount": 0,
+      "duration_minutes": 60
+    },
+    {
+      "key": "mu-cang-chai/stay",
+      "name": "Mu Cang Chai Town",
+      "amount": 800000,
+      "duration_minutes": 1440
+    },
+    {
+      "key": "leg/1",
+      "name": "Hanoi to Mu Cang Chai",
+      "amount": 1000000,
+      "duration_minutes": 240
+    },
+    {
+      "key": "leg/2",
+      "name": "Mu Cang Chai to Hanoi",
+      "amount": 1000000,
+      "duration_minutes": 240
+    }
+  ],
+  "cities": []
+}

@@ -27,12 +27,18 @@ import { logEvent } from "../../../observability/logger.js";
 import { GenerationStore } from "./generation.store.js";
 import { generationInput, generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
-import { fallbackAllowed, fallbackSources, simulateCanaryQuota, supplementWithFallback, type FallbackSource } from "./supplement-fallback.js";
+import {
+  fallbackAllowed,
+  fallbackSources,
+  simulateCanaryQuota,
+  supplementWithFallback,
+  type FallbackSource,
+} from "./supplement-fallback.js";
 import {
   prepareSnapshot,
-  applySupplement,
-  scheduleTravel,
-  validateSupplementRequirements,
+  applySupplementForDisplay,
+  scheduleTravelForDisplay,
+  planningWarning,
   type Snapshot,
   type Destination,
 } from "./planning-data.js";
@@ -336,65 +342,137 @@ export class CatalogFirstPlanner {
       const binding = workerContext?.rawAi ?? workerContext?.ai;
       let provider: SupplementProvider | undefined;
       let sources: FallbackSource[] = [];
-      const raw = await this.store.once(
-        job.generation_id,
-        async (signal) => {
-          provider ??= createSupplementProvider({
-            workersAI: binding,
-            config: state.ai_config,
-          });
-          let recorded = 0;
-          return supplementWithFallback({
-            primary: provider,
-            fallbacks: sources.map((source) => ({ id: source.id, create: () => {
-              const key = process.env[source.key_env]?.trim();
-              if (!key) throw new HttpException({ code: "AI_PROVIDER_CONFIGURATION_INVALID" }, 503);
-              return createSupplementProvider({ config: { provider: source.provider, model: source.model }, apiKey: key });
-            }})),
-            prompt, locale: state.input.locale, schema, signal,
-            onUsage: async (usage) => {
-              for (const item of usage.slice(recorded)) options.onUsage?.(item);
-              recorded = usage.length;
-              await this.store.recordUsage?.(job.generation_id, usage).catch(() => {});
-            },
-          });
-        },
-        () => {
-          state.ai_config ??= supplementConfig();
-          const allowFallback = fallbackAllowed(options.userId, process.env.AI_FALLBACK_CANARY_ONLY, process.env.PLANNING_CANARY_USER_IDS);
-          sources = allowFallback ? fallbackSources(process.env.AI_FALLBACK_PROVIDERS, Number(process.env.AI_FALLBACK_MAX_SOURCES ?? 5)).filter((source) => {
-            if (process.env[source.key_env]?.trim()) return true;
-            logEvent("journey.ai_fallback_unconfigured", "warn", { sourceId: source.id, code: "AI_PROVIDER_CONFIGURATION_INVALID" });
-            return false;
-          }) : [];
-          provider = createSupplementProvider({
-            workersAI: binding,
-            config: state.ai_config,
-          });
-          if (state.ai_config.provider === "cloudflare" && sources.length && simulateCanaryQuota(options.userId, process.env))
-            provider = {
-              supplementRaw: async () => { throw new PlanningGenerationError("AI_QUOTA_EXHAUSTED", undefined, undefined, "cloudflare"); },
-              getUsage: () => [{ operation: "detail", provider: "cloudflare", model: "canary-simulated-quota", input_tokens: null, output_tokens: null, total_tokens: null, outcome: "quota_rejected" }],
-            };
-        },
-      );
+      let raw: { response?: unknown };
+      try {
+        raw = await this.store.once(
+          job.generation_id,
+          async (signal) => {
+            provider ??= createSupplementProvider({
+              workersAI: binding,
+              config: state.ai_config,
+            });
+            let recorded = 0;
+            return supplementWithFallback({
+              primary: provider,
+              fallbacks: sources.map((source) => ({
+                id: source.id,
+                create: () => {
+                  const key = process.env[source.key_env]?.trim();
+                  if (!key)
+                    throw new HttpException(
+                      { code: "AI_PROVIDER_CONFIGURATION_INVALID" },
+                      503,
+                    );
+                  return createSupplementProvider({
+                    config: { provider: source.provider, model: source.model },
+                    apiKey: key,
+                  });
+                },
+              })),
+              prompt,
+              locale: state.input.locale,
+              schema,
+              signal,
+              onUsage: async (usage) => {
+                for (const item of usage.slice(recorded))
+                  options.onUsage?.(item);
+                recorded = usage.length;
+                await this.store
+                  .recordUsage?.(job.generation_id, usage)
+                  .catch(() => {});
+              },
+            });
+          },
+          () => {
+            state.ai_config ??= supplementConfig();
+            const allowFallback = fallbackAllowed(
+              options.userId,
+              process.env.AI_FALLBACK_CANARY_ONLY,
+              process.env.PLANNING_CANARY_USER_IDS,
+            );
+            sources = allowFallback
+              ? fallbackSources(
+                  process.env.AI_FALLBACK_PROVIDERS,
+                  Number(process.env.AI_FALLBACK_MAX_SOURCES ?? 5),
+                ).filter((source) => {
+                  if (process.env[source.key_env]?.trim()) return true;
+                  logEvent("journey.ai_fallback_unconfigured", "warn", {
+                    sourceId: source.id,
+                    code: "AI_PROVIDER_CONFIGURATION_INVALID",
+                  });
+                  return false;
+                })
+              : [];
+            provider = createSupplementProvider({
+              workersAI: binding,
+              config: state.ai_config,
+            });
+            if (
+              state.ai_config.provider === "cloudflare" &&
+              sources.length &&
+              simulateCanaryQuota(options.userId, process.env)
+            )
+              provider = {
+                supplementRaw: async () => {
+                  throw new PlanningGenerationError(
+                    "AI_QUOTA_EXHAUSTED",
+                    undefined,
+                    undefined,
+                    "cloudflare",
+                  );
+                },
+                getUsage: () => [
+                  {
+                    operation: "detail",
+                    provider: "cloudflare",
+                    model: "canary-simulated-quota",
+                    input_tokens: null,
+                    output_tokens: null,
+                    total_tokens: null,
+                    outcome: "quota_rejected",
+                  },
+                ],
+              };
+          },
+        );
+      } catch (error) {
+        const code =
+          error instanceof HttpException
+            ? (error.getResponse() as { code?: string }).code
+            : undefined;
+        if (
+          !(error instanceof PlanningGenerationError) &&
+          !code?.startsWith("AI_")
+        )
+          throw error;
+        if (!Object.keys(state.items).length) throw error;
+        planningWarning(
+          state,
+          "PLANNING_SUPPLEMENT_UNAVAILABLE",
+          "Chưa bổ sung được dữ liệu AI. Lịch hiển thị phần dữ liệu đã có; các mục còn thiếu cần kiểm tra và bổ sung.",
+          "AI supplementation is unavailable. Available itinerary data is shown; review and fill in the missing items.",
+        );
+        raw = { response: { items: [] } };
+      }
       let response: unknown;
       try {
         response =
           typeof raw?.response === "string"
             ? JSON.parse(raw.response)
             : raw?.response;
-        applySupplement(state, response);
+        applySupplementForDisplay(state, response);
       } catch (error) {
         if (error instanceof HttpException) throw error;
-        generationError("AI_RESPONSE_INVALID", "supplement_invalid");
+        if (!Object.keys(state.items).length)
+          generationError("AI_RESPONSE_INVALID", "supplement_invalid");
+        response = { items: [] };
+        applySupplementForDisplay(state, response);
       }
-      validateSupplementRequirements(state);
       const proposals = (
         response as {
           cities?: { destination: string; name: string; country: string }[];
         }
-      ).cities;
+      )?.cities;
       for (const dest of state.destinations) {
         if (dest.city) continue;
         const proposal = Array.isArray(proposals)
@@ -406,33 +484,64 @@ export class CatalogFirstPlanner {
           !proposal.name.trim() ||
           typeof proposal.country !== "string" ||
           (dest.country && proposal.country !== dest.country)
-        )
-          generationError("AI_RESPONSE_INVALID", "city_proposal_invalid");
+        ) {
+          planningWarning(
+            state,
+            "PLANNING_LOCATION_UNVERIFIED",
+            "Chưa xác minh được thành phố được đề xuất. Lịch trình vẫn được hiển thị để bạn kiểm tra địa điểm.",
+            "The proposed city could not be verified. The itinerary is shown for you to review its locations.",
+          );
+          dest.city = {
+            slug: dest.selected,
+            name: { en: dest.selected },
+            country: dest.country,
+            timezone: state.input.planning!.journey.timezone,
+            currency: state.input.currency,
+            lat: null,
+            lon: null,
+            popular: false,
+            places: [],
+            activities: [],
+          };
+          continue;
+        }
         let city;
         try {
           city = await this.cities.remember(
             `${proposal.name}, ${proposal.country}`,
           );
         } catch (error) {
-          if (error instanceof BadRequestException)
-            generationError(
-              "PLANNING_DATA_INSUFFICIENT",
-              "proposed_city_unresolved",
-            );
           if (
-            error instanceof HttpException &&
-            [429, 503].includes(error.getStatus())
+            !(error instanceof BadRequestException) &&
+            !(
+              error instanceof HttpException &&
+              [429, 503].includes(error.getStatus())
+            )
           )
-            throw new HttpException(
-              { code: "LOCATION_LOOKUP_UNAVAILABLE" },
-              503,
-            );
-          throw error;
+            throw error;
+          planningWarning(
+            state,
+            "PLANNING_LOCATION_UNVERIFIED",
+            `Chưa xác minh được ${proposal.name}; cần kiểm tra địa điểm trước khi đi.`,
+            `${proposal.name} could not be verified; review its location before travel.`,
+          );
+          city = {
+            slug: dest.selected,
+            name: { en: proposal.name },
+            country: dest.country,
+            timezone: state.input.planning!.journey.timezone,
+            currency: state.input.currency,
+            lat: null,
+            lon: null,
+            popular: false,
+          };
         }
         if (city.country !== proposal.country)
-          generationError(
-            "PLANNING_DATA_INSUFFICIENT",
-            "city_country_mismatch",
+          planningWarning(
+            state,
+            "PLANNING_LOCATION_UNVERIFIED",
+            `Quốc gia của ${proposal.name} chưa khớp với điểm đến đã chọn; cần kiểm tra lại.`,
+            `The country of ${proposal.name} does not match the selected destination; review it.`,
           );
         dest.city = (await this.cities.findForPlanning(city.slug, 300)) ?? {
           ...city,
@@ -458,14 +567,7 @@ export class CatalogFirstPlanner {
         source: "manual",
       };
     }
-    try {
-      scheduleTravel(state);
-    } catch {
-      generationError(
-        "PLANNING_DATA_INSUFFICIENT",
-        "main_travel_schedule_unavailable",
-      );
-    }
+    scheduleTravelForDisplay(state);
     for (const day of state.schedule) {
       if (state.days.some((done) => done.day_number === day.day)) continue;
       state.days.push(assembleDay(state, day));

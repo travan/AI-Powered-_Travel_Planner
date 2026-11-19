@@ -6,7 +6,7 @@
  *   2. Google OAuth with a custom `next` param (e.g. /saved) → land on /saved
  *   3. /auth/callback with no `code` param → /login?error=auth_callback_error  (real route behaviour)
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test-fixtures";
 import {
   clearWebMockAuthSession,
   triggerGoogleOAuthOnWeb,

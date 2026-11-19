@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test } from "./helpers/test-fixtures";
 
 test.describe("Supabase demo data", () => {
   test.skip(!process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes("placeholder"),

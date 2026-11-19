@@ -146,7 +146,7 @@ describe("booking review messages", () => {
     },
   );
 
-  it("omits internal diagnostics while keeping actionable conflicts", () => {
+  it("shows quality warnings alongside the available itinerary", () => {
     const plan = {
       days: [],
       issues: [
@@ -177,8 +177,8 @@ describe("booking review messages", () => {
         <JourneySummary plan={plan} />
       </LanguageProvider>,
     );
-    expect(screen.queryByText("Day 1: missing breakfast.")).toBeNull();
-    expect(screen.queryByText("Accommodation will be suggested.")).toBeNull();
+    expect(screen.getByText("Day 1: missing breakfast.")).toBeTruthy();
+    expect(screen.getByText(/Accommodation will be suggested/)).toBeTruthy();
     expect(screen.getByText("Dinner overlaps your departure.")).toBeTruthy();
   });
 });

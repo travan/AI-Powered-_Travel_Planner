@@ -9,20 +9,7 @@ export function JourneySummary({ plan }: { plan: Itinerary }) {
 
   const issueText = useIssueText();
   const t = useUiText();
-  const diagnosticCodes = new Set([
-    "MEAL_MISSING",
-    "ACTIVITIES_MISSING",
-    "SCHEDULE_DETAILS_MISSING",
-    "ACTIVITY_DETAILS_MISSING",
-    "EVENING_MISSING",
-    "HOTEL_RETURN_MISSING",
-    "BUDGET_INCOMPLETE",
-    "STAY_UNSELECTED",
-    "STAY_NOT_SELECTED",
-  ]);
-  const issues = (plan.issues ?? []).filter(
-    (issue) => !diagnosticCodes.has(issue.code),
-  );
+  const issues = plan.issues ?? [];
   const p = plan.planning;
   const route = routeLabels(itineraryRoute(plan), formattingLocale);
   if (p && !p.journey.return_to_origin && !p.journey.endpoint?.label.trim())

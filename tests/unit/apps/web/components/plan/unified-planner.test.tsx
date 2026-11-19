@@ -249,9 +249,18 @@ describe("compact planner submission", () => {
         (screen.getByLabelText("Currency") as HTMLSelectElement).value,
       ).toBe("USD"),
     );
-    const converted = JSON.parse(localStorage.getItem(key)!);
-    expect(converted.planning.budget.total).toBe(0.04);
-    expect(converted.planning.stay_preferences.nightly_budget).toBe(0.02);
+    // React renders the new currency before the separate draft-persistence
+    // effect necessarily runs, especially on a slower coverage runner.
+    await waitFor(() => {
+      const converted = JSON.parse(localStorage.getItem(key)!);
+      expect(converted.planning.budget).toMatchObject({
+        currency: "USD",
+        total: 0.04,
+      });
+      expect(converted.planning.stay_preferences.nightly_budget).toBe(0.02);
+      expect(converted.planning.dining_preferences.per_person_budget).toBe(0);
+      expect(converted.planning.transport_preferences.total_price).toBe(0.01);
+    });
     fireEvent.click(screen.getByRole("button", { name: "VI", exact: true }));
     await waitFor(() =>
       expect(
@@ -259,6 +268,16 @@ describe("compact planner submission", () => {
           .value,
       ).toBe("1000"),
     );
+    await waitFor(() => {
+      const restored = JSON.parse(localStorage.getItem(key)!);
+      expect(restored.planning.budget).toMatchObject({
+        currency: "VND",
+        total: 1000,
+      });
+      expect(restored.planning.stay_preferences.nightly_budget).toBe(500);
+      expect(restored.planning.dining_preferences.per_person_budget).toBe(100);
+      expect(restored.planning.transport_preferences.total_price).toBe(200);
+    });
   });
   it("keeps original money and blocks sending when conversion fails, then allows retry", async () => {
     const draft = emptyPlanner("en");

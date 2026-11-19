@@ -1,10 +1,48 @@
 packages:
-  - "apps/server"
-  - "apps/web"
-  - "apps/mobile"
-  - "packages/*"
+  - apps/server
+  - apps/web
+  - apps/mobile
+  - packages/*
 
 overrides:
-  "@babel/core": "7.29.0"
-  react: "19.0.0"
-  react-dom: "19.0.0"
+  '@babel/core': 7.29.6
+  '@humanfs/node@<0.16.8': 0.16.8
+  '@xmldom/xmldom@<0.8.15': 0.8.15
+  body-parser@>=2.0.0 <2.4.0: 2.4.0
+  brace-expansion@<2.0.0: 1.1.21
+  brace-expansion@>=2.0.0 <3.0.0: 2.1.7
+  brace-expansion@>=3.0.0 <5.0.12: 5.0.12
+  compression@<1.8.2: 1.8.2
+  decode-uri-component@<0.5.1: 0.5.1
+  esbuild@<0.25.0: 0.25.12
+  esbuild@>=0.27.3 <0.28.1: 0.28.1
+  follow-redirects@<1.16.2: 1.16.2
+  form-data@>=4.0.0 <4.0.6: 4.0.6
+  glob@>=9.0.0 <14.0.2: 14.0.2
+  image-size@<2.0.3: 2.0.3
+  js-yaml@>=3.0.0 <4.0.0: 3.15.2
+  js-yaml@>=4.0.0 <4.3.2: 4.3.2
+  minimatch@>=7.0.0 <11.0.1: 11.0.1
+  multer@<2.5.0: 2.5.0
+  nanoid@<3.3.18: 3.3.18
+  node-forge@<1.4.3: 1.4.3
+  nodemailer@<10.1.4: 10.1.4
+  postcss@<8.5.23: 8.5.23
+  proxy-addr@<2.0.8: 2.0.8
+  qs@<6.16.1: 6.16.1
+  react: 19.0.0
+  react-dom: 19.0.0
+  shell-quote@<1.11.0: 1.11.0
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
+  tar@<7.5.21: 7.5.21
+  undici@<7.0.0: 6.29.1
+  undici@>=7.0.0 <7.30.1: 7.30.1
+  uuid@<11.1.1: 11.1.1
+  vite@<6.4.4: ^6.4.4
+  ws@>=6.0.0 <7.0.0: 6.2.4
+  ws@>=7.0.0 <8.0.0: 7.5.11
+  ws@>=8.0.0 <8.21.0: 8.21.0
+
+patchedDependencies:
+  decode-uri-component@0.5.1: patches/decode-uri-component@0.5.1.patch
+  metro@0.82.5: patches/metro@0.82.5.patch

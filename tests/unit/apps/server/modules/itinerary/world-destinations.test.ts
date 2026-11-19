@@ -153,18 +153,20 @@ function scenario(
 // validation regressions, not evidence of live coverage, realistic fares or model quality.
 describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
   it.each(destinations)(
-    "%s reports resolver downtime separately from model or form errors",
+    "%s displays available data with a warning when the resolver is unavailable",
     async (...target) => {
       const s = scenario(target, kind, "empty");
       s.cityService.remember.mockRejectedValue(
         new ServiceUnavailableException("provider unavailable"),
       );
-      await expect(s.run()).rejects.toMatchObject({
-        response: { code: "LOCATION_LOOKUP_UNAVAILABLE" },
-        status: 503,
-      });
+      const generated = await s.run();
+      expect(generated.result.days).toHaveLength(3);
+      expect(generated.result.issues).toContainEqual(expect.objectContaining({
+        code: "PLANNING_LOCATION_UNVERIFIED", severity: "warning",
+      }));
+      expect(generated.result.days.flatMap((day) => day.activities).every((activity) => activity.lat == null && activity.lon == null)).toBe(true);
       expect(s.binding.run).toHaveBeenCalledOnce();
-      expect(s.repository.createComplete).not.toHaveBeenCalled();
+      expect(s.repository.createComplete).toHaveBeenCalledOnce();
     },
   );
   it.each(destinations)(

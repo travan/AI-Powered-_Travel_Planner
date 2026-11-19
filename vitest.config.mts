@@ -34,6 +34,10 @@ export default defineConfig({
         __dirname,
         "apps/mobile/node_modules/expo-linking",
       ),
+      "react-native": path.resolve(
+        __dirname,
+        "apps/mobile/node_modules/react-native/index.js",
+      ),
       "expo-secure-store": path.resolve(
         __dirname,
         "apps/mobile/node_modules/expo-secure-store",
@@ -64,7 +68,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
-      all: true,
       include: [
         "packages/ai/src/**/*.ts",
         "packages/scrapers/src/**/*.ts",
@@ -97,12 +100,10 @@ export default defineConfig({
         "**/*.spec.*",
       ],
       thresholds: {
-        global: {
-          branches: 80,
-          functions: 80,
-          lines: 80,
-          statements: 80,
-        },
+        branches: 80,
+        functions: 80,
+        lines: 80,
+        statements: 80,
       },
     },
   },

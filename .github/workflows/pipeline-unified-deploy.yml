@@ -136,7 +136,7 @@ jobs:
             apps/server/package.json \
             apps/web/.next \
             apps/web/package.json \
-            packages \
+            packages patches \
             package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json
 
       - name: Upload unified artifacts

@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "./helpers/test-fixtures";
 import { API_BASE_URL, apiAuthHeaders, apiJsonHeaders } from "./helpers/e2e-helpers";
 
 const tripId = "11111111-1111-4111-8111-111111111111";

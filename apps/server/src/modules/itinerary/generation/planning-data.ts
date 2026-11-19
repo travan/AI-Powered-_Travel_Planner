@@ -1,4 +1,8 @@
-import type { ItineraryInput, ItineraryDay } from "@travel/types";
+import type {
+  ItineraryInput,
+  ItineraryDay,
+  PlanningIssue,
+} from "@travel/types";
 import { prepareDailySlots } from "@travel/ai";
 import * as types from "@travel/types";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
@@ -55,6 +59,7 @@ export type SlotDay = {
     itemKey?: string;
     coveredBy?: string;
     displayName?: string;
+    duringTransport?: boolean;
   })[];
 };
 export type Snapshot = {
@@ -69,7 +74,123 @@ export type Snapshot = {
   ai_config?: import("@travel/ai").SupplementConfig;
   legacy_destination_only?: boolean;
   travel_scheduled?: boolean;
+  warnings?: PlanningIssue[];
 };
+
+export function planningWarning(
+  snapshot: Snapshot,
+  code: string,
+  vi: string,
+  en: string,
+) {
+  snapshot.warnings ??= [];
+  const message = snapshot.input.locale === "vi" ? vi : en;
+  if (
+    !snapshot.warnings.some(
+      (issue) => issue.code === code && issue.message === message,
+    )
+  )
+    snapshot.warnings.push({ code, severity: "warning", message });
+}
+
+/** Retain usable AI items; an incomplete item must not discard the whole trip. */
+export function applySupplementForDisplay(
+  snapshot: Snapshot,
+  response: unknown,
+) {
+  const rows =
+    response &&
+    typeof response === "object" &&
+    Array.isArray((response as { items?: unknown }).items)
+      ? (response as { items: unknown[] }).items
+      : [];
+  let usable = Object.keys(snapshot.items).length;
+  for (const need of snapshot.needs) {
+    const matches = rows.filter(
+      (row): row is Record<string, unknown> =>
+        !!row &&
+        typeof row === "object" &&
+        (row as { key?: unknown }).key === need.key,
+    );
+    const row = matches[0];
+    try {
+      applySupplement({ ...snapshot, needs: [need] }, { items: matches });
+      usable++;
+    } catch {
+      const old = snapshot.items[need.key];
+      const name =
+        old?.name ??
+        need.fixed_name ??
+        (typeof row?.name === "string" && row.name.trim()
+          ? row.name.trim().slice(0, 200)
+          : undefined);
+      if (name) {
+        usable++;
+        const amount =
+          typeof row?.amount === "number" &&
+          Number.isFinite(row.amount) &&
+          (row.amount > 0 || (row.amount === 0 && need.kind === "visit"))
+            ? row.amount
+            : null;
+        const duration =
+          Number.isInteger(row?.duration_minutes) &&
+          Number(row?.duration_minutes) >= 15 &&
+          Number(row?.duration_minutes) <= 1440
+            ? Number(row?.duration_minutes)
+            : undefined;
+        snapshot.items[need.key] = {
+          ...old,
+          name,
+          amount: old?.amount ?? need.fixed_amount ?? amount,
+          duration_minutes: old?.duration_minutes ?? duration,
+          source: old?.source ?? "ai_suggestion",
+          scope:
+            old?.scope ??
+            (need.kind === "stay"
+              ? "room_night"
+              : need.kind === "local"
+                ? "group"
+                : "person"),
+          assumption:
+            "Incomplete planning estimate; confirm the missing price or travel details before booking.",
+        };
+      }
+      planningWarning(
+        snapshot,
+        "PLANNING_ITEM_INCOMPLETE",
+        `Chưa đủ giá hoặc thông tin cho ${name ?? need.key}; phần đã có vẫn được hiển thị, cần xác nhận bổ sung.`,
+        `Price or details are incomplete for ${name ?? need.key}; available data is shown and needs confirmation.`,
+      );
+    }
+  }
+  if (!usable) generationError("AI_RESPONSE_INVALID", "supplement_invalid");
+  try {
+    validateSupplementRequirements(snapshot);
+  } catch {
+    planningWarning(
+      snapshot,
+      "PLANNING_REQUIREMENTS_UNVERIFIED",
+      "Chưa xác minh được một số yêu cầu bắt buộc, dị ứng hoặc điều kiện lưu trú/ăn uống. Các gợi ý chưa được bảo đảm đáp ứng; cần xác nhận trực tiếp trước khi sử dụng.",
+      "Some required preferences, allergies or accommodation/dining conditions are unverified. Suggestions are not guaranteed to comply; confirm directly before using them.",
+    );
+  }
+}
+
+/** Scheduling is transactional: preserve the original timeline if fitting fails. */
+export function scheduleTravelForDisplay(snapshot: Snapshot) {
+  const schedule = structuredClone(snapshot.schedule);
+  try {
+    scheduleTravel(snapshot);
+  } catch {
+    snapshot.schedule = schedule;
+    planningWarning(
+      snapshot,
+      "MAIN_TRAVEL_SCHEDULE_UNVERIFIED",
+      "Chưa ghép được giờ di chuyển với lịch trong ngày. Lịch đang là bản dự kiến; cần điều chỉnh giờ đến/đi và các hoạt động có thể chồng nhau.",
+      "Main travel could not be fitted into the daily timeline. This is a draft; adjust arrival/departure times and potentially overlapping activities.",
+    );
+  }
+}
 const trusted = (value: { source: string; last_verified_at?: string }) =>
   !["ai_generated", "user_added", "user_submission"].includes(value.source) &&
   !!value.last_verified_at &&
@@ -641,6 +762,37 @@ export function scheduleTravel(snapshot: Snapshot) {
       coveredBy: leg.key,
       displayName: `${snapshot.input.locale === "vi" ? "Chặng chính" : "Main travel"}: ${item!.name}`,
     };
+    // Meals inside a long journey are allowances to arrange during transit,
+    // not visits to the destination restaurant proposed for a normal day.
+    const transitMeals = day.slots
+      .filter(
+        (slot) =>
+          slot.kind === "meal" &&
+          minutes(slot.time) >= start &&
+          minutes(slot.time) + slot.duration_minutes <= start + duration &&
+          (incoming
+            ? start + duration + 15 >=
+              (slot.meal_slot === "breakfast"
+                ? 10 * 60
+                : slot.meal_slot === "lunch"
+                  ? 14 * 60
+                  : 21 * 60)
+            : !(
+                slot.meal_slot === "dinner" &&
+                !transport.departure_at?.startsWith(day.date) &&
+                start - slot.duration_minutes >= 17 * 60
+              )),
+      )
+      .map((slot) => ({
+        ...slot,
+        duringTransport: true,
+        displayName:
+          snapshot.input.locale === "vi"
+            ? `${slot.meal_slot === "breakfast" ? "Bữa sáng" : slot.meal_slot === "lunch" ? "Bữa trưa" : "Bữa tối"} trong chặng di chuyển (dự trù, cần tự sắp xếp)`
+            : `${slot.meal_slot === "breakfast" ? "Breakfast" : slot.meal_slot === "lunch" ? "Lunch" : "Dinner"} during main travel (allowance; arrange separately)`,
+      }));
+    const transitMealIds = new Set(transitMeals.map((slot) => slot.slot_id));
+    day.slots = day.slots.filter((slot) => !transitMealIds.has(slot.slot_id));
     if (incoming) {
       if (
         snapshot.items[`${day.destination}/stay`] &&
@@ -735,7 +887,7 @@ export function scheduleTravel(snapshot: Snapshot) {
           displayName: previousStay?.name,
         });
       }
-      day.slots = [...kept, transfer].sort(
+      day.slots = [...kept, transfer, ...transitMeals].sort(
         (a, b) => minutes(a.time) - minutes(b.time),
       );
     } else {
@@ -765,7 +917,8 @@ export function scheduleTravel(snapshot: Snapshot) {
                 ? transport.airport_buffer_minutes
                 : 0),
       );
-      day.slots.push(transfer);
+      day.slots.push(transfer, ...transitMeals);
+      day.slots.sort((a, b) => minutes(a.time) - minutes(b.time));
     }
   }
   snapshot.travel_scheduled = true;

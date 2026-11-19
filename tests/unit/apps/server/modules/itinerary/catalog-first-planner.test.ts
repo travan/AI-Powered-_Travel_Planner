@@ -6,6 +6,8 @@ import {
   type Snapshot,
   applySupplement,
   validateSupplementRequirements,
+  applySupplementForDisplay,
+  scheduleTravelForDisplay,
 } from "../../../../../../apps/server/src/modules/itinerary/generation/planning-data";
 import {
   completePlan,
@@ -15,6 +17,8 @@ import { workerRequestContext } from "../../../../../../apps/server/src/cloudfla
 import { catalogScenario } from "../../../../fixtures/catalog-scenario";
 import travelCheckpoint from "../../../../fixtures/malaysia-singapore-travel-checkpoint.json";
 import realSupplement from "../../../../fixtures/malaysia-singapore-supplement.json";
+import moscowSupplement from "../../../../fixtures/beijing-moscow-supplement.json";
+import muCangChaiSupplement from "../../../../fixtures/mu-cang-chai-supplement.json";
 import { generationInput } from "../../../../../../apps/server/src/modules/itinerary/generation/generation-input";
 
 afterEach(() => {
@@ -30,6 +34,199 @@ function fixture() {
 }
 
 describe("catalog-first generation v2", () => {
+  it("persists the recorded Mu Cang Chai response despite repeated venues", async () => {
+    const { input, cities, dto } = fixture();
+    input.cities = ["mu-cang-chai"];
+    input.planning!.journey.destinations = input.cities;
+    const snapshot = prepareSnapshot(input, [
+      {
+        selected: "mu-cang-chai",
+        country: "VN",
+        city: {
+          ...cities[0]!,
+          slug: "mu-cang-chai",
+          name: { en: "Mu Cang Chai" },
+          country: "VN",
+          places: [],
+          activities: [],
+        },
+      },
+    ]);
+    const store = {
+      checkpoint: vi.fn().mockResolvedValue(snapshot),
+      save: vi.fn(),
+      once: vi.fn().mockResolvedValue({ response: muCangChaiSupplement }),
+    };
+    const repository = {
+      createComplete: vi.fn().mockResolvedValue("displayable-plan"),
+    };
+    const planner = new CatalogFirstPlanner(
+      store as never,
+      {} as never,
+      repository as never,
+      {} as never,
+    );
+    const result = await planner.generate({
+      userId: "u",
+      dto,
+      job: { id: "j", generation_id: "g", claim_token: "c" },
+    });
+    expect(result.itinerary_id).toBe("displayable-plan");
+    expect(result.result.days).toHaveLength(10);
+    expect(result.result.issues).toContainEqual(
+      expect.objectContaining({ code: "REPEATED_PLACE", severity: "warning" }),
+    );
+    expect(repository.createComplete).toHaveBeenCalledOnce();
+    expect(store.once).toHaveBeenCalledOnce();
+  });
+
+  it("retains valid items and unknown prices from a partial supplement", () => {
+    const { input, destinations } = fixture();
+    const snapshot = prepareSnapshot(input, destinations);
+    const key = `${destinations[0]!.selected}/meal/lunch`;
+    delete snapshot.items[key];
+    snapshot.needs = [
+      { key, destination: destinations[0]!.selected, kind: "meal" },
+    ];
+    applySupplementForDisplay(snapshot, {
+      items: [{ key, name: "Proposed lunch venue", amount: -1 }],
+    });
+    expect(snapshot.items[key]).toMatchObject({
+      name: "Proposed lunch venue",
+      amount: null,
+    });
+    snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
+    const plan = completePlan(snapshot);
+    expect(plan.days).toHaveLength(10);
+    expect(plan.budget_breakdown.complete).toBe(false);
+    expect(plan.issues).toContainEqual(
+      expect.objectContaining({
+        code: "PLANNING_ITEM_INCOMPLETE",
+        severity: "warning",
+      }),
+    );
+  });
+
+  it("keeps the original schedule when a confirmed long leg cannot fit", () => {
+    const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
+    snapshot.input.planning!.transport_preferences.departure_at =
+      "2027-01-10T19:00";
+    const original = structuredClone(snapshot.schedule);
+    scheduleTravelForDisplay(snapshot);
+    expect(snapshot.schedule).toEqual(original);
+    snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
+    expect(completePlan(snapshot).issues).toContainEqual(
+      expect.objectContaining({
+        code: "MAIN_TRAVEL_SCHEDULE_UNVERIFIED",
+        severity: "warning",
+      }),
+    );
+  });
+  it.each(["moscow", "country-ru"])(
+    "handles a long-haul Moscow trip selected as %s",
+    (selected) => {
+      const { input, cities } = fixture();
+      input.cities = [selected];
+      input.num_days = 5;
+      input.end_date = "2027-01-05";
+      input.planning!.journey.destinations = input.cities;
+      const snapshot = prepareSnapshot(input, [
+        {
+          selected,
+          country: "RU",
+          city: {
+            ...cities[0]!,
+            slug: "moscow",
+            name: { en: "Moscow" },
+            country: "RU",
+            places: [],
+            activities: [],
+          },
+        },
+      ]);
+      const items = moscowSupplement.items
+        .filter((item) => item.key.startsWith("moscow/"))
+        .map((item) => ({
+          ...item,
+          key: item.key
+            .replace(
+              /^moscow\/(\d+)\//,
+              (_, day) => `moscow/${Number(day) - 5}/`,
+            )
+            .replace(/^moscow\//, `${selected}/`),
+        }));
+      items.push(
+        {
+          key: "leg/1",
+          name: "Hanoi to Moscow Flight",
+          amount: 7000000,
+          duration_minutes: 600,
+        },
+        {
+          key: "leg/2",
+          name: "Moscow to Hanoi Flight",
+          amount: 7000000,
+          duration_minutes: 600,
+        },
+      );
+      applySupplement(snapshot, { items });
+      scheduleTravel(snapshot);
+      snapshot.days = snapshot.schedule.map((day) =>
+        assembleDay(snapshot, day),
+      );
+      const plan = completePlan(snapshot);
+      expect(plan.days).toHaveLength(5);
+      expect(plan.issues?.every((issue) => issue.severity === "warning")).toBe(
+        true,
+      );
+    },
+  );
+  it("assembles the recorded Beijing/Moscow response with 4h/8h/10h main travel", () => {
+    const { input, cities } = fixture();
+    input.cities = ["bac-kinh", "moscow"];
+    input.planning!.journey.destinations = input.cities;
+    const destinations = input.cities.map((selected, index) => ({
+      selected,
+      country: index === 0 ? "CN" : "RU",
+      city: {
+        ...cities[index]!,
+        slug: selected,
+        name: { en: index === 0 ? "Beijing" : "Moscow" },
+        country: index === 0 ? "CN" : "RU",
+        places: [],
+        activities: [],
+      },
+    }));
+    const snapshot = prepareSnapshot(input, destinations);
+    applySupplement(snapshot, moscowSupplement);
+    validateSupplementRequirements(snapshot);
+    scheduleTravel(snapshot);
+    snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
+    const plan = completePlan(snapshot);
+    expect(plan.days).toHaveLength(10);
+    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(
+      plan.days[5]!.activities.find(
+        (activity) => activity.meal_slot === "lunch",
+      ),
+    ).toMatchObject({
+      during_transport: true,
+      price: { amount: 100000, scope: "person" },
+    });
+    expect(
+      plan.days[9]!.activities.find(
+        (activity) => activity.meal_slot === "dinner",
+      ),
+    ).toMatchObject({
+      during_transport: true,
+      price: { amount: 200000, scope: "person" },
+    });
+    expect(
+      plan.issues?.filter((issue) =>
+        ["MEAL_MISSING", "SCHEDULE_CONFLICT"].includes(issue.code),
+      ),
+    ).toEqual([]);
+  });
   it("assembles the recorded 4h/5h/6h travel response without dropping required meals or evenings", () => {
     const snapshot = structuredClone(travelCheckpoint) as unknown as Snapshot;
     scheduleTravel(snapshot);
@@ -189,7 +386,7 @@ describe("catalog-first generation v2", () => {
     expect(plan.total_cost).toBe(11220000);
   });
 
-  it("blocks missing meals, overlapping stops and repeated venues", () => {
+  it("displays missing meals, overlapping stops and repeated venues as warnings", () => {
     const { input, destinations } = fixture();
     const snapshot = prepareSnapshot(input, destinations);
     snapshot.days = snapshot.schedule.map((d) => assembleDay(snapshot, d));
@@ -197,17 +394,26 @@ describe("catalog-first generation v2", () => {
     missing.days[0]!.activities = missing.days[0]!.activities.filter(
       (a) => a.meal_slot !== "lunch",
     );
-    expect(() => completePlan(missing)).toThrow();
+    expect(completePlan(missing).issues).toContainEqual(
+      expect.objectContaining({ code: "MEAL_MISSING", severity: "warning" }),
+    );
     const overlap = structuredClone(snapshot);
     overlap.days[0]!.activities[1]!.time = "07:30";
-    expect(() => completePlan(overlap)).toThrow();
+    expect(completePlan(overlap).issues).toContainEqual(
+      expect.objectContaining({
+        code: "SCHEDULE_CONFLICT",
+        severity: "warning",
+      }),
+    );
     const duplicate = structuredClone(snapshot);
     const first = duplicate.days[0]!.activities.find(
       (a) => a.kind === "visit",
     )!;
     duplicate.days[1]!.activities.find((a) => a.kind === "visit")!.name =
       first.name;
-    expect(() => completePlan(duplicate)).toThrow();
+    expect(completePlan(duplicate).issues).toContainEqual(
+      expect.objectContaining({ code: "REPEATED_PLACE", severity: "warning" }),
+    );
   });
 
   it("retains catalog names while AI supplies only missing prices", () => {
@@ -327,78 +533,148 @@ describe("catalog-first generation v2", () => {
     expect(store.save).toHaveBeenCalledTimes(12);
   });
 
-  it.each([true, false])("honors the canary allowlist when the primary quota is exhausted (allowed=%s)", async (allowed) => {
-    const { dto, cities } = fixture();
-    cities[0]!.activities = [];
-    vi.stubEnv("AI_FALLBACK_CANARY_ONLY", "true");
-    vi.stubEnv("PLANNING_CANARY_USER_IDS", "canary");
-    vi.stubEnv("GEMINI_API_KEY_TEST", "test-only-gemini-key");
-    vi.stubEnv("AI_FALLBACK_PROVIDERS", JSON.stringify([
-      { id: "gemini-test", provider: "gemini", model: "test-model", key_env: "GEMINI_API_KEY_TEST" },
-    ]));
-    const request = vi.fn(async (_url, init) => {
-      const prompt = JSON.parse(init.body).contents[0].parts[0].text;
-      const context = JSON.parse(prompt.split("\n").at(-1));
-      return new Response(JSON.stringify({
-        candidates: [{ content: { parts: [{ text: JSON.stringify({
-          cities: [],
-          items: context.missing.map((need) => ({
-            key: need.key,
-            name: need.fixed_name ?? `Suggestion ${need.key}`,
-            amount: need.key.includes("stay") ? 300000 : 10000,
-            duration_minutes: 60,
-          })),
-        }) }] } }],
-        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
-      }));
-    });
-    vi.stubGlobal("fetch", request);
-    const binding = { run: vi.fn(async () => { throw new Error("daily quota exhausted"); }) };
-    const store = {
-      checkpoint: vi.fn(), save: vi.fn(), recordUsage: vi.fn(async () => {}),
-      once: vi.fn(async (_id, work, preflight) => {
-        preflight();
-        return work(new AbortController().signal);
-      }),
-    };
-    const planner = new CatalogFirstPlanner(
-      store as never,
-      {
-        byCountry: async (country) => cities.filter((city) => city.country === country),
-        findForPlanning: async (slug) => cities.find((city) => city.slug === slug),
-      } as never,
-      { findReusable: vi.fn().mockResolvedValue(null), createComplete: vi.fn().mockResolvedValue("plan-id") } as never,
-      { query: vi.fn().mockResolvedValue({ rows: [] }) },
-    );
-    const result = workerRequestContext.run({ pool: {} as never, ai: binding }, () => planner.generate({
-      userId: allowed ? "canary" : "ordinary-user", dto,
-      job: { id: "job", generation_id: "generation", claim_token: "claim" },
-    }));
-    if (allowed) {
-      await expect(result).resolves.toMatchObject({ itinerary_id: "plan-id" });
-      expect(request).toHaveBeenCalledOnce();
-      expect(request.mock.calls[0][1].headers["x-goog-api-key"]).toBe("test-only-gemini-key");
-      expect(store.recordUsage.mock.lastCall?.[1]).toMatchObject([
-        { source_id: "primary", outcome: "quota_rejected" },
-        { source_id: "gemini-test", provider: "gemini", total_tokens: 30, outcome: "received" },
-      ]);
-    } else {
-      await expect(result).rejects.toMatchObject({ code: "AI_QUOTA_EXHAUSTED" });
-      expect(request).not.toHaveBeenCalled();
-    }
-    expect(binding.run).toHaveBeenCalledOnce();
-  });
+  it.each([true, false])(
+    "honors the canary allowlist when the primary quota is exhausted (allowed=%s)",
+    async (allowed) => {
+      const { dto, cities } = fixture();
+      cities[0]!.activities = [];
+      vi.stubEnv("AI_FALLBACK_CANARY_ONLY", "true");
+      vi.stubEnv("PLANNING_CANARY_USER_IDS", "canary");
+      vi.stubEnv("GEMINI_API_KEY_TEST", "test-only-gemini-key");
+      vi.stubEnv(
+        "AI_FALLBACK_PROVIDERS",
+        JSON.stringify([
+          {
+            id: "gemini-test",
+            provider: "gemini",
+            model: "test-model",
+            key_env: "GEMINI_API_KEY_TEST",
+          },
+        ]),
+      );
+      const request = vi.fn(async (_url, init) => {
+        const prompt = JSON.parse(init.body).contents[0].parts[0].text;
+        const context = JSON.parse(prompt.split("\n").at(-1));
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        cities: [],
+                        items: context.missing.map((need) => ({
+                          key: need.key,
+                          name: need.fixed_name ?? `Suggestion ${need.key}`,
+                          amount: need.key.includes("stay") ? 300000 : 10000,
+                          duration_minutes: 60,
+                        })),
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+            },
+          }),
+        );
+      });
+      vi.stubGlobal("fetch", request);
+      const binding = {
+        run: vi.fn(async () => {
+          throw new Error("daily quota exhausted");
+        }),
+      };
+      const store = {
+        checkpoint: vi.fn(),
+        save: vi.fn(),
+        recordUsage: vi.fn(async () => {}),
+        once: vi.fn(async (_id, work, preflight) => {
+          preflight();
+          return work(new AbortController().signal);
+        }),
+      };
+      const planner = new CatalogFirstPlanner(
+        store as never,
+        {
+          byCountry: async (country) =>
+            cities.filter((city) => city.country === country),
+          findForPlanning: async (slug) =>
+            cities.find((city) => city.slug === slug),
+        } as never,
+        {
+          findReusable: vi.fn().mockResolvedValue(null),
+          createComplete: vi.fn().mockResolvedValue("plan-id"),
+        } as never,
+        { query: vi.fn().mockResolvedValue({ rows: [] }) },
+      );
+      const result = workerRequestContext.run(
+        { pool: {} as never, ai: binding },
+        () =>
+          planner.generate({
+            userId: allowed ? "canary" : "ordinary-user",
+            dto,
+            job: {
+              id: "job",
+              generation_id: "generation",
+              claim_token: "claim",
+            },
+          }),
+      );
+      if (allowed) {
+        await expect(result).resolves.toMatchObject({
+          itinerary_id: "plan-id",
+        });
+        expect(request).toHaveBeenCalledOnce();
+        expect(request.mock.calls[0][1].headers["x-goog-api-key"]).toBe(
+          "test-only-gemini-key",
+        );
+        expect(store.recordUsage.mock.lastCall?.[1]).toMatchObject([
+          { source_id: "primary", outcome: "quota_rejected" },
+          {
+            source_id: "gemini-test",
+            provider: "gemini",
+            total_tokens: 30,
+            outcome: "received",
+          },
+        ]);
+      } else {
+        const generated = await result;
+        expect(generated.result.days).toHaveLength(10);
+        expect(generated.result.issues).toContainEqual(expect.objectContaining({
+          code: "PLANNING_SUPPLEMENT_UNAVAILABLE", severity: "warning",
+        }));
+        expect(request).not.toHaveBeenCalled();
+      }
+      expect(binding.run).toHaveBeenCalledOnce();
+    },
+  );
 
-  it("returns an over-budget plan with a warning while still rejecting a missing mandatory price", () => {
+  it("returns over-budget and missing-price plans with warnings", () => {
     const { input, destinations } = fixture();
     const snapshot = prepareSnapshot(input, destinations);
     snapshot.days = snapshot.schedule.map((d) => assembleDay(snapshot, d));
     snapshot.items["leg/1"]!.amount = 20000000;
     const plan = completePlan(snapshot);
     expect(plan.total_cost).toBeGreaterThan(input.budget!);
-    expect(plan.issues).toContainEqual(expect.objectContaining({ code: "OVER_BUDGET", severity: "warning" }));
+    expect(plan.issues).toContainEqual(
+      expect.objectContaining({ code: "OVER_BUDGET", severity: "warning" }),
+    );
     snapshot.items["leg/1"]!.amount = null;
-    expect(() => completePlan(snapshot)).toThrow();
+    const incomplete = completePlan(snapshot);
+    expect(incomplete.transport_summary[0]!.price!.amount).toBeNull();
+    expect(incomplete.budget_breakdown.complete).toBe(false);
+    expect(incomplete.issues).toContainEqual(
+      expect.objectContaining({
+        code: "BUDGET_INCOMPLETE",
+        severity: "warning",
+      }),
+    );
   });
 
   it("uses the cache before choosing a flexible date or reading catalog data", async () => {

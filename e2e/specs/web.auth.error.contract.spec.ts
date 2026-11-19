@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test-fixtures";
 
 const E2E_SIGNUP_ERROR_KEY = "horizon.e2e.signup.force_error";
 

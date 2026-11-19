@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test-fixtures";
 import { cachedScenario } from "../fixtures/index.mjs";
 import {
   API_BASE_URL,

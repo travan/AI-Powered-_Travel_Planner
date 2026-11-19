@@ -58,14 +58,17 @@
     "demo:watch": "NEXT_PUBLIC_API_URL= docker compose --env-file .env -f deploy/docker/docker-compose.stack.yml -f deploy/docker/docker-compose.dev.yml --profile demo watch --no-up",
     "test:e2e:google": "pnpm --filter @travel/server build && playwright test --config playwright.google-auth.config.ts",
     "db:audit": "node scripts/audit-travel-databases.mjs",
-    "learning:export": "node scripts/export-planner-training-data.mjs"
+    "learning:export": "node scripts/export-planner-training-data.mjs",
+    "test:production:local:prepare": "pnpm build:server && node apps/server/cloudflare/prepare-queue-config.mjs production && node scripts/prepare-production-local.mjs && pnpm --dir apps/server exec tsx ../../scripts/prepare-production-replay.mts",
+    "test:production:local:worker": "pnpm dlx wrangler@4.155.0 dev --config test-results/production-validation/wrangler.local.json --local --ip 127.0.0.1 --port 8787 --test-scheduled --persist-to test-results/production-validation/state",
+    "test:e2e:production:local": "playwright test --config playwright.production-local.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.0.0",
     "@types/smtp-server": "^3.5.13",
-    "@vitest/coverage-v8": "^3.2.6",
+    "@vitest/coverage-v8": "^5.0.5",
     "jsdom": "^25.0.1",
     "prettier": "^3.4.2",
     "react": "19.0.0",
@@ -73,6 +76,7 @@
     "smtp-server": "^3.19.22",
     "turbo": "^2.9.14",
     "typescript": "^5.7.2",
+    "vite": "^6.4.4",
     "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@10.15.0",

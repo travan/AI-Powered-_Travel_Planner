@@ -29,7 +29,9 @@ export function resolveCity(cities: CityPlanningData[], value?: string) {
   const exact = cities.filter((city) => city.slug === value);
   if (exact.length === 1) return exact[0];
   const matches = cities.filter((city) =>
-    [city.slug, ...Object.values(city.name)].some((name) => placeKey(name) === placeKey(value)),
+    [city.slug, ...Object.values(city.name)].some(
+      (name) => placeKey(name) === placeKey(value),
+    ),
   );
   return matches.length === 1 ? matches[0] : undefined;
 }
@@ -170,7 +172,17 @@ export function enrichTravel(
     }
     for (const a of day.activities) {
       a.city = city?.name.en ?? day.city;
-      setPlace(a, city);
+      if (a.during_transport) {
+        // A transit allowance is not a restaurant at the destination.
+        a.city = undefined;
+        a.city_slug = undefined;
+        a.country = undefined;
+        a.lat = undefined;
+        a.lon = undefined;
+        a.address = "";
+        a.google_place_id = undefined;
+        a.maps_link = "";
+      } else setPlace(a, city);
       // Planning allowances are useful estimates, and remain distinct from verified venue facts.
       const catalogCost = city?.activities.find(
         (entry) =>
@@ -413,7 +425,9 @@ export function itineraryRouteIssues(
   // Resolve selected city IDs through the same catalog identity used for days
   // and legs. Country IDs must remain country identities, not city slugs.
   const expected = journey.destinations.map((destination) =>
-    countryDestinationReference(destination) ? destination : identity(destination),
+    countryDestinationReference(destination)
+      ? destination
+      : identity(destination),
   );
   const days = plan.days ?? [];
   const visits: string[] = [];
@@ -582,9 +596,16 @@ export function itineraryQuality(
     const dinnerStart = dinner ? minutes(dinner.time) : null;
     if (availableEnd >= 1320 && dinnerStart != null) {
       const dinnerEnd = dinnerStart + activityMinutes(dinner!);
-      const departing = mainTravel.some(
-        (a) => (minutes(a.time) ?? -1) >= dinnerEnd,
-      );
+      const departing = mainTravel.some((a) => {
+        const start = minutes(a.time);
+        return (
+          start != null &&
+          (start >= dinnerEnd ||
+            (dinner!.during_transport &&
+              start <= dinnerStart &&
+              start + activityMinutes(a) >= dinnerEnd))
+        );
+      });
       if (
         !departing &&
         !visits.some((a) => (minutes(a.time) ?? -1) >= dinnerEnd)
@@ -626,13 +647,25 @@ export function itineraryQuality(
           day.id,
         );
       if (time != null) {
+        const transitMeal =
+          a.during_transport &&
+          a.kind === "meal" &&
+          mainTravel.some((leg) => {
+            const start = minutes(leg.time);
+            return (
+              start != null &&
+              time >= start &&
+              time + duration <= start + activityMinutes(leg)
+            );
+          });
         if (
-          (a.main_transport
+          !transitMeal &&
+          ((a.main_transport
             ? time < (day.activities.indexOf(a) > 0 ? previousEnd : 0)
             : time <
               previousEnd +
                 (a.kind === "transfer" ? 0 : (a.travel_minutes ?? 0))) ||
-          (!a.main_transport && time + duration > availableEnd)
+            (!a.main_transport && time + duration > availableEnd))
         )
           add(
             "SCHEDULE_CONFLICT",

@@ -70,6 +70,8 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [accountExists, setAccountExists] = useState<boolean | null>(null);
@@ -345,6 +347,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                       onChange={(event) => setFullName(event.target.value)}
                       placeholder={t("full_name_placeholder")}
                       data-testid="web-auth-full-name"
+                      disabled={!hydrated}
                       className="w-full rounded-xl bg-surface-container-high py-4 pr-4 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                     />
                   </span>
@@ -367,6 +370,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     onBlur={handleEmailBlur}
                     placeholder={t("email_placeholder")}
                     data-testid="web-auth-email"
+                    disabled={!hydrated}
                     className="w-full rounded-xl bg-surface-container-high py-4 pr-4 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                   />
                 </span>
@@ -432,6 +436,7 @@ export function AuthExperience({ mode }: AuthExperienceProps) {
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder={t("password_placeholder")}
                     data-testid="web-auth-password"
+                    disabled={!hydrated}
                     className="w-full rounded-xl bg-surface-container-high py-4 pr-12 pl-12 text-on-surface outline-none ring-2 ring-transparent transition placeholder:text-outline focus:ring-primary-fixed"
                   />
                   <button

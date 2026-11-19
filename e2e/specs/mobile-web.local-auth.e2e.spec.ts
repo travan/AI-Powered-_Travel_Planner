@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test-fixtures";
 
 function createIdentity() {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

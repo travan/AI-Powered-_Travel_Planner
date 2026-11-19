@@ -23,6 +23,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "patches/**"
       - "turbo.json"
   pull_request:
     branches: [main, develop]
@@ -41,6 +42,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "patches/**"
       - "turbo.json"
   workflow_dispatch:
 

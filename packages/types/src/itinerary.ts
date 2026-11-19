@@ -200,6 +200,8 @@ export interface TransportSegment {
 export interface Activity extends PlaceLocation {
   /** Main journey leg reserved by the backend; fare is in transport_summary. */
   main_transport?: boolean;
+  /** A separately budgeted meal within a main travel leg, not a venue stop. */
+  during_transport?: boolean;
   meal_slot?: "breakfast" | "lunch" | "dinner";
   id?: string;
   kind?: TimelineKind;
