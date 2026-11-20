@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import ts from "typescript";
 import { cloudflareApiToken } from "./cloudflare-auth.mjs";
 
@@ -9,8 +10,12 @@ export function verifyFallbackSecrets(config, settings) {
     ? JSON.parse(config.vars.AI_FALLBACK_PROVIDERS)
     : [];
   for (const source of fallbacks)
-    assert.ok(settings.bindings?.some((b) => b.type === "secret_text" && b.name === source.key_env),
-      `Fallback source ${source.id} requires an encrypted Worker secret`);
+    assert.ok(
+      settings.bindings?.some(
+        (b) => b.type === "secret_text" && b.name === source.key_env,
+      ),
+      `Fallback source ${source.id} requires an encrypted Worker secret`,
+    );
 }
 
 export async function verifyPlanningBindings(config, api) {
@@ -72,6 +77,26 @@ export async function verifyPlanningBindings(config, api) {
   );
 }
 
+// Worker settings and Queue consumer metadata can lag a successful deploy.
+// Re-read all resources on each attempt, and still fail on persistent mismatches.
+export async function verifyPlanningBindingsWithRetry(
+  config,
+  api,
+  { sleep = delay, onRetry = () => {} } = {},
+) {
+  const attempts = 12;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await verifyPlanningBindings(config, api);
+      return;
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      onRetry(attempt, attempts);
+      await sleep(5000);
+    }
+  }
+}
+
 if (
   process.argv[1] &&
   pathToFileURL(process.argv[1]).href === import.meta.url
@@ -104,10 +129,22 @@ if (
   if (process.argv.includes("--secrets-only")) {
     const fallbacks = JSON.parse(config.vars?.AI_FALLBACK_PROVIDERS || "[]");
     if (fallbacks.length)
-      verifyFallbackSecrets(config, await api(`/workers/scripts/${encodeURIComponent(config.name)}/settings`));
+      verifyFallbackSecrets(
+        config,
+        await api(
+          `/workers/scripts/${encodeURIComponent(config.name)}/settings`,
+        ),
+      );
     console.log("Fallback secret bindings verified.");
   } else {
-    await verifyPlanningBindings(config, api);
-    console.log("Planning Queue deployment bindings verified (or v2 disabled).");
+    await verifyPlanningBindingsWithRetry(config, api, {
+      onRetry: (attempt, attempts) =>
+        console.log(
+          `Waiting for Cloudflare deployment metadata (${attempt}/${attempts}).`,
+        ),
+    });
+    console.log(
+      "Planning Queue deployment bindings verified (or v2 disabled).",
+    );
   }
 }

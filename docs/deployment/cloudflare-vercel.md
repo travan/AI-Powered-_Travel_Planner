@@ -43,7 +43,7 @@ Configure these secrets in the repository's **production** environment
 
 | Secret                              | Value                                                                                                                                                                                                                                                              |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CLOUDFLARE_API_TOKEN`              | Account-scoped token with Workers Scripts Edit and the read permissions required by the existing AI and Hyperdrive bindings. Use the Edit Cloudflare Workers template restricted to account `6b34ff1e99d15ffdbbb503dac4423549`.                                    |
+| `CLOUDFLARE_API_TOKEN`              | Account-scoped token with Workers Scripts Edit, **Workers AI Read** (required by the live REST inference gate), and the permissions required by the existing Queue and Hyperdrive bindings. Restrict it to account `6b34ff1e99d15ffdbbb503dac4423549`; the Edit Cloudflare Workers template alone does not grant Workers AI Read. |
 | `CLOUDFLARE_MIGRATION_DATABASE_URL` | Administrator PostgreSQL URL for project `cvlvzfkoarlwhvjwwppn`, used only by the migration step. On IPv4-only hosted runners use the dashboard's **Session pooler** URL on port 5432 with user `postgres.cvlvzfkoarlwhvjwwppn`. Do not use transaction port 6543. |
 
 Repository secrets with these names also work if environment secrets are absent.
@@ -67,6 +67,14 @@ the exact Git commit, journey config and `POST /api/planning/validate`. Missing
 routes such as `Cannot POST /api/planning/validate` fail the job. It does not create
 accounts, trips or AI jobs. Inspect **Deploy Cloudflare API** separately from the
 Vercel Ready status. Vercel deploys independently and may be ready earlier.
+
+After deployment, the Queue binding check refreshes Worker and consumer metadata
+up to 12 times, five seconds apart, to allow Cloudflare propagation. Persistent
+missing bindings or mismatched Queue/DLQ/concurrency settings still fail the job.
+An `AI_AUTH_INVALID` result with upstream HTTP 401/code 10000 in the pre-deploy
+live-model report means the CI credential cannot invoke Workers AI; check the
+production environment token's account scope, validity and Workers AI Read
+permission before retrying deployment.
 
 ### Manual fallback
 
