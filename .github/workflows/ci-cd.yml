@@ -255,9 +255,10 @@ jobs:
     timeout-minutes: 240
     environment:
       name: production
-      url: https://travel-planner-api.travan-it-96.workers.dev
     env:
-      API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
+      API_BASE_URL: ${{ secrets.PRODUCTION_API_BASE_URL }}
+      TRAVEL_PRODUCTION_CONFIG: ${{ secrets.TRAVEL_PRODUCTION_CONFIG }}
+      REQUIRE_PRIVATE_DEPLOY_CONFIG: "true"
       PLANNING_CANARY_EMAIL: ${{ secrets.PLANNING_CANARY_EMAIL }}
       PLANNING_CANARY_PASSWORD: ${{ secrets.PLANNING_CANARY_PASSWORD }}
       DEPLOY_AI_PROVIDER: ${{ vars.AI_PROVIDER || 'cloudflare' }}
@@ -298,6 +299,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SUPABASE_DATABASE_URL: ${{ secrets.CLOUDFLARE_MIGRATION_DATABASE_URL }}
         run: |
+          test -n "$TRAVEL_PRODUCTION_CONFIG" || { echo '::error::Set production secret TRAVEL_PRODUCTION_CONFIG'; exit 1; }
+          test -n "$API_BASE_URL" || { echo '::error::Set production secret PRODUCTION_API_BASE_URL'; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo '::error::Set production secret CLOUDFLARE_API_TOKEN'; exit 1; }
           test -n "$SUPABASE_DATABASE_URL" || { echo '::error::Set production secret CLOUDFLARE_MIGRATION_DATABASE_URL'; exit 1; }
 
@@ -330,9 +333,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          CLOUDFLARE_ACCOUNT_ID: 6b34ff1e99d15ffdbbb503dac4423549
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          NEXT_PUBLIC_APP_URL: https://ai-powered-travel-planner-api.vercel.app
+          NEXT_PUBLIC_APP_URL: ${{ secrets.PRODUCTION_WEB_ORIGIN }}
         run: |
           for case_id in original-my-sg wide-my-sg short-da-nang; do
             PLANNING_LIVE_CASE="$case_id" ./apps/server/node_modules/.bin/tsx --tsconfig apps/server/tsconfig.json scripts/check-generation-v2-live.mts
@@ -377,7 +380,7 @@ jobs:
 
       - name: Verify deployed revision and planner API
         env:
-          API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
+          API_BASE_URL: ${{ secrets.PRODUCTION_API_BASE_URL }}
           EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
           EXPECTED_PLANNING_V2_PERCENT: "100"
           EXPECTED_PLANNING_CANARY: "true"
@@ -389,7 +392,7 @@ jobs:
 
       - name: Verify ordinary V2 generation on production
         env:
-          API_BASE_URL: https://travel-planner-api.travan-it-96.workers.dev
+          API_BASE_URL: ${{ secrets.PRODUCTION_API_BASE_URL }}
           EXPECTED_DEPLOY_COMMIT: ${{ github.sha }}
           PLANNING_CANARY_MODE: promoted
         run: node scripts/check-production-generation.mjs

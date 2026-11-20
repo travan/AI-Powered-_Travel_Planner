@@ -191,6 +191,26 @@ try {
     Math.round(
       values.sort((a, b) => a - b)[Math.ceil(values.length * 0.95) - 1]!,
     );
+  // An expired historical failure with a durable response is replayed once,
+  // under the original owner's job, without another inference or duplicate plan.
+  const recoveryJob = jobs[0]!;
+  const original = (await pool.query("select itinerary_id from itinerary_jobs where id=$1", [recoveryJob])).rows[0].itinerary_id;
+  await pool.query("update itinerary_jobs set status='failed',itinerary_id=null,error_code='AI_RESPONSE_INVALID',deadline_at=now()-interval '1 day' where id=$1", [recoveryJob]);
+  await pool.query("delete from itineraries where id=$1", [original]);
+  assert.deepEqual(await store.recoverReceived(users[1]!, [recoveryJob]), []);
+  const recovered = await Promise.all([store.recoverReceived(users[0]!, [recoveryJob]), store.recoverReceived(users[0]!, [recoveryJob])]);
+  assert.equal(recovered.flat().length, 1);
+  await run(recoveryJob);
+  const repaired = await service.getJob(users[0]!, recoveryJob);
+  assert.equal(repaired.status, "complete");
+  assert.equal(calls, 100, "Recovery must never call AI again");
+  const result = (await pool.query("select result from itineraries where id=$1", [repaired.itinerary_id])).rows[0].result;
+  assert.equal(result.days.length, 10);
+  assert.ok(result.issues.some((issue: { code: string }) => issue.code === "SAVED_AI_RESPONSE_RECOVERED"));
+  await pool.query("update itinerary_jobs set status='failed' where id=$1", [recoveryJob]);
+  const linked = await service.getJob(users[0]!, recoveryJob);
+  assert.equal(linked.status, "complete", "A saved result must override a stale failed status");
+  assert.equal((await pool.query("select count(*)::int as count from itineraries where user_id=$1", [users[0]])).rows[0].count, 1);
   console.log(
     JSON.stringify(
       {
@@ -205,6 +225,8 @@ try {
         p95OwnerStatusReadMs: p95(reads),
         p95TerminalMs: p95(terminal),
         duplicateItineraries: 0,
+        historicalResponseRecovery: true,
+        staleStatusRepair: true,
       },
       null,
       2,

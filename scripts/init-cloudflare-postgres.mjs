@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { rootCertificates } from "node:tls";
+import { privateDeploymentConfig } from "./deployment-config.mjs";
 
 const require = createRequire(
   new URL("../apps/server/package.json", import.meta.url),
@@ -21,10 +22,14 @@ if (!env.SUPABASE_DATABASE_URL) {
   throw new Error("Database migration requires SUPABASE_DATABASE_URL");
 }
 const adminUrl = new URL(env.SUPABASE_DATABASE_URL);
-const isDirect = adminUrl.hostname === "db.cvlvzfkoarlwhvjwwppn.supabase.co";
+const deployment = await privateDeploymentConfig();
+const projectRef = deployment?.supabaseProjectRef ?? process.env.SUPABASE_PROJECT_REF;
+if (!/^[a-z0-9]{20}$/.test(projectRef ?? ""))
+  throw new Error("Set the target Supabase project in private deployment configuration");
+const isDirect = adminUrl.hostname === `db.${projectRef}.supabase.co`;
 const isSessionPooler =
   adminUrl.hostname.endsWith(".pooler.supabase.com") &&
-  decodeURIComponent(adminUrl.username) === "postgres.cvlvzfkoarlwhvjwwppn" &&
+  decodeURIComponent(adminUrl.username) === `postgres.${projectRef}` &&
   adminUrl.port === "5432";
 if (!isDirect && !isSessionPooler) {
   throw new Error(
@@ -166,7 +171,7 @@ try {
   if (apply && !ci) {
     const runtimeUrl = new URL(env.POSTGRES_URL || adminUrl);
     runtimeUrl.username = runtimeUrl.hostname.endsWith(".pooler.supabase.com")
-      ? `${role}.cvlvzfkoarlwhvjwwppn`
+      ? `${role}.${projectRef}`
       : role;
     runtimeUrl.password = password;
     runtimeUrl.search = "";

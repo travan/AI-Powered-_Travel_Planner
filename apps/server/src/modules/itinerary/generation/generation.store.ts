@@ -16,6 +16,7 @@ import { generationKey } from "./generation-input.js";
 import { generationError } from "./generation-error.js";
 import { acquireAiPermit } from "./ai-permit.js";
 import { PlanningGenerationError } from "@travel/ai";
+import { recoverableSavedGeneration } from "./saved-generation.js";
 
 @Injectable()
 export class GenerationStore {
@@ -105,6 +106,61 @@ export class GenerationStore {
         [generation],
       )
     ).rows[0]?.checkpoint;
+  }
+  /** Recover once from durable responses, with the same ownership and admission lock. */
+  async recoverReceived(user: string, ids?: string[]) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(hashtextextended($1,58317291))", [user]);
+      const linked = await client.query<{ id: string }>(`update itinerary_jobs j
+        set status='complete',stage='complete',completed_at=coalesce(j.completed_at,now()),
+          error=null,error_code=null,error_params=null,locked_until=null,claim_token=null
+        from itineraries i where j.user_id=$1 and i.user_id=$1::text and i.id=j.itinerary_id
+          and j.kind='generate' and j.status='failed' and i.status='complete'
+          and jsonb_array_length(case when jsonb_typeof(i.result->'days')='array'
+            then i.result->'days' else '[]'::jsonb end)>0
+          and ($2::uuid[] is null or j.id=any($2)) returning j.id::text`, [user, ids ?? null]);
+      const active = await client.query<{ count: number }>(
+        "select count(*)::int as count from itinerary_jobs where user_id=$1 and status in ('queued','processing')", [user]);
+      const capacity = Math.max(0, 5 - active.rows[0]!.count);
+      const candidates = capacity ? await client.query<{
+        id: string; generation_id: string; checkpoint: unknown; response: unknown;
+      }>(`select j.id::text,j.generation_id::text,g.checkpoint,a.response
+        from itinerary_jobs j join planning_generations g on g.id=j.generation_id
+        join planning_generation_ai a on a.generation_id=g.id
+        where j.user_id=$1 and j.kind='generate' and j.pipeline_version=2 and j.status='failed'
+          and j.itinerary_id is null and a.state='received' and a.response is not null
+          and g.checkpoint->>'display_recovery_version' is distinct from '1'
+          and ($2::uuid[] is null or j.id=any($2))
+        order by j.created_at desc limit 20 for update of j,g skip locked`, [user, ids ?? null]) : { rows: [] };
+      const recovered: string[] = linked.rows.map(row => row.id);
+      let queued = 0;
+      for (const row of candidates.rows) {
+        if (queued >= capacity) break;
+        if (!recoverableSavedGeneration(row.checkpoint, row.response)) continue;
+        const checkpoint = { ...row.checkpoint, days: [], display_recovery_version: 1,
+          warnings: [...(row.checkpoint.warnings ?? []), {
+            code: "SAVED_AI_RESPONSE_RECOVERED", severity: "warning",
+            message: row.checkpoint.input.locale === "vi"
+              ? "Lịch trình được khôi phục từ kết quả AI đã lưu. Hãy kiểm tra các thông tin chưa đầy đủ trước khi sử dụng."
+              : "This itinerary was recovered from its saved AI response. Review incomplete details before use.",
+          }] };
+        await client.query("update planning_generations set checkpoint=$2 where id=$1", [row.generation_id, checkpoint]);
+        await client.query(`update itinerary_jobs set status='queued',stage='assembly',attempts=0,
+          request_hash=concat(request_hash,':saved-response:',id::text),
+          deadline_at=now()+interval '30 minutes',available_at=now(),completed_at=null,
+          locked_until=null,claim_token=null,error=null,error_code=null,error_params=null
+          where id=$1 and user_id=$2 and status='failed'`, [row.id, user]);
+        recovered.push(row.id);
+        queued++;
+      }
+      await client.query("commit");
+      return recovered;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
   }
   async resume(user: string, job: string) {
     const client = await this.pool.connect();

@@ -15,6 +15,9 @@ apps/api/src/**/*.d.ts.map
 !apps/api/src/types/**/*.d.ts
 
 # Environment files
+.env*
+!.env.example
+.private/
 .env
 .env.local
 .env.production

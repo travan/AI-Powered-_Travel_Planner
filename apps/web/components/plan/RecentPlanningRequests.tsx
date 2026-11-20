@@ -41,14 +41,17 @@ export function RecentPlanningRequests() {
         } else {
           const statuses = await getPlanningStatuses(activeIds, session.access_token, signal);
           if (signal.aborted) return false;
-          if (statuses.some(({ status }) => status === "complete" || status === "failed"))
+          const terminal = statuses.some(({ status }) => status === "complete" || status === "failed");
+          if (terminal)
             notifyJobStatusChanged();
           const byId = new Map(statuses.map((job) => [job.id, job]));
           setRequests((rows) => rows.map((row) => ({ ...row, ...byId.get(row.id) })));
-          activeIds = statuses.filter(({ status }) => status === "queued" || status === "processing").map(({ id }) => id);
+          // Refresh the list after completion so the next bounded batch of saved
+          // responses can recover and newly available result links are loaded.
+          activeIds = terminal ? undefined : statuses.filter(({ status }) => status === "queued" || status === "processing").map(({ id }) => id);
         }
         setError(false);
-        return activeIds.length > 0;
+        return activeIds === undefined || activeIds.length > 0;
       } catch (e) {
         if (!signal.aborted) setError(true);
         if (e instanceof ApiRequestError && e.status === 429) return e.retryAfterMs ?? true;

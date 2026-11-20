@@ -37,7 +37,7 @@ test("production runtime uses the real local database, queue and strict authenti
 });
 
 for (const scenario of replays) {
-  test(`${scenario.name}: queued replay persists a plan and displays warnings in the production web build`, async ({
+  test(`${scenario.name}: an expired failed job recovers its saved AI response and displays a result with warnings`, async ({
     request,
     page,
   }, testInfo) => {
@@ -68,10 +68,15 @@ for (const scenario of replays) {
         [generation, { response: scenario.response }],
       );
       await db.query(
-        "insert into itinerary_jobs(id,user_id,kind,payload,pipeline_version,generation_id,request_hash,deadline_at) values($1,$2,'generate',$3,2,$4,$5,now()+interval '10 minutes')",
+        "insert into itinerary_jobs(id,user_id,kind,payload,pipeline_version,generation_id,request_hash,deadline_at,status,stage,error_code) values($1,$2,'generate',$3,2,$4,$5,now()-interval '1 day','failed','failed','AI_RESPONSE_INVALID')",
         [job, userId, { dto: input }, generation, hash],
       );
       await db.query("commit");
+      const listed = await request.get(`${api}/api/planning/requests`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(listed.ok()).toBe(true);
+      expect((await listed.json()).find((row: any) => row.id === job).status).not.toBe("failed");
       // Exercise the production cron -> durable dispatch -> Queue consumer path.
       expect(
         (await request.get(`${api}/__scheduled?cron=*+*+*+*+*`)).ok(),
@@ -97,6 +102,9 @@ for (const scenario of replays) {
         ])
       ).rows[0].result;
       expect(saved.days).toHaveLength(10);
+      expect(saved.issues).toContainEqual(expect.objectContaining({
+        code: "SAVED_AI_RESPONSE_RECOVERED", severity: "warning",
+      }));
       if (scenario.incomplete) {
         expect(saved.transport_summary.at(-1).price.amount).toBeNull();
         expect(saved.budget_breakdown.complete).toBe(false);

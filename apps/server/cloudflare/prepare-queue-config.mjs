@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
 import { parseFallbackSources } from "../../../packages/ai/fallback-config.mjs";
+import { privateDeploymentConfig } from "../../../scripts/deployment-config.mjs";
 
 const target = process.argv[2];
 if (!["staging", "production"].includes(target))
@@ -10,11 +11,22 @@ if (!["staging", "production"].includes(target))
   );
 
 const base = new URL("../wrangler.jsonc", import.meta.url);
-const { config, error } = ts.parseConfigFileTextToJson(
+const { config: template, error } = ts.parseConfigFileTextToJson(
   "wrangler.jsonc",
   await fs.readFile(base, "utf8"),
 );
 if (error) throw new Error("Invalid Wrangler configuration.");
+const deployment = await privateDeploymentConfig();
+const config = structuredClone(deployment?.worker ?? template);
+if (deployment && process.env.GITHUB_ACTIONS === "true") {
+  // Mask individual fields too; masking a whole JSON secret does not hide fragments.
+  for (const value of [config.account_id, config.name,
+    ...config.hyperdrive.map(item => item.id), deployment.supabaseProjectRef,
+    config.vars.NEXT_PUBLIC_APP_URL, config.vars.CORS_ORIGINS,
+    ...(config.vars.CORS_ORIGINS ?? "").split(","), config.vars.GOOGLE_REDIRECT_URI])
+    if (typeof value === "string" && value && !/[\r\n]/.test(value))
+      console.log(`::add-mask::${value}`);
+}
 
 const queue = `travel-planner-journey-${target}`;
 const concurrency = Number(
