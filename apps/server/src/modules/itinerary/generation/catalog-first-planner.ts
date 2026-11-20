@@ -44,6 +44,7 @@ import {
 } from "./planning-data.js";
 import { assembleDay, completePlan } from "./planning-assembler.js";
 import { supplementBudget } from "./planning-budget.js";
+import { storedSupplementResponse } from "./saved-generation.js";
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 const {
   countryDestinationReference,
@@ -336,8 +337,7 @@ export class CatalogFirstPlanner {
         context.retained = [];
         prompt = instruction + JSON.stringify(context);
       }
-      if (bytes(prompt) > 16000)
-        generationError("PLANNING_DATA_INSUFFICIENT", "context_limit");
+      const contextTooLarge = bytes(prompt) > 16000;
       const workerContext = workerRequestContext.getStore();
       const binding = workerContext?.rawAi ?? workerContext?.ai;
       let provider: SupplementProvider | undefined;
@@ -384,6 +384,8 @@ export class CatalogFirstPlanner {
             });
           },
           () => {
+            if (contextTooLarge)
+              generationError("PLANNING_DATA_INSUFFICIENT", "context_limit");
             state.ai_config ??= supplementConfig();
             const allowFallback = fallbackAllowed(
               options.userId,
@@ -456,10 +458,7 @@ export class CatalogFirstPlanner {
       }
       let response: unknown;
       try {
-        response =
-          typeof raw?.response === "string"
-            ? JSON.parse(raw.response)
-            : raw?.response;
+        response = storedSupplementResponse(raw);
         applySupplementForDisplay(state, response);
       } catch (error) {
         if (error instanceof HttpException) throw error;

@@ -12,3 +12,5 @@
 .env.*
 legacy-archives
 mockup_design
+
+.private

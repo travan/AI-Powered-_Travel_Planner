@@ -84,20 +84,19 @@ describe("reopening planning requests", () => {
     expect(mock.list).toHaveBeenCalledOnce();
     expect(screen.getByRole("region")).toBeTruthy();
   });
-  it("updates failed statuses without removing requests or reloading history", async () => {
+  it("refreshes terminal statuses without losing requests or the current page", async () => {
     vi.useFakeTimers();
     const rows = Array.from({ length: 4 }, (_, index) => ({
       ...request,
       id: `job-${index}`,
       city_names: [`City ${index}`],
     }));
-    mock.list.mockResolvedValueOnce(rows);
-    mock.statuses.mockResolvedValue(
-      rows.map((row, index) => ({
+    const terminalRows = rows.map((row, index) => ({
         ...row,
         status: index === 0 ? "complete" : "failed",
-      })),
-    );
+      }));
+    mock.list.mockResolvedValueOnce(rows).mockResolvedValue(terminalRows);
+    mock.statuses.mockResolvedValue(terminalRows);
     show();
     await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
@@ -111,7 +110,7 @@ describe("reopening planning requests", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(mock.list).toHaveBeenCalledTimes(1);
+    expect(mock.list).toHaveBeenCalledTimes(2);
     expect(mock.statuses).toHaveBeenCalledTimes(1);
   });
   it("shows at most three requests per page and supports moving both ways", async () => {
@@ -152,7 +151,9 @@ describe("reopening planning requests", () => {
   });
   it("refreshes queued requests until the result becomes available", async () => {
     vi.useFakeTimers();
-    mock.list.mockResolvedValueOnce([request]);
+    mock.list.mockResolvedValueOnce([request]).mockResolvedValue([
+      { ...request, status: "complete", itinerary_id: "ready" },
+    ]);
     mock.statuses.mockResolvedValue([
         { ...request, status: "complete", itinerary_id: "ready" },
       ]);
@@ -168,8 +169,24 @@ describe("reopening planning requests", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(mock.list).toHaveBeenCalledTimes(1);
+    expect(mock.list).toHaveBeenCalledTimes(2);
     expect(mock.statuses).toHaveBeenCalledTimes(1);
+  });
+  it("continues recovering saved responses in bounded batches until all results are available", async () => {
+    vi.useFakeTimers();
+    const first = { ...request, status: "complete", itinerary_id: "first-result" };
+    const second = { ...request, id: "second-job", status: "complete", itinerary_id: "second-result" };
+    mock.list.mockResolvedValueOnce([request, { ...second, status: "failed", itinerary_id: undefined }])
+      .mockResolvedValueOnce([first, { ...second, status: "queued", itinerary_id: undefined }])
+      .mockResolvedValue([first, second]);
+    mock.statuses.mockResolvedValueOnce([first]).mockResolvedValueOnce([second]);
+    show();
+    await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
+    expect(mock.list).toHaveBeenCalledTimes(3);
+    expect(mock.statuses).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Thất bại")).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Xem kết quả" }).map(link => link.getAttribute("href")))
+      .toEqual(["/itinerary/first-result", "/itinerary/second-result"]);
   });
   it("allows retrying a history load failure", async () => {
     mock.list

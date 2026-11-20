@@ -96,7 +96,7 @@ export function setup() {
       : health.json("journey_load_test") !== true) ||
     health.json("planning_pipeline.v2_percent") !== 100 ||
     health.json("planning_pipeline.queue_bound") !== true ||
-    base === "https://travel-planner-api.travan-it-96.workers.dev"
+    base === "http://127.0.0.1:4000"
   )
     throw new Error(
       "Expected the selected mock-only staging Worker and exact deployment commit.",

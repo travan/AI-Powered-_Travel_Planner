@@ -1,67 +1,73 @@
 {
-	"$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-	"name": "travel-planner-api",
-	"main": "cloudflare/worker.mjs",
-	"account_id": "6b34ff1e99d15ffdbbb503dac4423549",
-	"compatibility_date": "2026-10-25",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"workers_dev": true,
-	"build": {
-		"command": "pnpm --filter @travel/server build"
-	},
-	"rules": [
-		{
-			"type": "Text",
-			"globs": [
-				"**/*.crt"
-			],
-			"fallthrough": true
-		}
-	],
-	"alias": {
-		"@nestjs/websockets/socket-module": "./cloudflare/unused-nest-module.cjs",
-		"@nestjs/microservices/microservices-module": "./cloudflare/unused-nest-module.cjs",
-		"@nestjs/microservices": "./cloudflare/unused-nest-module.cjs"
-	},
-	"vars": {
-		"NODE_ENV": "production",
-		"RUNTIME_TARGET": "cloudflare",
-		"DOCUMENT_STORE": "postgres",
-		"DATABASE_PROVIDER": "postgres",
-		"AUTH_PROVIDER": "local",
-		"AI_PROVIDER": "cloudflare",
-		"PLANNING_CATALOG_PERCENT": "0",
-		"PLANNING_V2_PERCENT": "100",
-		"PLANNING_AI_CONCURRENCY": "1",
-		"CLOUDFLARE_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-		"NEXT_PUBLIC_APP_URL": "https://ai-powered-travel-planner-api.vercel.app",
-		"CORS_ORIGINS": "https://ai-powered-travel-planner-api.vercel.app,https://ai-powered-travel-planner-api-git-code-f15b26-travan1s-projects.vercel.app",
-		"TRUST_PROXY_HOPS": "1",
-		"LOG_SINK": "cloudflare",
-		"GOOGLE_AUTH_ENABLED": "true",
-		"GOOGLE_REDIRECT_URI": "https://ai-powered-travel-planner-api.vercel.app/api/auth/google/callback"
-	},
-	"ai": {
-		"binding": "AI"
-	},
-	"triggers": {
-		"crons": [
-			"* * * * *"
-		]
-	},
-	"observability": {
-		"enabled": true,
-		"redact_query_string": true,
-		"issues": { "enabled": false },
-		"logs": { "enabled": true, "invocation_logs": false, "head_sampling_rate": 1 },
-		"traces": { "enabled": false }
-	},
-	"hyperdrive": [
-		{
-			"binding": "HYPERDRIVE",
-			"id": "99a6db02fb8b4c6e8bcc732fa3749fc6"
-		}
-	]
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "travel-planner-api",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "build": {
+    "command": "pnpm --filter @travel/server build"
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.crt"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "alias": {
+    "@nestjs/websockets/socket-module": "./cloudflare/unused-nest-module.cjs",
+    "@nestjs/microservices/microservices-module": "./cloudflare/unused-nest-module.cjs",
+    "@nestjs/microservices": "./cloudflare/unused-nest-module.cjs"
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "RUNTIME_TARGET": "cloudflare",
+    "DOCUMENT_STORE": "postgres",
+    "DATABASE_PROVIDER": "postgres",
+    "AUTH_PROVIDER": "local",
+    "AI_PROVIDER": "cloudflare",
+    "PLANNING_CATALOG_PERCENT": "0",
+    "PLANNING_V2_PERCENT": "100",
+    "PLANNING_AI_CONCURRENCY": "1",
+    "CLOUDFLARE_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "NEXT_PUBLIC_APP_URL": "http://localhost:3000",
+    "CORS_ORIGINS": "http://localhost:3000",
+    "TRUST_PROXY_HOPS": "1",
+    "LOG_SINK": "cloudflare",
+    "GOOGLE_AUTH_ENABLED": "false"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "issues": {
+      "enabled": false
+    },
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": false
+    }
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "00000000000000000000000000000000"
+    }
+  ]
 }

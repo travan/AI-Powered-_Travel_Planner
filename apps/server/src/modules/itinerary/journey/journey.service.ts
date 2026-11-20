@@ -305,9 +305,26 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private async recoverStoredJobs(userId: string, ids?: string[]) {
+    if (!this.generations?.recoverReceived) return [];
+    try {
+      const recovered = await this.generations.recoverReceived(userId, ids);
+      const queue = workerRequestContext.getStore()?.queue;
+      if (queue)
+        await Promise.all(recovered.map(jobId => queue.send({ jobId }).catch(() =>
+          logEvent("journey.dispatch_deferred", "warn", { jobId }))));
+      return recovered;
+    } catch {
+      logEvent("journey.saved_response_recovery_deferred", "warn", {});
+      return [];
+    }
+  }
+
   async retryJob(userId: string, id: string, key?: string) {
     if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
       throw new BadRequestException("Invalid idempotency key");
+    if ((await this.recoverStoredJobs(userId, [id])).length)
+      return { status: "queued" as const, job_id: id, stream_url: `/api/itinerary/jobs/${id}` };
     const result = await this.sql.query<{
       payload: { dto: GenerateItineraryDto };
       error_code: string;
@@ -382,6 +399,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listJobs(userId: string): Promise<PlanningJobSummary[]> {
+    await this.recoverStoredJobs(userId);
     // Uses itinerary_jobs_user_idx; exclude translation and revision jobs.
     const result = await this.sql.query<
       PlanningJobSummary & {
@@ -434,18 +452,22 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  async listStatuses(userId: string, ids: string[]) {
-    return (
+  async listStatuses(userId: string, ids: string[]): Promise<PlanningJob[]> {
+    const rows = (
       await this.sql.query<PlanningJob>(
         `select id::text,status,stage,attempts,itinerary_id::text
        from itinerary_jobs where user_id=$1 and id=any($2::uuid[]) and kind='generate'`,
         [userId, ids],
       )
     ).rows;
+    const failed = rows.filter(row => row.status === "failed").map(row => row.id);
+    if (failed.length && (await this.recoverStoredJobs(userId, failed)).length)
+      return this.listStatuses(userId, ids);
+    return rows;
   }
 
   async getJob(userId: string, id: string) {
-    const result = await this.sql.query<
+    const load = () => this.sql.query<
       PlanningJob & {
         source_kind?: TranslationPayload["sourceKind"];
         source_id?: string;
@@ -465,13 +487,16 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         from itinerary_jobs where id=$1 and user_id=$2`,
       [id, userId],
     );
+    const result = await load();
     if (!result.rows[0])
       throw new NotFoundException({
         code: "JOB_NOT_FOUND",
         params: {},
         message: "Không tìm thấy yêu cầu.",
       });
-    const row = result.rows[0];
+    let row = result.rows[0];
+    if (row.status === "failed" && (await this.recoverStoredJobs(userId, [id])).length)
+      row = (await load()).rows[0] ?? row;
     if (row.kind === "translate" && row.source_kind && row.source_id)
       await this.translationSource(userId, row.source_kind, row.source_id);
     if (row.kind === "revision" && row.trip_id)
