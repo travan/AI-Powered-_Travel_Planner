@@ -21,10 +21,16 @@ export function validateCanaryPlan(plan, request) {
     "Invalid successful plan cost",
   );
   if (request.budget !== undefined && plan.total_cost > request.budget)
-    assert.ok(plan.issues?.some((issue) => issue.code === "OVER_BUDGET" &&
-      issue.severity === "warning" && issue.params?.currency === plan.currency &&
-      issue.params?.amount === plan.total_cost - request.budget),
-    "Over-budget plan is missing an accurate warning");
+    assert.ok(
+      plan.issues?.some(
+        (issue) =>
+          issue.code === "OVER_BUDGET" &&
+          issue.severity === "warning" &&
+          issue.params?.currency === plan.currency &&
+          issue.params?.amount === plan.total_cost - request.budget,
+      ),
+      "Over-budget plan is missing an accurate warning",
+    );
   assert.equal(plan.budget_breakdown?.complete, true, "Incomplete budget");
   const breakdown = plan.budget_breakdown;
   const costs = [
@@ -90,15 +96,39 @@ export function validateCanaryPlan(plan, request) {
       assert.ok(match, "Missing activity time");
       const start = Number(match[1]) * 60 + Number(match[2]);
       assert.ok(
-        start >= lastEnd && Number(match[2]) < 60,
-        "Overlapping activities",
+        Number(match[1]) < 24 && Number(match[2]) < 60,
+        "Invalid activity time",
       );
       assert.ok(
         Number.isFinite(activity.duration_minutes) &&
           activity.duration_minutes > 0,
         "Missing duration",
       );
-      lastEnd = start + activity.duration_minutes;
+      const end = start + activity.duration_minutes;
+      const transitMeal =
+        activity.kind === "meal" &&
+        activity.during_transport === true &&
+        day.activities.some((leg) => {
+          if (!leg.main_transport || leg.kind !== "transfer") return false;
+          const [hours, minutes] = (leg.time ?? "").split(":").map(Number);
+          const departure = hours * 60 + minutes;
+          return start >= departure && end <= departure + leg.duration_minutes;
+        });
+      if (transitMeal)
+        assert.ok(
+          !day.activities.some((other) => {
+            if (other === activity || other.main_transport) return false;
+            const [hours, minutes] = (other.time ?? "").split(":").map(Number);
+            const otherStart = hours * 60 + minutes;
+            return (
+              start < otherStart + other.duration_minutes && end > otherStart
+            );
+          }),
+          "Overlapping activities",
+        );
+      assert.ok(start >= lastEnd || transitMeal, "Overlapping activities");
+      // A meal inside a main travel leg does not shorten the occupied travel window.
+      lastEnd = Math.max(lastEnd, end);
       assert.ok(lastEnd <= 1440, "Activity extends beyond day");
       assert.ok(
         activity.name?.trim() && activity.description?.trim(),
@@ -219,8 +249,10 @@ export async function runProductionCanary({
     "Unexpected rollout percentage",
   );
   const session = await canarySession(base, { request });
-  const cases = testCases ?? await planningCanaryCases();
-  const selectedCases = cases.filter((test) => mode === "compare" ? test.compare !== false : test.promoted === true);
+  const cases = testCases ?? (await planningCanaryCases());
+  const selectedCases = cases.filter((test) =>
+    mode === "compare" ? test.compare !== false : test.promoted === true,
+  );
   assert.ok(selectedCases.length > 0, "No production canary cases configured");
   const reports = [];
   await fs.mkdir(output, { recursive: true });
@@ -308,10 +340,20 @@ export async function runProductionCanary({
             "Job used the wrong pipeline",
           );
           if (expectedProvider)
-            assert.equal(job.provider, expectedProvider, "Job used the wrong AI provider");
+            assert.equal(
+              job.provider,
+              expectedProvider,
+              "Job used the wrong AI provider",
+            );
           if (pipeline === 2) {
             const usage = job.ai_usage ?? [];
-            assert.ok(usage.length <= 21 && usage.slice(0, -1).every((call) => call.outcome === "quota_rejected"), "Unexpected V2 provider dispatches");
+            assert.ok(
+              usage.length <= 21 &&
+                usage
+                  .slice(0, -1)
+                  .every((call) => call.outcome === "quota_rejected"),
+              "Unexpected V2 provider dispatches",
+            );
           }
           let validationError;
           if (job.status === "complete") {
@@ -368,8 +410,12 @@ export async function runProductionCanary({
 
 const total = (calls = [], field) =>
   calls.some((call) => call.model !== "canary-simulated-quota") &&
-  calls.filter((call) => call.model !== "canary-simulated-quota").every((call) => Number.isFinite(call[field]))
-    ? calls.filter((call) => call.model !== "canary-simulated-quota").reduce((sum, call) => sum + call[field], 0)
+  calls
+    .filter((call) => call.model !== "canary-simulated-quota")
+    .every((call) => Number.isFinite(call[field]))
+    ? calls
+        .filter((call) => call.model !== "canary-simulated-quota")
+        .reduce((sum, call) => sum + call[field], 0)
     : null;
 export function summarize(rows) {
   return Object.fromEntries(
