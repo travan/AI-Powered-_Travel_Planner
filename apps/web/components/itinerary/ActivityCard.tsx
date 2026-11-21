@@ -5,6 +5,7 @@ import { UiText, useUiText } from "../i18n/UiText";
 
 import React from "react";
 import { PlaceLookup } from "./PlaceLookup";
+import { PriceDetails } from "./PriceDetails";
 import { mapUrl } from "@travel/types";
 import type { Activity, GoldenMoment, TicketOption } from "@travel/types";
 import { Badge } from "@travel/ui";
@@ -139,19 +140,20 @@ export function ActivityCard({
               {activity.city} {activity.address && `· ${activity.address}`}
             </p>
           </div>
-          {(activity.price?.amount != null || activity.cost != null) && (
+          {
             <span className="shrink-0 text-sm">
-              {activity.price?.status !== "user_confirmed" &&
+              {(activity.price?.amount != null || activity.cost != null) &&
+                activity.price?.status !== "user_confirmed" &&
                 (formattingLocale === "vi" ? "Dự toán · " : "Estimate · ")}
-              {activity.price?.amount != null ? (
-                `${activity.price.amount.toLocaleString(formattingLocale)} ${activity.currency}${t(scope)}`
-              ) : activity.cost != null ? (
-                `${activity.cost.toLocaleString(formattingLocale)} ${activity.currency}${t("/cả nhóm")}`
-              ) : (
-                <UiText id="t1006ab49c0bf" fallback="Chưa có giá" />
-              )}
+              {activity.price?.amount != null
+                ? `${activity.price.amount.toLocaleString(formattingLocale)} ${activity.currency}${t(scope)}`
+                : activity.cost != null
+                  ? `${activity.cost.toLocaleString(formattingLocale)} ${activity.currency}${t("/cả nhóm")}`
+                  : vi
+                    ? "Chưa dự tính được"
+                    : "Not estimated yet"}
             </span>
-          )}
+          }
         </div>
         {activity.description && (
           <p className="mt-3 text-sm leading-6 text-on-surface">
@@ -168,15 +170,14 @@ export function ActivityCard({
           </p>
         )}
         {activity.reason && <p className="mt-2 text-sm">{activity.reason}</p>}
-        {activity.price?.basis === "planning_estimate" &&
-          activity.price.assumption && (
-            <p className="mt-2 rounded-lg bg-primary-fixed/30 p-2 text-xs leading-5 text-on-surface-variant">
-              {formattingLocale === "vi"
-                ? "Giả định dự toán: "
-                : "Budget assumption: "}
-              {activity.price.assumption}
-            </p>
-          )}
+        {activity.price?.assumption && (
+          <p className="mt-2 rounded-lg bg-primary-fixed/30 p-2 text-xs leading-5 text-on-surface-variant">
+            {formattingLocale === "vi"
+              ? "Giả định dự toán: "
+              : "Budget assumption: "}
+            {activity.price.assumption}
+          </p>
+        )}
         <details className="mt-3 text-sm">
           <summary className="cursor-pointer font-semibold text-primary">
             {" "}
@@ -189,9 +190,10 @@ export function ActivityCard({
             <p>
               {t(source)}
               {activity.evidence?.verified_at
-                ? ` · Cập nhật ${activity.evidence.verified_at}`
+                ? ` · ${vi ? "Cập nhật" : "Updated"} ${activity.evidence.verified_at}`
                 : ""}
             </p>
+            <PriceDetails price={activity.price} />
             {activity.alternative && (
               <p>
                 {" "}

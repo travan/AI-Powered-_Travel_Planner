@@ -1,4 +1,4 @@
-import type { Activity, Itinerary } from "@travel/types";
+import type { Activity, Itinerary, ScopedPrice } from "@travel/types";
 import * as types from "@travel/types";
 import {
   enrichTravel,
@@ -15,7 +15,7 @@ import {
   type Item,
   type SlotDay,
 } from "./planning-data.js";
-const { upgradeJourneyPlan } =
+const { upgradeJourneyPlan, hasPriceEvidence } =
   (types as unknown as { default?: typeof types }).default ?? types;
 
 export function assembleDay(snapshot: Snapshot, day: SlotDay) {
@@ -29,12 +29,24 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
   const p = input.planning!;
   const stay = snapshot.items[`${dest.selected}/stay`];
   const activities: Activity[] = day.slots.map((slot) => {
+    const includedKey =
+      slot.coveredBy ??
+      (!slot.itemKey
+        ? slot.kind === "check_in" || slot.kind === "check_out"
+          ? `${dest.selected}/stay`
+          : `${dest.selected}/local/daily`
+        : undefined);
     const item = slot.itemKey
       ? snapshot.items[slot.itemKey]
-      : slot.coveredBy
-        ? snapshot.items[slot.coveredBy]
+      : includedKey
+        ? snapshot.items[includedKey]
         : undefined;
-    const amount = slot.coveredBy || !slot.itemKey ? 0 : (item?.amount ?? null);
+    const amount =
+      item?.price && hasPriceEvidence(item.price)
+        ? includedKey
+          ? 0
+          : item.amount
+        : null;
     if (slot.itemKey && (!item || item.amount === null))
       planningWarning(
         snapshot,
@@ -52,7 +64,7 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
     const booked = p.stay_preferences.booked_name;
     const name =
       slot.displayName ??
-      item?.name ??
+      (slot.itemKey || slot.coveredBy ? item?.name : undefined) ??
       (slot.itemKey
         ? vi
           ? "Mục dự kiến — chưa đủ thông tin địa điểm"
@@ -102,20 +114,31 @@ export function assembleDay(snapshot: Snapshot, day: SlotDay) {
             ? { source: "user" }
             : { source: "ai_suggestion" },
       price: {
-        amount,
         currency: input.currency,
-        scope: item?.scope ?? "group",
-        status: "estimated",
-        basis: "planning_estimate",
+        ...item?.price,
+        amount,
+        scope: includedKey ? "group" : (item?.scope ?? "group"),
+        status: item?.price?.status ?? "estimated",
+        basis: item?.price?.basis ?? "planning_estimate",
+        ...(includedKey
+          ? {
+              included_in: includedKey,
+              ...(item?.price?.original
+                ? { original: { ...item.price.original, amount: 0 } }
+                : {}),
+            }
+          : {}),
         assumption:
-          (slot.duringTransport
-            ? "Separate meal allowance during main travel, not a destination restaurant visit or a guaranteed onboard meal. Arrange food separately; not included in the main fare estimate."
-            : slot.coveredBy
-              ? "Included in the main travel budget; duration is a provisional allowance. Confirm the actual service and local arrival/departure times."
-              : item?.assumption) ??
-          (slot.kind === "check_in" || slot.kind === "check_out"
-            ? "Room charges are counted in the accommodation budget."
-            : "Included in the daily local or main travel allowance; no extra charge."),
+          amount === null
+            ? "Price unavailable: no verified price source. Excluded from the total."
+            : ((slot.duringTransport
+                ? "Separate meal allowance during main travel, not a destination restaurant visit or a guaranteed onboard meal. Arrange food separately; not included in the main fare estimate."
+                : slot.coveredBy
+                  ? "Included in the main travel budget; duration is a provisional allowance. Confirm the actual service and local arrival/departure times."
+                  : item?.assumption) ??
+              (slot.kind === "check_in" || slot.kind === "check_out"
+                ? "Room charges are counted in the accommodation budget."
+                : "Included in the daily local or main travel allowance; no extra charge.")),
       },
     };
   });
@@ -182,7 +205,11 @@ export function completePlan(snapshot: Snapshot): Itinerary {
         city: d.city!.name.en ?? d.city!.slug,
         rooms: p.stay_preferences.rooms,
         nights,
-        nightly_estimate: item.amount ?? undefined,
+        price: item.price,
+        nightly_estimate:
+          item.price && hasPriceEvidence(item.price)
+            ? (item.amount ?? undefined)
+            : undefined,
         estimate_basis: "planning_estimate" as const,
         estimate_assumption: item.assumption,
         price_per_night: "",
@@ -213,7 +240,11 @@ export function completePlan(snapshot: Snapshot): Itinerary {
     restaurants: [],
     suggestions: [],
     transport_summary: snapshot.legs.map((leg) => {
-      const item = snapshot.items[leg.key] ?? {
+      const item: Partial<Item> & {
+        amount: number | null;
+        scope: ScopedPrice["scope"];
+        assumption: string;
+      } = snapshot.items[leg.key] ?? {
         amount: null,
         scope: "person" as const,
         assumption: "Travel price is missing; confirm before booking.",
@@ -232,11 +263,13 @@ export function completePlan(snapshot: Snapshot): Itinerary {
             : ("intercity" as const),
         options: [],
         price: {
-          amount: item.amount,
+          ...item.price,
+          amount:
+            item.price && hasPriceEvidence(item.price) ? item.amount : null,
           currency: input.currency,
           scope: item.scope,
-          status: "estimated" as const,
-          basis: "planning_estimate" as const,
+          status: item.price?.status ?? "estimated",
+          basis: item.price?.basis ?? "planning_estimate",
           assumption: item.assumption,
         },
       };
@@ -280,13 +313,20 @@ export function completePlan(snapshot: Snapshot): Itinerary {
       transport_kind: "local",
       options: [],
       price: {
-        amount: 0,
+        ...local?.price,
+        amount: local?.price && hasPriceEvidence(local.price) ? 0 : null,
+        included_in: `${snapshot.destinations[0]!.selected}/local/daily`,
+        ...(local?.price?.original
+          ? { original: { ...local.price.original, amount: 0 } }
+          : {}),
         currency: input.currency,
         scope: "group",
         status: "estimated",
         basis: "planning_estimate",
         assumption:
-          "Local-only route. All travel within this city is already included in the daily local transport allowance; no additional main travel charge.",
+          local?.price && hasPriceEvidence(local.price)
+            ? "Local-only route. All travel within this city is already included in the daily local transport allowance; no additional main travel charge."
+            : "Price unavailable: no verified price source. Excluded from the total.",
       },
     });
   }

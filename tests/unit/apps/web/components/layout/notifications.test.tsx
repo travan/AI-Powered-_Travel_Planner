@@ -94,12 +94,12 @@ async function open() {
   fireEvent.click(screen.getByRole("button", { name: "Thông báo" }));
   await waitFor(() => expect(snapshot.page?.items).toHaveLength(3));
 }
-it("groups checklist tasks by trip and names each task, then marks all read", async () => {
+it("groups all trip activity and names each task, then marks all read", async () => {
   await open();
   expect(
-    screen.getAllByText(/Danh sách việc · Moscow trip · 3 việc/),
+    screen.getAllByText(/Chuyến đi · Moscow trip · 3 cập nhật/),
   ).toHaveLength(1);
-  expect(screen.getByText("Task 2")).toBeTruthy();
+  expect(screen.getByText(/Danh sách việc · Task 2/)).toBeTruthy();
   mocks.request.mockImplementation(async (path: string) =>
     path === "notifications/read-all" ? { read_at: timestamp } : { count: 0 },
   );
@@ -205,4 +205,51 @@ it("discards a pending bulk write when the user signs out", async () => {
   expect(snapshot.count).toBe(0);
   expect(snapshot.page).toBeUndefined();
   expect(snapshot.markingAll).toBe(false);
+});
+
+it("groups different task categories in the same trip without merging another trip", async () => {
+  mocks.request.mockImplementation(async (path: string) =>
+    path === "notifications/unread"
+      ? { count: 3 }
+      : {
+          items: [
+            item("task"),
+            item("membership", { category: "member", event: "active" }),
+            item("other", {
+              trip_id: "another-trip",
+              trip_title: "Tokyo trip",
+              category: "trip",
+              event: "updated",
+            }),
+          ],
+          next: null,
+        },
+  );
+  await open();
+  expect(document.querySelectorAll("summary")).toHaveLength(2);
+  expect(screen.getByText(/Chuyến đi · Moscow trip · 2 cập nhật/)).toBeTruthy();
+  expect(screen.getByText(/Chuyến đi · Tokyo trip · 1 cập nhật/)).toBeTruthy();
+  expect(screen.getByText(/Thành viên · Task membership/)).toBeTruthy();
+});
+it("groups unassociated invitations by category without inventing trip access", async () => {
+  mocks.request.mockImplementation(async (path: string) =>
+    path === "notifications/unread"
+      ? { count: 3 }
+      : {
+          items: ["one", "two", "three"].map((id) =>
+            item(id, {
+              trip_id: null,
+              trip_title: null,
+              category: "invite",
+              event: "accepted",
+              subject_label: null,
+            }),
+          ),
+          next: null,
+        },
+  );
+  await open();
+  expect(document.querySelectorAll("summary")).toHaveLength(1);
+  expect(screen.getByText(/Lời mời · 3 cập nhật/)).toBeTruthy();
+  expect(screen.queryByText(/Moscow trip/)).toBeNull();
 });

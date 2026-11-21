@@ -1,6 +1,6 @@
 "use client";
 import { pollWhileVisible } from "@/lib/visible-poll";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   applyItineraryTranslation,
@@ -10,7 +10,11 @@ import {
 import { useAppLanguage } from "../i18n/LanguageProvider";
 import { useIssueText } from "../i18n/UiText";
 import { ApiRequestError } from "../../lib/api";
-import { getJourneyJob, journeyRequest, notifyJobStatusChanged } from "../../lib/journey-api";
+import {
+  getJourneyJob,
+  journeyRequest,
+  notifyJobStatusChanged,
+} from "../../lib/journey-api";
 
 type TranslationList = {
   source_version: string;
@@ -48,6 +52,8 @@ export function TranslationControls({
   const [error, setError] = useState<DisplayError | null>(null);
   const [jobId, setJobId] = useState<string>();
   const epoch = useRef(0);
+  const attempted = useRef(new Set<string>());
+  const submitting = useRef(false);
   useEffect(() => {
     const current = ++epoch.current;
     setData(null);
@@ -56,6 +62,8 @@ export function TranslationControls({
     setJobId(undefined);
     setStatus("idle");
     setError(null);
+    attempted.current.clear();
+    submitting.current = false;
     const abort = new AbortController();
     journeyRequest<TranslationList>(path, token, undefined, "GET", abort.signal)
       .then((result) => {
@@ -104,7 +112,8 @@ export function TranslationControls({
         setStatus(job.status === "processing" ? "processing" : "queued");
         return true;
       } catch (e) {
-        if (e instanceof ApiRequestError && e.status === 429) return e.retryAfterMs ?? true;
+        if (e instanceof ApiRequestError && e.status === 429)
+          return e.retryAfterMs ?? true;
         if (!signal.aborted && current === epoch.current) {
           setError(translationError(e));
           setStatus("idle");
@@ -114,45 +123,52 @@ export function TranslationControls({
       }
     });
   }, [jobId, path, token]);
-  const translate = async (target: "en" | "vi") => {
-    if (!data) return;
-    const current = epoch.current;
-    setError(null);
-    setStatus("queued");
-    try {
-      // Submit the version already shown, never silently accept a newer source.
-      const result = await journeyRequest<{
-        job_id?: string;
-        translation?: ItineraryTranslation;
-      }>(path, token, {
-        target_locale: target,
-        source_version: data.source_version,
-      });
-      if (current !== epoch.current) return;
-      if (result.translation) {
-        setData((previous) =>
-          previous
-            ? {
-                ...previous,
-                translations: [
-                  result.translation!,
-                  ...previous.translations.filter(
-                    (x) => x.target_locale !== target,
-                  ),
-                ],
-              }
-            : previous,
-        );
-        setStatus("idle");
-      } else if (result.job_id) setJobId(result.job_id);
-      else throw new Error("Missing translation job");
-    } catch (e) {
-      if (current === epoch.current) {
-        setStatus("idle");
-        setError(translationError(e));
+  const translate = useCallback(
+    async (target: "en" | "vi") => {
+      if (!data || submitting.current) return;
+      const current = epoch.current;
+      submitting.current = true;
+      attempted.current.add(`${data.source_version}:${target}`);
+      setError(null);
+      setStatus("queued");
+      try {
+        // Submit the version already shown, never silently accept a newer source.
+        const result = await journeyRequest<{
+          job_id?: string;
+          translation?: ItineraryTranslation;
+        }>(path, token, {
+          target_locale: target,
+          source_version: data.source_version,
+        });
+        if (current !== epoch.current) return;
+        if (result.translation) {
+          setData((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  translations: [
+                    result.translation!,
+                    ...previous.translations.filter(
+                      (x) => x.target_locale !== target,
+                    ),
+                  ],
+                }
+              : previous,
+          );
+          setStatus("idle");
+        } else if (result.job_id) setJobId(result.job_id);
+        else throw new Error("Missing translation job");
+      } catch (e) {
+        if (current === epoch.current) {
+          setStatus("idle");
+          setError(translationError(e));
+        }
+      } finally {
+        if (current === epoch.current) submitting.current = false;
       }
-    }
-  };
+    },
+    [data, path, token],
+  );
   const sourceChanged =
     plan.version !== undefined &&
     data?.source.version !== undefined &&
@@ -162,6 +178,29 @@ export function TranslationControls({
     : (data?.translations.filter(
         (entry) => !entry.stale && entry.source_version === data.source_version,
       ) ?? []);
+  useEffect(() => {
+    if (
+      !data ||
+      sourceChanged ||
+      status !== "idle" ||
+      error ||
+      plan.locale === locale ||
+      !plan.locale ||
+      available.some((entry) => entry.target_locale === locale) ||
+      attempted.current.has(`${data.source_version}:${locale}`)
+    )
+      return;
+    void translate(locale);
+  }, [
+    data,
+    sourceChanged,
+    status,
+    error,
+    plan.locale,
+    locale,
+    available,
+    translate,
+  ]);
   useEffect(() => {
     const entry =
       plan.locale === locale || sourceChanged
@@ -231,7 +270,10 @@ export function TranslationControls({
               key={target}
               type="button"
               disabled={!data || sourceChanged || status !== "idle"}
-              onClick={() => void translate(target)}
+              onClick={() => {
+                setLocale(target);
+                void translate(target);
+              }}
               className="rounded-full border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-50"
             >
               {t("translate_to", {
@@ -244,10 +286,25 @@ export function TranslationControls({
         <p className="text-sm text-amber-800">{t("stale")}</p>
       )}
       {status !== "idle" && <p role="status">{t(status)}</p>}
-      {error && (
-        <p role="alert" className="text-sm text-error">
-          {issueText(error)}
+      {plan.locale && plan.locale !== locale && selected === "original" && (
+        <p role="status" className="text-sm text-amber-800">
+          {t("showing_original")}
         </p>
+      )}
+      {error && (
+        <div role="alert" className="text-sm text-error">
+          <p>{issueText(error)}</p>
+          {data && !sourceChanged && plan.locale !== locale && (
+            <button
+              type="button"
+              disabled={status !== "idle"}
+              onClick={() => void translate(locale)}
+              className="mt-2 rounded-full border border-primary px-4 py-2 font-bold text-primary disabled:opacity-50"
+            >
+              {t("retry")}
+            </button>
+          )}
+        </div>
       )}
     </section>
   );

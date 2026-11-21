@@ -14,6 +14,8 @@ export * from "./journey";
 export * from "./translation";
 
 export * from "./travel-display";
+export * from "./price-evidence";
+export * from "./planning-text";
 
 export * from "./learning";
 

@@ -217,26 +217,40 @@ export function DayTimeline({
           {showDailyBudget &&
             day.daily_cost_estimate != null &&
             Number.isFinite(day.daily_cost_estimate) &&
-            day.daily_cost_estimate > 0 && (
+            (day.daily_cost_estimate > 0 ||
+              day.daily_budget_complete === false) && (
               <div className="sm:ml-14 flex items-center justify-between gap-4 rounded-xl border border-primary/25 bg-primary-fixed/40 px-4 py-3">
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-on-primary-fixed-variant">
                     {" "}
-                    <UiText
-                      id="t3ecae6cbba22"
-                      fallback="Estimated daily budget"
-                    />{" "}
+                    {day.daily_budget_complete === false ? (
+                      formattingLocale === "vi" ? (
+                        "Tạm tính các khoản đã có giá"
+                      ) : (
+                        "Subtotal of priced items"
+                      )
+                    ) : (
+                      <UiText
+                        id="t3ecae6cbba22"
+                        fallback="Estimated daily budget"
+                      />
+                    )}{" "}
                   </p>
                   <p className="mt-0.5 text-xl font-black text-on-surface">
-                    {formatMoney(
-                      day.daily_cost_estimate ??
-                        activitiesForDay(day, currency).reduce(
-                          (sum, activity) => sum + (activity.cost ?? 0),
-                          0,
-                        ),
-                      currency,
-                      formattingLocale,
-                    )}
+                    {day.daily_cost_estimate === 0 &&
+                    day.daily_budget_complete === false
+                      ? formattingLocale === "vi"
+                        ? "Chưa dự tính được"
+                        : "Not estimated yet"
+                      : formatMoney(
+                          day.daily_cost_estimate ??
+                            activitiesForDay(day, currency).reduce(
+                              (sum, activity) => sum + (activity.cost ?? 0),
+                              0,
+                            ),
+                          currency,
+                          formattingLocale,
+                        )}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-on-primary">

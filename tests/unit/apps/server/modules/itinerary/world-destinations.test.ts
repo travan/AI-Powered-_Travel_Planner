@@ -161,10 +161,17 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
       );
       const generated = await s.run();
       expect(generated.result.days).toHaveLength(3);
-      expect(generated.result.issues).toContainEqual(expect.objectContaining({
-        code: "PLANNING_LOCATION_UNVERIFIED", severity: "warning",
-      }));
-      expect(generated.result.days.flatMap((day) => day.activities).every((activity) => activity.lat == null && activity.lon == null)).toBe(true);
+      expect(generated.result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "PLANNING_LOCATION_UNVERIFIED",
+          severity: "warning",
+        }),
+      );
+      expect(
+        generated.result.days
+          .flatMap((day) => day.activities)
+          .every((activity) => activity.lat == null && activity.lon == null),
+      ).toBe(true);
       expect(s.binding.run).toHaveBeenCalledOnce();
       expect(s.repository.createComplete).toHaveBeenCalledOnce();
     },
@@ -213,12 +220,12 @@ describe.each(["city", "country"] as const)("worldwide %s requests", (kind) => {
       expect(
         variants.some(
           (variant: any) =>
-            variant.properties.amount.exclusiveMinimum === 0 &&
+            variant.properties.amount.type.includes("null") &&
             variant.properties.key.enum.length > 0,
         ),
       ).toBe(true);
       expect(payload.messages[1].content).toContain(
-        "Prioritize total_group_budget when selecting options",
+        "Budget allocation is guidance for choosing options, never evidence of their prices",
       );
       expect(s.cityService.remember).not.toHaveBeenCalled();
     },

@@ -1069,6 +1069,7 @@
     "APPLY_PERMISSION_CHANGED": "Quyền áp dụng phương án đã thay đổi.",
     "REVISION_UNAVAILABLE": "Bản xem trước đã áp dụng hoặc không còn hợp lệ.",
     "REVISION_INVALID": "Phương án còn lỗi thời gian hoặc ràng buộc; hãy tạo lại trước khi áp dụng.",
+    "CHECKLIST_CHANGED": "Danh sách việc đã thay đổi. Hãy tải lại trước khi lưu lựa chọn.",
     "CHECKLIST_NOT_FOUND": "Không tìm thấy việc cần làm.",
     "CITY_UNRESOLVED": "Hãy chọn một thành phố có trong danh sách, kèm quốc gia hoặc vùng.",
     "CITY_AMBIGUOUS": "Có nhiều thành phố trùng tên. Hãy chọn đúng thành phố và quốc gia hoặc vùng.",
@@ -1100,6 +1101,8 @@
     "PLANNING_QUEUE_UNAVAILABLE": "Hàng đợi lập lịch trình chưa sẵn sàng. Vui lòng thử lại sau."
   },
   "translations": {
+    "showing_original": "Bản dịch chưa sẵn sàng. Nội dung lịch trình đang hiển thị bằng ngôn ngữ gốc.",
+    "retry": "Thử dịch lại",
     "panel": "Bản dịch lịch trình",
     "source_language": "Ngôn ngữ gốc",
     "unknown": "Chưa xác định",

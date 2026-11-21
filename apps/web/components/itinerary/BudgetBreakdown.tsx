@@ -34,7 +34,7 @@ export function BudgetBreakdown({ breakdown }: Props) {
     { label: "Contingency", value: breakdown.contingency ?? 0 },
   ].filter((c) => c.value > 0);
 
-  if (!categories.length) return null;
+  if (!categories.length && breakdown.complete !== false) return null;
 
   const hasEstimates = breakdown.items?.some(
     (item) => item.basis === "planning_estimate",
@@ -52,7 +52,9 @@ export function BudgetBreakdown({ breakdown }: Props) {
         {breakdown.total > 0 && (
           <span className="whitespace-nowrap text-xl font-bold text-emerald-700">
             {breakdown.complete === false &&
-              (formattingLocale === "vi" ? "Tạm tính · " : "Subtotal · ")}
+              (formattingLocale === "vi"
+                ? "Tạm tính các khoản đã có giá · "
+                : "Subtotal of priced items · ")}
             {breakdown.currency ?? "USD"} {money(breakdown.total)}
           </span>
         )}
@@ -175,27 +177,43 @@ export function BudgetBreakdown({ breakdown }: Props) {
               : "Itemized group budget"}
           </summary>
           <ul className="mt-4 divide-y divide-gray-100">
-            {breakdown.items
-              .filter((item) => item.amount != null)
-              .map((item) => (
-                <li key={item.id} className="py-3 text-sm">
-                  <div className="flex flex-wrap justify-between gap-2">
-                    <span className="font-medium">{item.label}</span>
-                    <span className="whitespace-nowrap font-semibold">
-                      {breakdown.currency} {money(item.amount!)}
-                    </span>
-                  </div>
-                  {item.assumption && (
-                    <p className="mt-1 text-xs leading-5 text-gray-600">
-                      {item.assumption}
-                    </p>
-                  )}
-                </li>
-              ))}
+            {breakdown.items.map((item) => (
+              <li key={item.id} className="py-3 text-sm">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <span className="font-medium">{item.label}</span>
+                  <span className="whitespace-nowrap font-semibold">
+                    {item.amount == null
+                      ? formattingLocale === "vi"
+                        ? "Chưa dự tính được"
+                        : "Not estimated yet"
+                      : `${breakdown.currency} ${money(item.amount)}`}
+                  </span>
+                </div>
+                {item.assumption && (
+                  <p className="mt-1 text-xs leading-5 text-gray-600">
+                    {item.assumption}
+                  </p>
+                )}
+              </li>
+            ))}
           </ul>
         </details>
       )}
 
+      {!!breakdown.missing_items?.length && (
+        <div className="text-sm text-amber-900">
+          <p className="font-semibold">
+            {formattingLocale === "vi"
+              ? "Các khoản chưa dự tính được"
+              : "Items not estimated yet"}
+          </p>
+          <ul className="mt-2 list-disc pl-5">
+            {breakdown.missing_items.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {/* Per person / per day */}
       {breakdown.complete !== false &&
         (breakdown.per_person != null || breakdown.per_day != null) && (

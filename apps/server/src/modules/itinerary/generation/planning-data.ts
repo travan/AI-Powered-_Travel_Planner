@@ -3,6 +3,7 @@ import type {
   ItineraryDay,
   PlanningIssue,
 } from "@travel/types";
+import { catalogPrice } from "../enrichment/catalog-prices.js";
 import { prepareDailySlots } from "@travel/ai";
 import * as types from "@travel/types";
 import type { CityPlanningData } from "../../cities/domain/city.entity.js";
@@ -39,6 +40,7 @@ export type Need = {
   fixed_amount?: number;
 };
 export type Item = {
+  price?: import("@travel/types").ScopedPrice;
   duration_minutes?: number;
   name: string;
   amount: number | null;
@@ -126,12 +128,6 @@ export function applySupplementForDisplay(
           : undefined);
       if (name) {
         usable++;
-        const amount =
-          typeof row?.amount === "number" &&
-          Number.isFinite(row.amount) &&
-          (row.amount > 0 || (row.amount === 0 && need.kind === "visit"))
-            ? row.amount
-            : null;
         const duration =
           Number.isInteger(row?.duration_minutes) &&
           Number(row?.duration_minutes) >= 15 &&
@@ -141,7 +137,7 @@ export function applySupplementForDisplay(
         snapshot.items[need.key] = {
           ...old,
           name,
-          amount: old?.amount ?? need.fixed_amount ?? amount,
+          amount: old?.amount ?? need.fixed_amount ?? null,
           duration_minutes: old?.duration_minutes ?? duration,
           source: old?.source ?? "ai_suggestion",
           scope:
@@ -247,7 +243,20 @@ export function prepareSnapshot(
   const catalogs = new Map(
     destinations.map((dest) => {
       const prices = new Map<string, number>();
+      const priceRecords = new Map<
+        string,
+        import("@travel/types").ScopedPrice
+      >();
       for (const activity of dest.city?.activities ?? []) {
+        if (
+          trusted(activity) &&
+          activity.currency === input.currency &&
+          !priceRecords.has(placeKey(activity.title))
+        )
+          priceRecords.set(
+            placeKey(activity.title),
+            catalogPrice(activity, input.currency, "person"),
+          );
         if (
           !trusted(activity) ||
           activity.currency !== input.currency ||
@@ -256,6 +265,11 @@ export function prepareSnapshot(
         )
           continue;
         const key = placeKey(activity.title);
+        if (activity.estimated_cost < (prices.get(key) ?? Infinity))
+          priceRecords.set(
+            key,
+            catalogPrice(activity, input.currency, "person"),
+          );
         prices.set(
           key,
           Math.min(prices.get(key) ?? Infinity, activity.estimated_cost),
@@ -273,7 +287,14 @@ export function prepareSnapshot(
               Number(preferred.has(a.id ?? "")) ||
             (a.id ?? a.name).localeCompare(b.id ?? b.name),
         );
-      return [dest.selected, { places, cost }] as const;
+      return [
+        dest.selected,
+        {
+          places,
+          cost,
+          price: (name: string) => priceRecords.get(placeKey(name)),
+        },
+      ] as const;
     }),
   );
   const count = input.num_days ?? 1;
@@ -367,6 +388,7 @@ export function prepareSnapshot(
         if (price)
           item = {
             name: price.title,
+            price: catalogPrice(price, input.currency, "group"),
             amount: price.estimated_cost,
             source: "catalog",
             id: price.id,
@@ -440,6 +462,7 @@ export function prepareSnapshot(
           const price = catalogs.get(dest.selected)!.cost(picked.name);
           item = {
             name: picked.name,
+            price: catalogs.get(dest.selected)!.price(picked.name),
             amount: typeof price === "number" && price >= 0 ? price : null,
             source: "catalog",
             id: picked.id,
@@ -498,6 +521,12 @@ export function prepareSnapshot(
         name
           ? {
               name,
+              price: hotel
+                ? {
+                    ...catalogs.get(dest.selected)!.price(hotel.name)!,
+                    scope: "room_night",
+                  }
+                : undefined,
               amount,
               source: stay.booked_name ? "user" : "catalog",
               id: hotel?.id,
@@ -559,6 +588,15 @@ export function prepareSnapshot(
             name: `${from} → ${to}`,
             amount: i === 1 ? confirmed : 0,
             duration_minutes: estimate?.duration_minutes ?? undefined,
+            price: {
+              amount: i === 1 ? confirmed : 0,
+              currency: input.currency,
+              scope: "group",
+              status: "user_confirmed",
+              basis: "user",
+              evidence: { source: "user" },
+              ...(i > 1 ? { included_in: "leg/1" } : {}),
+            },
             scope: "group",
             source: "user",
             assumption:
@@ -569,6 +607,7 @@ export function prepareSnapshot(
         : estimate
           ? {
               name: estimate.title,
+              price: catalogPrice(estimate, input.currency, "person"),
               amount: estimate.estimated_cost,
               duration_minutes: estimate.duration_minutes ?? undefined,
               scope: "person",
@@ -597,56 +636,19 @@ export function applySupplement(snapshot: Snapshot, response: unknown) {
         typeof r === "object" &&
         (r as { key?: unknown }).key === need.key,
     );
-    let row = matches[0];
-    // Alternatives are different proposed options with their own prices. Never
-    // make an existing quote appear affordable by clamping its amount.
-    if (
-      row &&
-      need.fixed_name === undefined &&
-      need.fixed_amount === undefined &&
-      Array.isArray(row.alternatives)
-    ) {
-      const candidates = [row, ...row.alternatives.slice(0, 2)] as Record<
-        string,
-        unknown
-      >[];
-      const valid = candidates.filter(
-        (candidate) =>
-          !(
-            !candidate ||
-            typeof candidate !== "object" ||
-            typeof candidate.name !== "string" ||
-            !candidate.name.trim() ||
-            candidate.name.length > 200 ||
-            typeof candidate.amount !== "number" ||
-            !Number.isFinite(candidate.amount) ||
-            candidate.amount < 0 ||
-            (candidate.amount === 0 && need.kind !== "visit") ||
-            (need.kind === "leg" &&
-              (!Number.isInteger(candidate.duration_minutes) ||
-                Number(candidate.duration_minutes) < 15 ||
-                Number(candidate.duration_minutes) > 1440))
-          ),
-      );
-      row = valid.sort((a, b) => Number(a.amount) - Number(b.amount))[0] ?? row;
-    }
+    const row = matches[0];
     if (
       matches.length !== 1 ||
       !row ||
       typeof row.name !== "string" ||
       !row.name.trim() ||
       row.name.length > 200 ||
-      typeof row.amount !== "number" ||
-      !Number.isFinite(row.amount) ||
-      row.amount < 0
+      (row.amount !== null &&
+        (typeof row.amount !== "number" ||
+          !Number.isFinite(row.amount) ||
+          row.amount < 0))
     )
       throw new Error("invalid supplement item");
-    if (
-      row.amount === 0 &&
-      need.fixed_amount === undefined &&
-      need.kind !== "visit"
-    )
-      throw new Error("missing mandatory cost");
     const old = snapshot.items[need.key];
     if (
       need.kind === "leg" &&
@@ -662,11 +664,11 @@ export function applySupplement(snapshot: Snapshot, response: unknown) {
         (["visit", "meal", "cafe", "stay"].includes(need.kind)
           ? venueName(row.name)
           : row.name.trim()),
-      amount: old?.amount ?? row.amount,
+      amount: old?.amount ?? need.fixed_amount ?? null,
       ...(need.kind === "leg"
         ? { duration_minutes: Number(row.duration_minutes) }
         : {}),
-      source: "ai_suggestion",
+      source: old?.source ?? "ai_suggestion",
       scope:
         old?.scope ??
         (need.kind === "local"
@@ -675,7 +677,8 @@ export function applySupplement(snapshot: Snapshot, response: unknown) {
             ? "room_night"
             : "person"),
       assumption:
-        "Unverified AI planning allowance, not a quote; confirm before booking.",
+        old?.assumption ??
+        "Price unavailable: no verified price source. Excluded from the total.",
     };
   }
 }

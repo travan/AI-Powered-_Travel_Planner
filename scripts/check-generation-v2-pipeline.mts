@@ -174,7 +174,46 @@ try {
   for (const plan of stored) {
     assert.deepEqual([...plan.countries].sort(), ["MY", "SG"]);
     assert.equal(plan.result.days.length, 10);
-    assert.equal(plan.result.budget_breakdown.complete, true);
+    const meals = plan.result.days
+      .flatMap(
+        (day: {
+          activities: { kind: string; price?: { amount: number | null } }[];
+        }) => day.activities,
+      )
+      .filter((activity: { kind: string }) => activity.kind === "meal");
+    const unknownMeals = meals.filter(
+      (activity: { price?: { amount: number | null } }) =>
+        activity.price?.amount == null,
+    );
+    // The first result used priced catalog meals. All later jobs lack catalog meal prices:
+    // their AI supplement may propose venues but must not invent a complete budget.
+    assert.equal(
+      plan.result.budget_breakdown.complete,
+      unknownMeals.length === 0,
+    );
+    if (unknownMeals.length) {
+      const foodItems = plan.result.budget_breakdown.items.filter(
+        (item: { category: string }) => item.category === "food",
+      );
+      assert.ok(
+        foodItems.some(
+          (item: { amount: number | null }) => item.amount == null,
+        ),
+      );
+      assert.equal(
+        plan.result.budget_breakdown.food,
+        foodItems.reduce(
+          (sum: number, item: { amount: number | null }) =>
+            sum + (item.amount ?? 0),
+          0,
+        ),
+      );
+      assert.ok(
+        plan.result.issues.some(
+          (issue: { code: string }) => issue.code === "BUDGET_INCOMPLETE",
+        ),
+      );
+    }
     assert.ok(plan.result.total_cost <= 20000000);
   }
   assert.equal(
@@ -194,23 +233,55 @@ try {
   // An expired historical failure with a durable response is replayed once,
   // under the original owner's job, without another inference or duplicate plan.
   const recoveryJob = jobs[0]!;
-  const original = (await pool.query("select itinerary_id from itinerary_jobs where id=$1", [recoveryJob])).rows[0].itinerary_id;
-  await pool.query("update itinerary_jobs set status='failed',itinerary_id=null,error_code='AI_RESPONSE_INVALID',deadline_at=now()-interval '1 day' where id=$1", [recoveryJob]);
+  const original = (
+    await pool.query("select itinerary_id from itinerary_jobs where id=$1", [
+      recoveryJob,
+    ])
+  ).rows[0].itinerary_id;
+  await pool.query(
+    "update itinerary_jobs set status='failed',itinerary_id=null,error_code='AI_RESPONSE_INVALID',deadline_at=now()-interval '1 day' where id=$1",
+    [recoveryJob],
+  );
   await pool.query("delete from itineraries where id=$1", [original]);
   assert.deepEqual(await store.recoverReceived(users[1]!, [recoveryJob]), []);
-  const recovered = await Promise.all([store.recoverReceived(users[0]!, [recoveryJob]), store.recoverReceived(users[0]!, [recoveryJob])]);
+  const recovered = await Promise.all([
+    store.recoverReceived(users[0]!, [recoveryJob]),
+    store.recoverReceived(users[0]!, [recoveryJob]),
+  ]);
   assert.equal(recovered.flat().length, 1);
   await run(recoveryJob);
   const repaired = await service.getJob(users[0]!, recoveryJob);
   assert.equal(repaired.status, "complete");
   assert.equal(calls, 100, "Recovery must never call AI again");
-  const result = (await pool.query("select result from itineraries where id=$1", [repaired.itinerary_id])).rows[0].result;
+  const result = (
+    await pool.query("select result from itineraries where id=$1", [
+      repaired.itinerary_id,
+    ])
+  ).rows[0].result;
   assert.equal(result.days.length, 10);
-  assert.ok(result.issues.some((issue: { code: string }) => issue.code === "SAVED_AI_RESPONSE_RECOVERED"));
-  await pool.query("update itinerary_jobs set status='failed' where id=$1", [recoveryJob]);
+  assert.ok(
+    result.issues.some(
+      (issue: { code: string }) => issue.code === "SAVED_AI_RESPONSE_RECOVERED",
+    ),
+  );
+  await pool.query("update itinerary_jobs set status='failed' where id=$1", [
+    recoveryJob,
+  ]);
   const linked = await service.getJob(users[0]!, recoveryJob);
-  assert.equal(linked.status, "complete", "A saved result must override a stale failed status");
-  assert.equal((await pool.query("select count(*)::int as count from itineraries where user_id=$1", [users[0]])).rows[0].count, 1);
+  assert.equal(
+    linked.status,
+    "complete",
+    "A saved result must override a stale failed status",
+  );
+  assert.equal(
+    (
+      await pool.query(
+        "select count(*)::int as count from itineraries where user_id=$1",
+        [users[0]],
+      )
+    ).rows[0].count,
+    1,
+  );
   console.log(
     JSON.stringify(
       {

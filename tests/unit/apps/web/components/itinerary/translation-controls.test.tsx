@@ -13,7 +13,8 @@ import type { Itinerary } from "@travel/types";
 const api = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../../../../../../apps/web/lib/journey-api", () => ({
   journeyRequest: api.request,
-  getJourneyJob: (id: string, token: string) => api.request(`itinerary/jobs/${id}`, token),
+  getJourneyJob: (id: string, token: string) =>
+    api.request(`itinerary/jobs/${id}`, token),
   notifyJobStatusChanged: vi.fn(),
 }));
 import { TranslationControls } from "../../../../../../apps/web/components/itinerary/TranslationControls";
@@ -155,5 +156,116 @@ describe("explicit itinerary translations", () => {
     await act(async () => resolvePost({ translation }));
     expect(screen.queryByRole("option", { name: "Tiếng Việt" })).toBeNull();
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("automatic itinerary translations", () => {
+  it("automatically enqueues and applies a missing translation after selecting VI", async () => {
+    let started = false;
+    api.request.mockImplementation(
+      async (path: string, _token: string, body?: unknown) => {
+        if (body) {
+          started = true;
+          return { job_id: "auto-job" };
+        }
+        if (path.includes("jobs/")) return { status: "complete" };
+        return {
+          source: plan,
+          source_version: "hash-one",
+          translations: started ? [translation] : [],
+        };
+      },
+    );
+    render(view());
+    await waitFor(() => expect(api.request).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "VI", exact: true }));
+    await waitFor(() =>
+      expect(onChange).toHaveBeenLastCalledWith({
+        ...plan,
+        overview: "Mô tả tiếng Việt",
+      }),
+    );
+    expect(
+      api.request.mock.calls.filter((call) => call[2] !== undefined),
+    ).toHaveLength(1);
+  });
+  it("automatically translates a Vietnamese source when opening it in English", async () => {
+    const source = { ...plan, locale: "vi" as const, overview: "Mô tả gốc" };
+    api.request.mockImplementation(
+      async (_path: string, _token: string, body?: unknown) =>
+        body
+          ? {
+              translation: {
+                ...translation,
+                target_locale: "en",
+                texts: { overview: "English description" },
+              },
+            }
+          : { source, source_version: "hash-one", translations: [] },
+    );
+    render(view(source));
+    await waitFor(() =>
+      expect(onChange).toHaveBeenLastCalledWith({
+        ...source,
+        overview: "English description",
+      }),
+    );
+    expect(
+      api.request.mock.calls.filter((call) => call[2] !== undefined),
+    ).toHaveLength(1);
+  });
+  it("shows the original-language notice on failure and retries only on request", async () => {
+    api.request.mockImplementation(
+      async (_path: string, _token: string, body?: unknown) => {
+        if (body) throw new Error("translation offline");
+        return { source: plan, source_version: "hash-one", translations: [] };
+      },
+    );
+    render(view());
+    await waitFor(() => expect(api.request).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "VI", exact: true }));
+    await screen.findByRole("alert");
+    expect(
+      screen.getByText(/Nội dung lịch trình đang hiển thị bằng ngôn ngữ gốc/),
+    ).toBeTruthy();
+    expect(
+      api.request.mock.calls.filter((call) => call[2] !== undefined),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Thử dịch lại" }));
+    await waitFor(() =>
+      expect(
+        api.request.mock.calls.filter((call) => call[2] !== undefined),
+      ).toHaveLength(2),
+    );
+  });
+  it("does not show a late translation for the wrong selected language or submit duplicates", async () => {
+    let resolve!: (value: unknown) => void;
+    api.request.mockImplementation(
+      (_path: string, _token: string, body?: unknown) =>
+        body
+          ? new Promise((r) => {
+              resolve = r;
+            })
+          : Promise.resolve({
+              source: plan,
+              source_version: "hash-one",
+              translations: [],
+            }),
+    );
+    render(view());
+    await waitFor(() => expect(api.request).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "VI", exact: true }));
+    await waitFor(() => expect(resolve).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("button", { name: "EN", exact: true }));
+    await act(async () => resolve({ translation }));
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    fireEvent.click(screen.getByRole("button", { name: "VI", exact: true }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...plan,
+      overview: "Mô tả tiếng Việt",
+    });
+    expect(
+      api.request.mock.calls.filter((call) => call[2] !== undefined),
+    ).toHaveLength(1);
   });
 });

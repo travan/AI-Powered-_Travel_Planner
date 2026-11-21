@@ -20,6 +20,7 @@ import {
   journeyRequest,
 } from "../../lib/journey-api";
 import { mapUrl } from "@travel/types";
+import { PlanningSelections } from "./PlanningSelections";
 import { BookingLinks } from "../itinerary/BookingLinks";
 import type {
   AccommodationBooking,
@@ -93,6 +94,7 @@ export function JourneyWorkspacePanel({
   const [dayNumber, setDayNumber] = useState(1),
     [mealTime, setMealTime] = useState("12:00");
   const [skipped, setSkipped] = useState<string[]>([]);
+  const [selectionsDirty, setSelectionsDirty] = useState(false);
   async function load() {
     const [next, bookings, history] = await Promise.all([
       getJourneyPlan(tripId, token),
@@ -157,7 +159,8 @@ export function JourneyWorkspacePanel({
           return false;
         }
       } catch (e) {
-        if (!signal.aborted) setError(apiErrorText(e, "Mất kết nối; đang thử lại."));
+        if (!signal.aborted)
+          setError(apiErrorText(e, "Mất kết nối; đang thử lại."));
         if (e instanceof ApiRequestError) {
           if ([401, 403, 404].includes(e.status)) return false;
           if (e.retryAfterMs) return e.retryAfterMs;
@@ -266,6 +269,14 @@ export function JourneyWorkspacePanel({
   const startRevision = (revisionScope: string, targetId: string, extra = "") =>
     run(async () => {
       if (!plan) return;
+      if (selectionsDirty) {
+        setError(
+          locale === "vi"
+            ? "Hãy lưu hoặc hủy các ô chọn trước khi tạo phương án."
+            : "Save or discard your checkbox selections before creating a revision.",
+        );
+        return;
+      }
       const queued = await journeyRequest<{ job_id: string }>(
         `trips/${tripId}/itinerary-revisions`,
         token,
@@ -1039,87 +1050,30 @@ export function JourneyWorkspacePanel({
               </button>
             </fieldset>
           )}
-          <div className="space-y-3">
-            <h3 className="font-bold">
-              {" "}
-              <UiText
-                id="t3765b91e2c3e"
-                fallback="Việc cần làm trước chuyến đi"
-              />{" "}
-            </h3>
-            {checklist.length === 0 && (
-              <p className="text-sm">
-                {" "}
-                <UiText
-                  id="tc873da066e0d"
-                  fallback="Chưa có việc cần xử lý từ lịch trình."
-                />{" "}
-              </p>
-            )}
-            {checklist.map((item) => (
-              <label key={item.id} className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  disabled={!canEdit || busy}
-                  checked={item.status === "done"}
-                  onChange={(e) =>
-                    void run(async () => {
-                      setChecklist(
-                        await journeyRequest(
-                          `trips/${tripId}/planning-checklist/${item.id}`,
-                          token,
-                          { status: e.target.checked ? "done" : "todo" },
-                          "PATCH",
-                        ),
-                      );
-                    })
-                  }
-                />
-                {item.title}
-              </label>
-            ))}
-          </div>
-          <details>
-            <summary className="cursor-pointer font-bold">
-              {" "}
-              <UiText
-                id="te98989844b5f"
-                fallback="Các mục muốn giữ nguyên"
-              />{" "}
-            </summary>
-            <div className="mt-3 space-y-2">
-              {plan?.days.flatMap((d) =>
-                d.activities.map((a) => (
-                  <label key={a.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      disabled={!canEdit || busy}
-                      checked={(plan.locked_ids ?? []).includes(a.id!)}
-                      onChange={() =>
-                        void run(async () => {
-                          const ids = new Set(plan.locked_ids ?? []);
-                          if (ids.has(a.id!)) ids.delete(a.id!);
-                          else ids.add(a.id!);
-                          await journeyRequest(
-                            `trips/${tripId}/planning`,
-                            token,
-                            {
-                              expected_version: plan.version,
-                              locked_ids: [...ids],
-                            },
-                            "PATCH",
-                          );
-                          await changed();
-                        })
-                      }
-                    />{" "}
-                    <UiText id="t368c4575744a" fallback="Ngày" /> {d.day_number}
-                    : {a.name}
-                  </label>
-                )),
-              )}
-            </div>
-          </details>
+          {plan && (
+            <PlanningSelections
+              key={tripId}
+              tripId={tripId}
+              token={token}
+              plan={plan}
+              checklist={checklist}
+              canEdit={canEdit}
+              disabled={busy || !!jobId}
+              onDirtyChange={setSelectionsDirty}
+              onSaved={(next, updates) => {
+                setPlan(next);
+                setChecklist((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    status:
+                      updates.find((update) => update.id === item.id)?.status ??
+                      item.status,
+                  })),
+                );
+                onChanged(next);
+              }}
+            />
+          )}
         </>
       )}
       {(section === "revisions" || section === "dining") &&

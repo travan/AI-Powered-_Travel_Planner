@@ -80,6 +80,7 @@ import type {
   AccommodationDto,
   ResolveLocationDto,
   RevisionDto,
+  PlanningChecklistUpdateDto,
 } from "./journey.dto.js";
 
 type TranslationPayload = {
@@ -311,8 +312,15 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       const recovered = await this.generations.recoverReceived(userId, ids);
       const queue = workerRequestContext.getStore()?.queue;
       if (queue)
-        await Promise.all(recovered.map(jobId => queue.send({ jobId }).catch(() =>
-          logEvent("journey.dispatch_deferred", "warn", { jobId }))));
+        await Promise.all(
+          recovered.map((jobId) =>
+            queue
+              .send({ jobId })
+              .catch(() =>
+                logEvent("journey.dispatch_deferred", "warn", { jobId }),
+              ),
+          ),
+        );
       return recovered;
     } catch {
       logEvent("journey.saved_response_recovery_deferred", "warn", {});
@@ -324,7 +332,11 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     if (key !== undefined && !/^[a-zA-Z0-9_-]{1,128}$/.test(key))
       throw new BadRequestException("Invalid idempotency key");
     if ((await this.recoverStoredJobs(userId, [id])).length)
-      return { status: "queued" as const, job_id: id, stream_url: `/api/itinerary/jobs/${id}` };
+      return {
+        status: "queued" as const,
+        job_id: id,
+        stream_url: `/api/itinerary/jobs/${id}`,
+      };
     const result = await this.sql.query<{
       payload: { dto: GenerateItineraryDto };
       error_code: string;
@@ -460,24 +472,27 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         [userId, ids],
       )
     ).rows;
-    const failed = rows.filter(row => row.status === "failed").map(row => row.id);
+    const failed = rows
+      .filter((row) => row.status === "failed")
+      .map((row) => row.id);
     if (failed.length && (await this.recoverStoredJobs(userId, failed)).length)
       return this.listStatuses(userId, ids);
     return rows;
   }
 
   async getJob(userId: string, id: string) {
-    const load = () => this.sql.query<
-      PlanningJob & {
-        source_kind?: TranslationPayload["sourceKind"];
-        source_id?: string;
-        trip_id?: string;
-        pipeline_version?: number;
-        ai_usage?: AiTokenUsage[];
-        usage_recorded?: boolean;
-      }
-    >(
-      `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,
+    const load = () =>
+      this.sql.query<
+        PlanningJob & {
+          source_kind?: TranslationPayload["sourceKind"];
+          source_id?: string;
+          trip_id?: string;
+          pipeline_version?: number;
+          ai_usage?: AiTokenUsage[];
+          usage_recorded?: boolean;
+        }
+      >(
+        `select id::text,status,stage,attempts,itinerary_id::text,revision_id::text,translation_id::text,
         error_code,error_params,kind,pipeline_version,
         exists(select 1 from planning_ai_attempts a where a.job_id=itinerary_jobs.id) as usage_recorded,
         (select coalesce(jsonb_agg(call order by a.recorded_at), '[]'::jsonb) from planning_ai_attempts a cross join lateral jsonb_array_elements(a.calls) call where a.job_id=itinerary_jobs.id) as ai_usage,
@@ -485,8 +500,8 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         case when kind='translate' then payload->>'sourceId' end as source_id,
         case when kind='revision' then payload->>'tripId' end as trip_id
         from itinerary_jobs where id=$1 and user_id=$2`,
-      [id, userId],
-    );
+        [id, userId],
+      );
     const result = await load();
     if (!result.rows[0])
       throw new NotFoundException({
@@ -495,7 +510,10 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         message: "Không tìm thấy yêu cầu.",
       });
     let row = result.rows[0];
-    if (row.status === "failed" && (await this.recoverStoredJobs(userId, [id])).length)
+    if (
+      row.status === "failed" &&
+      (await this.recoverStoredJobs(userId, [id])).length
+    )
       row = (await load()).rows[0] ?? row;
     if (row.kind === "translate" && row.source_kind && row.source_id)
       await this.translationSource(userId, row.source_kind, row.source_id);
@@ -524,7 +542,9 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
               error_params: {
                 ...generationErrorParams(row.error_params?.reason),
                 ...validationErrorParams(row.error_params),
-                ...(row.error_code === "PLANNING_BUDGET_UNSATISFIABLE" ? budgetErrorParams(row.error_params) : {}),
+                ...(row.error_code === "PLANNING_BUDGET_UNSATISFIABLE"
+                  ? budgetErrorParams(row.error_params)
+                  : {}),
               },
             }
           : row.status === "failed" && row.error_code === "AI_DAY_INVALID"
@@ -737,7 +757,11 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       for (let i = 1; i <= 5; i++) {
         const code = failure.params[`issue_${i}_code`];
         if (typeof code === "string")
-          logEvent("journey.ai_validation_failed", "error", { jobId: job?.id, stage, code });
+          logEvent("journey.ai_validation_failed", "error", {
+            jobId: job?.id,
+            stage,
+            code,
+          });
       }
       logEvent("journey.job_failed", "error", {
         jobId: job?.id,
@@ -840,7 +864,7 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
       return this.translationError("SOURCE_NOT_FOUND", 404);
     return {
       id: result.value.id,
-      ...normalizeOllamaItinerary(result.value.result),
+      ...(await this.itineraries.presentStored(result.value.result)),
     };
   }
   private sourceVersion(
@@ -851,8 +875,24 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     // Forecast refreshes are independent of the saved text/revision being translated.
     const sourcePlan = { ...plan };
     delete sourcePlan.weather;
+    const translationPaths = Object.keys(
+      itineraryTextSegments({
+        ...sourcePlan,
+        days: sourcePlan.days ?? [],
+        hotels: sourcePlan.hotels ?? [],
+        restaurants: sourcePlan.restaurants ?? [],
+        suggestions: sourcePlan.suggestions ?? [],
+      }),
+    ).sort();
     return createHash("sha256")
-      .update(JSON.stringify({ sourceKind, sourceId, plan: sourcePlan }))
+      .update(
+        JSON.stringify(
+          // Changing the text allowlist invalidates cached translations automatically.
+          { translationPaths, sourceKind, sourceId, plan: sourcePlan },
+          // Cache expiry can change between requests without changing any itinerary text or price.
+          (key, value) => (key === "expires_at" ? undefined : value),
+        ),
+      )
       .digest("hex");
   }
   async listTranslations(
@@ -1216,6 +1256,19 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
         currency: entry.currency,
         maps_link: old?.maps_link ?? "",
         evidence: old?.evidence ?? { source: "user" },
+        price:
+          !old ||
+          entry.estimated_cost !== old.cost ||
+          entry.currency !== old.currency
+            ? {
+                amount: entry.estimated_cost,
+                currency: entry.currency,
+                scope: "group",
+                status: "user_confirmed",
+                basis: "user",
+                evidence: { source: "user" },
+              }
+            : old.price,
       });
       day.activities.sort((a, b) => a.time.localeCompare(b.time));
     }
@@ -1282,41 +1335,45 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
             "Chỗ ở đã chọn là điểm neo; kiểm tra tuyến và thời gian di chuyển khi đổi phòng.",
         },
       ];
-      // Reprice only when all overnight cities have a selected, fully-priced stay.
-      const overnightCities = [
-        ...new Set(
-          plan.days.slice(0, -1).map((d) => d.city.toLocaleLowerCase()),
+      // User-entered booking prices carry their own currency and price evidence.
+      // Reconciliation applies room/night multipliers after currency conversion.
+      plan.hotels = [
+        ...plan.hotels.filter(
+          (h) =>
+            !activeStays.some(
+              (s) => s.city.toLocaleLowerCase() === h.city?.toLocaleLowerCase(),
+            ),
         ),
+        ...activeStays.map((stay) => {
+          const amount =
+            stay.total_price != null && stay.rooms > 0 && stay.nights > 0
+              ? stay.total_price / (stay.rooms * stay.nights)
+              : stay.price_per_night;
+          return {
+            id: stay.id,
+            name: stay.name,
+            city: stay.city,
+            rooms: stay.rooms,
+            nights: stay.nights,
+            nightly_estimate: amount ?? undefined,
+            evidence: { source: "user" as const },
+            price: {
+              amount,
+              currency: stay.currency,
+              scope: "room_night" as const,
+              status: "user_confirmed" as const,
+              basis: "user" as const,
+              evidence: { source: "user" as const, source_id: stay.id },
+            },
+            price_per_night: "",
+            price_range: "",
+            booking_url: "",
+            airbnb_url: "",
+            address: "",
+            maps_link: "",
+          };
+        }),
       ];
-      const covered = overnightCities.every((city) =>
-        activeStays.some(
-          (s) =>
-            s.city.toLocaleLowerCase() === city &&
-            s.total_price !== null &&
-            s.nights > 0,
-        ),
-      );
-      if (covered && overnightCities.length && plan.budget_breakdown) {
-        const value = activeStays.reduce(
-          (sum, s) => sum + (s.total_price ?? 0),
-          0,
-        );
-        const delta = value - plan.budget_breakdown.accommodation;
-        plan.budget_breakdown = {
-          ...plan.budget_breakdown,
-          accommodation: value,
-          total: plan.total_cost + delta,
-          per_day: (plan.total_cost + delta) / plan.num_days,
-          per_person: (plan.total_cost + delta) / plan.num_travelers,
-        };
-        plan.total_cost += delta;
-      } else
-        plan.issues.push({
-          code: "STAY_COST_INCOMPLETE",
-          severity: "warning",
-          message:
-            "Giá phòng đã chọn chưa đủ cho toàn bộ các đêm; tổng ngân sách phòng vẫn là ước tính.",
-        });
     }
     return this.itineraries.refreshPresentation(plan);
   }
@@ -1325,18 +1382,49 @@ export class JourneyService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     expectedVersion: number,
     ids: string[],
+    checklistUpdates: PlanningChecklistUpdateDto[] = [],
   ) {
     await this.member(tripId, userId, true);
-    const result = await this.sql.query(
-      `update trips set planning_locked_ids=$3,planning_version=planning_version+1 where id=$1 and planning_version=$2 returning planning_version`,
-      [tripId, expectedVersion, ids],
-    );
-    if (!result.rows.length)
-      throw new ConflictException({
-        code: "PLAN_CHANGED",
-        params: {},
-        message: "Lịch trình đã thay đổi. Vui lòng tải lại.",
-      });
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query(
+        `update trips set planning_locked_ids=$3,planning_version=planning_version+1
+         where id=$1 and planning_version=$2 and exists(
+           select 1 from trip_members m where m.trip_id=trips.id and m.user_id=$4
+             and m.status='active' and m.role in ('host','co_host','contributor'))
+         returning planning_version`,
+        [tripId, expectedVersion, ids, userId],
+      );
+      if (!result.rows.length)
+        throw new ConflictException({
+          code: "PLAN_CHANGED",
+          params: {},
+          message: "Lịch trình đã thay đổi. Vui lòng tải lại.",
+        });
+      if (checklistUpdates.length) {
+        const saved = await client.query(
+          `update trip_checklist_items c set status=changes.status,updated_by_user_id=$2,updated_at=now()
+           from jsonb_to_recordset($3::jsonb) as changes(id uuid,status text,expected_status text)
+           where c.trip_id=$1 and c.id=changes.id and c.status=changes.expected_status
+           returning c.id`,
+          [tripId, userId, JSON.stringify(checklistUpdates)],
+        );
+        if (saved.rows.length !== checklistUpdates.length)
+          throw new ConflictException({
+            code: "CHECKLIST_CHANGED",
+            params: {},
+            message: "Danh sách việc đã thay đổi. Vui lòng tải lại.",
+          });
+      }
+      // Product notification triggers commit together with the complete selection.
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
     return this.getPlan(tripId, userId);
   }
   async enqueueRevision(tripId: string, userId: string, dto: RevisionDto) {

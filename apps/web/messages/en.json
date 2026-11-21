@@ -1069,6 +1069,7 @@
     "APPLY_PERMISSION_CHANGED": "Your permission to apply this revision changed.",
     "REVISION_UNAVAILABLE": "This preview was applied or is no longer valid.",
     "REVISION_INVALID": "The preview has timing or constraint errors. Regenerate it before applying.",
+    "CHECKLIST_CHANGED": "The checklist changed. Reload before saving your selections.",
     "CHECKLIST_NOT_FOUND": "Checklist task not found.",
     "CITY_UNRESOLVED": "Select a recognized destination city with its country or region.",
     "CITY_AMBIGUOUS": "Several cities match this destination. Select the city and country or region you mean.",
@@ -1100,6 +1101,8 @@
     "PLANNING_QUEUE_UNAVAILABLE": "The planning queue is unavailable. Please try again later."
   },
   "translations": {
+    "showing_original": "Translation is not ready. Itinerary content is currently shown in its original language.",
+    "retry": "Retry translation",
     "panel": "Itinerary translations",
     "source_language": "Source language",
     "unknown": "Unknown",

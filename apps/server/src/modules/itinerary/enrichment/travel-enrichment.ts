@@ -1,3 +1,5 @@
+import { hasPriceEvidence, currentCatalogPrice } from "@travel/types";
+import { catalogPrice } from "./catalog-prices.js";
 import type {
   BookingLink,
   BudgetItem,
@@ -66,16 +68,6 @@ export function bookingSearches(
     link("Traveloka", "https://www.traveloka.com/en-vn/hotel"),
   ];
 }
-
-const isAllowance = (price?: ScopedPrice) =>
-  !!price &&
-  price.basis === "planning_estimate" &&
-  typeof price.assumption === "string" &&
-  price.assumption.trim().length >= 8 &&
-  typeof price.amount === "number" &&
-  Number.isFinite(price.amount) &&
-  price.amount >= 0 &&
-  ["person", "group", "segment", "room_night"].includes(price.scope);
 
 export function enrichTravel(
   plan: Itinerary,
@@ -199,21 +191,19 @@ export function enrichTravel(
       );
       if (!input && a.price?.status === "user_confirmed") {
         a.cost = a.price.amount;
-      } else if (
-        (a.kind === "check_in" || a.kind === "check_out") &&
-        isAllowance(a.price)
-      ) {
+      } else if (a.price?.included_in && hasPriceEvidence(a.price)) {
         a.cost = a.price!.amount;
       } else if (catalogCost) {
         a.cost = catalogCost.estimated_cost;
         a.price = {
-          amount: catalogCost.estimated_cost,
-          currency: a.currency,
-          scope: a.kind === "transfer" ? (a.price?.scope ?? "group") : "person",
-          status: "estimated",
-          basis: "catalog",
+          ...catalogPrice(
+            catalogCost,
+            a.currency,
+            a.kind === "transfer" ? (a.price?.scope ?? "group") : "person",
+          ),
+          assumption: a.price?.assumption,
         };
-      } else if (isAllowance(a.price)) {
+      } else if (hasPriceEvidence(a.price)) {
         a.cost = a.price!.amount;
       } else if (input || a.price?.status !== "user_confirmed") {
         a.cost = null;
@@ -251,16 +241,29 @@ export function enrichTravel(
     setPlace(item, city);
   }
   for (const h of out.hotels) {
+    const city = resolveCity(cities, h.city_slug ?? h.city);
+    const cost = city?.activities.find(
+      (a) =>
+        norm(a.title) === norm(h.name) &&
+        currentCatalogPrice(a) &&
+        a.currency === out.currency &&
+        a.estimated_cost != null,
+    );
+    if (cost && h.price?.status !== "user_confirmed")
+      h.price = {
+        ...catalogPrice(cost, out.currency, "room_night"),
+        assumption: h.estimate_assumption,
+      };
     if (
-      h.evidence?.source !== "user" &&
-      !(
-        h.estimate_basis === "planning_estimate" &&
-        h.estimate_assumption?.trim() &&
-        Number.isFinite(h.nightly_estimate) &&
-        h.nightly_estimate! >= 0
-      )
+      h.price &&
+      hasPriceEvidence(h.price) &&
+      h.price.currency === out.currency
     ) {
+      h.nightly_estimate = h.price.amount ?? undefined;
+      h.estimate_basis = h.price.basis;
+    } else {
       h.nightly_estimate = undefined;
+      if (h.price) h.price.amount = null;
       h.price_per_night = "";
       h.price_range = "";
     }
@@ -270,13 +273,14 @@ export function enrichTravel(
   }
   for (const r of out.restaurants) {
     if (
-      r.evidence?.source !== "user" &&
-      !(
-        r.estimate_basis === "planning_estimate" &&
-        r.estimate_assumption?.trim()
-      )
+      r.price &&
+      hasPriceEvidence(r.price) &&
+      r.price.currency === out.currency
     ) {
+      r.estimated_per_person = r.price.amount ?? undefined;
+    } else {
       r.estimated_per_person = undefined;
+      if (r.price) r.price.amount = null;
       r.price_per_person = "";
       r.price_range = "";
     }
@@ -294,7 +298,7 @@ export function enrichTravel(
           leg.transport_kind === kind ||
           (kind === "flight" && leg.recommended_mode === "flight"),
       );
-      if (legs.length !== 1 || !isAllowance(legs[0]!.price)) continue;
+      if (legs.length !== 1 || !hasPriceEvidence(legs[0]!.price)) continue;
       const leg = legs[0]!,
         price = leg.price!;
       const roundTrip = /khứ hồi|round.?trip/iu.test(price.assumption ?? "");
@@ -319,7 +323,11 @@ export function enrichTravel(
         to: leg.from,
         price: {
           ...price,
-          amount: roundTrip ? 0 : price.amount,
+          amount: roundTrip ? 0 : null,
+          included_in: roundTrip ? (leg.id ?? "outbound") : undefined,
+          ...(roundTrip && price.original
+            ? { original: { ...price.original, amount: 0 } }
+            : {}),
           assumption: roundTrip
             ? input?.locale === "vi"
               ? "Chiều về đã tính trong khoản dự trù khứ hồi, không cộng thêm lần nữa."
@@ -334,7 +342,7 @@ export function enrichTravel(
   for (const leg of out.transport_summary) {
     if (
       leg.price &&
-      !isAllowance(leg.price) &&
+      !hasPriceEvidence(leg.price) &&
       (input || leg.price.status !== "user_confirmed")
     )
       leg.price.amount = null;
@@ -374,6 +382,7 @@ export function enrichTravel(
   // A model-generated reserve has no confirmed cost basis either.
   if (out.budget_breakdown) out.budget_breakdown.contingency = 0;
   for (const day of out.days) {
+    day.daily_budget_complete = day.activities.every((a) => a.cost != null);
     const priced = day.activities.filter((a) => a.cost != null);
     day.daily_cost_estimate = priced.reduce(
       (sum, a) =>
@@ -721,12 +730,11 @@ export function reconcileBudget(
       day.activities.map((activity) => [activity, day.day_number] as const),
     ),
   );
-  const groupAmount = (price?: ScopedPrice, fallback?: number | null) => {
-    const amount = price
-      ? price.currency === plan.currency
+  const groupAmount = (price?: ScopedPrice) => {
+    const amount =
+      price && hasPriceEvidence(price) && price.currency === plan.currency
         ? price.amount
-        : null
-      : fallback;
+        : null;
     return typeof amount === "number" && Number.isFinite(amount) && amount >= 0
       ? amount * (price?.scope === "person" ? plan.num_travelers : 1)
       : null;
@@ -748,8 +756,7 @@ export function reconcileBudget(
           category,
           day_number: activityDays.get(a),
           label: `${(input?.locale ?? plan.locale) === "vi" ? "Ngày" : "Day"} ${activityDays.get(a)}: ${a.name}`,
-          amount:
-            a.currency === plan.currency ? groupAmount(a.price, a.cost) : null,
+          amount: a.currency === plan.currency ? groupAmount(a.price) : null,
           status: a.price?.status ?? "estimated",
           basis: a.price?.basis,
           assumption: a.price?.assumption,
@@ -771,24 +778,37 @@ export function reconcileBudget(
   ];
   if (input?.planning?.stay_preferences.type !== "none")
     for (const city of overnight) {
-      const h = plan.hotels.find((h) => (h.city_slug ?? h.city) === city);
-      const nights =
-        h?.nights ??
-        plan.days.slice(0, -1).filter((d) => (d.city_slug ?? d.city) === city)
-          .length;
-      const rooms = h?.rooms ?? input?.planning?.stay_preferences.rooms ?? 1;
-      items.push({
-        id: `stay:${city}`,
-        category: "accommodation",
-        label: h ? `${h.name} · ${rooms} × ${nights}` : city,
-        basis: h?.estimate_basis,
-        assumption: h?.estimate_assumption,
-        amount:
-          h?.nightly_estimate != null && h.nightly_estimate >= 0
-            ? h.nightly_estimate * rooms * nights
-            : null,
-        status: "estimated",
-      });
+      const expectedNights = plan.days
+        .slice(0, -1)
+        .filter((d) => (d.city_slug ?? d.city) === city).length;
+      const hotels = plan.hotels.filter(
+        (h) => (h.city_slug ?? h.city) === city,
+      );
+      if (
+        hotels.length &&
+        hotels.reduce((sum, h) => sum + (h.nights ?? expectedNights), 0) <
+          expectedNights
+      )
+        missing.add(city);
+      for (const [index, h] of (hotels.length
+        ? hotels
+        : [undefined]
+      ).entries()) {
+        const nights = h?.nights ?? expectedNights;
+        const rooms = h?.rooms ?? input?.planning?.stay_preferences.rooms ?? 1;
+        items.push({
+          id: `stay:${city}${index ? `:${index}` : ""}`,
+          category: "accommodation",
+          label: h ? `${h.name} · ${rooms} × ${nights}` : city,
+          basis: h?.price?.basis ?? h?.estimate_basis,
+          assumption: h?.estimate_assumption,
+          amount:
+            h?.price?.currency === plan.currency && hasPriceEvidence(h.price)
+              ? h.price.amount! * rooms * nights
+              : null,
+          status: h?.price?.status ?? "estimated",
+        });
+      }
     }
   const fixed = input?.planning?.transport_preferences;
   const confirmedTotal =
@@ -836,20 +856,16 @@ export function reconcileBudget(
   // Transfers with no standalone estimate remain covered by those legs and are not double counted.
   for (const [dayIndex, day] of plan.days.entries())
     for (const [index, a] of day.activities.entries())
-      if (
-        a.kind === "transfer" &&
-        (isAllowance(a.price) || a.price?.basis === "catalog") &&
-        a.price!.amount! > 0
-      )
+      if (a.kind === "transfer" && !a.main_transport && !a.price?.included_in)
         items.push({
           id: a.id ?? `local:${dayIndex}:${index}`,
           category: "transport",
           transport_kind: "local",
           label: `Day ${day.day_number}: ${a.name}`,
           amount: groupAmount(a.price),
-          status: "estimated",
-          basis: a.price!.basis,
-          assumption: a.price!.assumption,
+          status: a.price?.status ?? "estimated",
+          basis: a.price?.basis,
+          assumption: a.price?.assumption,
         });
   if (confirmedTotal != null && !usedConfirmed)
     items.push({
@@ -875,8 +891,12 @@ export function reconcileBudget(
   if (!plan.transport_summary.length && confirmedTotal == null)
     missing.add("transport");
   const hasAllowances = items.some(
-    (item) => item.basis === "planning_estimate" && item.amount != null,
+    (item) =>
+      item.status !== "user_confirmed" &&
+      item.amount != null &&
+      item.amount > 0,
   );
+  b.contingency = 0;
   if (hasAllowances)
     b.contingency = Math.round(
       items.reduce((sum, item) => sum + (item.amount ?? 0), 0) * 0.1,
@@ -939,7 +959,7 @@ export function reconcileBudget(
       code: "BUDGET_INCOMPLETE",
       severity: "warning",
       message:
-        input?.locale === "vi"
+        (input?.locale ?? plan.locale) === "vi"
           ? "Tổng hiện tại chỉ gồm khoản đã có giá; còn chi phí chưa xác định."
           : "The current total includes priced items only; some costs are unknown.",
     });

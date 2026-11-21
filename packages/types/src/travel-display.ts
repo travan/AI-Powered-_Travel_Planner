@@ -1,6 +1,7 @@
 import { itineraryRoute } from "./journey-route";
 import { placeKey } from "./journey";
 import type { Itinerary, PlaceLocation } from "./itinerary";
+import { localizedPlanningText, localizedSystemName } from "./planning-text";
 export function mapUrl(place: PlaceLocation & { name: string }): string {
   const query = [place.name, place.address, place.city, place.country]
     .filter(Boolean)
@@ -18,6 +19,8 @@ export function mapUrl(place: PlaceLocation & { name: string }): string {
 }
 export function localizedPlan(plan: Itinerary, locale: string): Itinerary {
   const copy = structuredClone(plan);
+  const systemLabels = new Map<string, string>();
+  copy.overview = localizedPlanningText(copy.overview, locale) ?? copy.overview;
   const aliases = new Map<string, Record<string, string>>();
   for (const [slug, city] of Object.entries(copy.city_catalog ?? {}))
     for (const label of [slug, ...Object.values(city.name)])
@@ -33,12 +36,99 @@ export function localizedPlan(plan: Itinerary, locale: string): Itinerary {
   };
   for (const day of copy.days ?? []) {
     day.city = day.city_names?.[locale] ?? name(day.city_slug, day.city);
-    for (const item of day.activities)
+    if (/^(?:Ngày \d+ tại |Day \d+ in )/.test(day.title))
+      day.title =
+        locale === "vi"
+          ? `Ngày ${day.day_number} tại ${day.city}`
+          : `Day ${day.day_number} in ${day.city}`;
+    for (const item of day.activities) {
+      const oldName = item.name;
+      const generatedDescription =
+        item.description ===
+          `Khung giờ dự kiến cho ${oldName}. Hãy xác nhận điều kiện, thời gian và giá trước khi đi.` ||
+        item.description ===
+          `Provisional time for ${oldName}. Confirm conditions, timing and prices before visiting.`;
+      item.name = localizedSystemName(item, locale);
+      if (oldName !== item.name) systemLabels.set(oldName, item.name);
+      if (generatedDescription)
+        item.description =
+          locale === "vi"
+            ? `Khung giờ dự kiến cho ${item.name}. Hãy xác nhận điều kiện, thời gian và giá trước khi đi.`
+            : `Provisional time for ${item.name}. Confirm conditions, timing and prices before visiting.`;
       item.city = name(item.city_slug ?? day.city_slug, item.city ?? day.city);
+      if (item.price)
+        item.price.assumption = localizedPlanningText(
+          item.price.assumption,
+          locale,
+        );
+      if (
+        item.duration === `${item.duration_minutes} min` ||
+        item.duration === `${item.duration_minutes} phút`
+      )
+        item.duration = `${item.duration_minutes} ${locale === "vi" ? "phút" : "min"}`;
+    }
   }
-  for (const item of [...(copy.hotels ?? []), ...(copy.restaurants ?? [])])
+  for (const item of [...(copy.hotels ?? []), ...(copy.restaurants ?? [])]) {
     item.city = name(item.city_slug, item.city);
+    item.estimate_assumption = localizedPlanningText(
+      item.estimate_assumption,
+      locale,
+    );
+    item.note = localizedPlanningText(item.note, locale);
+    if (item.evidence?.source !== "user")
+      item.name = localizedPlanningText(item.name, locale) ?? item.name;
+    if (item.price)
+      item.price.assumption = localizedPlanningText(
+        item.price.assumption,
+        locale,
+      );
+  }
+  for (const item of copy.budget_breakdown?.items ?? []) {
+    item.assumption = localizedPlanningText(item.assumption, locale);
+    item.label = item.label.replace(
+      /^(?:Ngày|Day) (\d+): /,
+      `${locale === "vi" ? "Ngày" : "Day"} $1: `,
+    );
+    if (["10% contingency", "Dự phòng 10%"].includes(item.label))
+      item.label = locale === "vi" ? "Dự phòng 10%" : "10% contingency";
+  }
+  const budgetLabel = (label: string) => {
+    for (const [original, translated] of systemLabels) {
+      if (label === original) label = translated;
+      else if (label.endsWith(`: ${original}`))
+        label = `${label.slice(0, -original.length)}${translated}`;
+    }
+    const vi = {
+      accommodation: "Lưu trú",
+      food: "Ăn uống",
+      activities: "Hoạt động",
+      transport: "Di chuyển",
+      contingency: "Dự phòng",
+      flight: "Vé máy bay",
+    };
+    const key = label as keyof typeof vi;
+    return (
+      (locale === "vi"
+        ? vi[key]
+        : Object.entries(vi).find(([, value]) => value === label)?.[0]) ??
+      label.replace(
+        /^(?:Ngày|Day) (\d+): /,
+        `${locale === "vi" ? "Ngày" : "Day"} $1: `,
+      )
+    );
+  };
+  if (copy.budget_breakdown) {
+    for (const item of copy.budget_breakdown.items ?? [])
+      item.label = budgetLabel(item.label);
+    copy.budget_breakdown.missing_items =
+      copy.budget_breakdown.missing_items?.map(budgetLabel);
+  }
   for (const leg of copy.transport_summary ?? []) {
+    if (leg.price)
+      leg.price.assumption = localizedPlanningText(
+        leg.price.assumption,
+        locale,
+      );
     const segment = leg.segment?.split(/\s*(?:→|->)\s*/);
     leg.from = name(leg.from_city_slug, leg.from);
     leg.to = name(leg.to_city_slug, leg.to);

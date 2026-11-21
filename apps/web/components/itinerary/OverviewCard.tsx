@@ -56,23 +56,29 @@ export function OverviewCard({ itinerary, showBudgetSummary = true }: Props) {
             />
           </p>
         </div>
-        {showBudgetSummary && itinerary.total_cost > 0 && (
-          <Badge variant="info" className="text-sm px-3 py-1">
-            {itinerary.budget_breakdown?.complete === false
-              ? formattingLocale === "vi"
-                ? "Tạm tính · "
-                : "Subtotal · "
-              : itinerary.budget_breakdown?.items?.some(
-                    (item) => item.basis === "planning_estimate",
-                  )
+        {showBudgetSummary &&
+          (itinerary.total_cost > 0 ||
+            itinerary.budget_breakdown?.complete === false) && (
+            <Badge variant="info" className="text-sm px-3 py-1">
+              {itinerary.budget_breakdown?.complete === false
                 ? formattingLocale === "vi"
-                  ? "Dự toán · "
-                  : "Estimate · "
-                : ""}
-            {itinerary.currency}{" "}
-            {itinerary.total_cost.toLocaleString(formattingLocale)}
-          </Badge>
-        )}
+                  ? "Tạm tính các khoản đã có giá · "
+                  : "Subtotal of priced items · "
+                : itinerary.budget_breakdown?.items?.some(
+                      (item) => item.basis === "planning_estimate",
+                    )
+                  ? formattingLocale === "vi"
+                    ? "Dự toán · "
+                    : "Estimate · "
+                  : ""}
+              {itinerary.total_cost === 0 &&
+              itinerary.budget_breakdown?.complete === false
+                ? formattingLocale === "vi"
+                  ? "Chưa dự tính được"
+                  : "Not estimated yet"
+                : `${itinerary.currency} ${itinerary.total_cost.toLocaleString(formattingLocale)}`}
+            </Badge>
+          )}
       </div>
 
       <p className="text-gray-700 leading-relaxed">{itinerary.overview}</p>

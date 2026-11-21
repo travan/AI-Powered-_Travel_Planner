@@ -2,6 +2,8 @@
 import { UiText } from "../i18n/UiText";
 
 import React from "react";
+import { useAppLanguage } from "../i18n/LanguageProvider";
+import { PriceDetails } from "./PriceDetails";
 import { BookingLinks } from "./BookingLinks";
 import type { TransportSegment } from "@travel/types";
 
@@ -26,6 +28,7 @@ interface Props {
 }
 
 export function TransportSection({ segments }: Props) {
+  const { locale } = useAppLanguage();
   const routes = (Array.isArray(segments) ? segments : []).filter(
     (segment) =>
       segment &&
@@ -71,6 +74,17 @@ export function TransportSection({ segments }: Props) {
               </div>
             </div>
 
+            <p className="text-sm font-semibold">
+              {seg.price?.amount == null
+                ? locale === "vi"
+                  ? "Chưa dự tính được"
+                  : "Not estimated yet"
+                : `${seg.price.amount.toLocaleString(locale)} ${seg.price.currency}${seg.price.scope === "person" ? (locale === "vi" ? "/người" : "/person") : locale === "vi" ? "/cả nhóm" : "/group"}`}
+            </p>
+            {seg.price?.assumption && (
+              <p className="text-xs">{seg.price.assumption}</p>
+            )}
+            <PriceDetails price={seg.price} />
             <BookingLinks
               links={seg.booking_links}
               context={`${seg.from} → ${seg.to} · ${seg.booking_context?.start_date ?? ""} — ${seg.booking_context?.end_date ?? ""} · ${seg.booking_context?.travelers ?? ""}`}
