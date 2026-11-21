@@ -204,14 +204,14 @@ describe("catalog-first generation v2", () => {
     snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
     const plan = completePlan(snapshot);
     expect(plan.days).toHaveLength(10);
-    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(plan.budget_breakdown.complete).toBe(false);
     expect(
       plan.days[5]!.activities.find(
         (activity) => activity.meal_slot === "lunch",
       ),
     ).toMatchObject({
       during_transport: true,
-      price: { amount: 100000, scope: "person" },
+      price: { amount: null, scope: "person" },
     });
     expect(
       plan.days[9]!.activities.find(
@@ -219,7 +219,7 @@ describe("catalog-first generation v2", () => {
       ),
     ).toMatchObject({
       during_transport: true,
-      price: { amount: 200000, scope: "person" },
+      price: { amount: null, scope: "person" },
     });
     expect(
       plan.issues?.filter((issue) =>
@@ -233,8 +233,8 @@ describe("catalog-first generation v2", () => {
     snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
     const plan = completePlan(snapshot);
     expect(plan.days).toHaveLength(10);
-    expect(plan.total_cost).toBe(57893000);
-    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(plan.total_cost).toBe(0);
+    expect(plan.budget_breakdown.complete).toBe(false);
     expect(
       plan.issues?.some((i) =>
         ["MEAL_MISSING", "EVENING_MISSING", "SCHEDULE_CONFLICT"].includes(
@@ -325,7 +325,7 @@ describe("catalog-first generation v2", () => {
     dto.start_date = "2027-02-30";
     expect(() => generationInput(dto)).toThrow();
   });
-  it("rejects the production model's zero international fares rather than inventing affordability", () => {
+  it("keeps international travel proposals but excludes model claims of free fares", () => {
     const { input } = fixture();
     const snapshot = prepareSnapshot(
       input,
@@ -344,9 +344,12 @@ describe("catalog-first generation v2", () => {
           duration_minutes: 240,
         })),
       }),
-    ).toThrow("missing mandatory cost");
+    ).not.toThrow();
+    expect(
+      snapshot.legs.every((leg) => snapshot.items[leg.key]?.amount === null),
+    ).toBe(true);
   });
-  it("retains the recorded real-model estimate even when mandatory travel/stay exceeds budget", () => {
+  it("retains recorded proposals while excluding their unverified prices", () => {
     const { input } = fixture();
     const snapshot = prepareSnapshot(
       input,
@@ -356,8 +359,8 @@ describe("catalog-first generation v2", () => {
       })),
     );
     applySupplement(snapshot, realSupplement);
-    expect(snapshot.items["country-my/stay"]!.amount).toBe(1500000);
-    expect(snapshot.items["leg/1"]!.amount).toBe(2000000);
+    expect(snapshot.items["country-my/stay"]!.amount).toBeNull();
+    expect(snapshot.items["leg/1"]!.amount).toBeNull();
   });
   it("assembles the ten-day FE payload entirely from priced DB data", () => {
     const { input, destinations } = fixture();
@@ -646,9 +649,12 @@ describe("catalog-first generation v2", () => {
       } else {
         const generated = await result;
         expect(generated.result.days).toHaveLength(10);
-        expect(generated.result.issues).toContainEqual(expect.objectContaining({
-          code: "PLANNING_SUPPLEMENT_UNAVAILABLE", severity: "warning",
-        }));
+        expect(generated.result.issues).toContainEqual(
+          expect.objectContaining({
+            code: "PLANNING_SUPPLEMENT_UNAVAILABLE",
+            severity: "warning",
+          }),
+        );
         expect(request).not.toHaveBeenCalled();
       }
       expect(binding.run).toHaveBeenCalledOnce();
@@ -788,7 +794,7 @@ describe("catalog-first generation v2", () => {
     expect(snapshot.needs.filter((n) => n.kind === "stay")).toHaveLength(2);
   });
 
-  it("rejects zero-priced mandatory AI costs and exposes AI pricing on retained venues", () => {
+  it("excludes AI prices while preserving catalog venue identity", () => {
     const { input, destinations } = fixture();
     destinations[0]!.city.activities = [];
     const snapshot = prepareSnapshot(input, destinations);
@@ -800,11 +806,11 @@ describe("catalog-first generation v2", () => {
     }));
     const mandatory = rows.find((r) => r.key.includes("stay"))!;
     mandatory.amount = 0;
-    expect(() => applySupplement(snapshot, { items: rows })).toThrow(
-      "mandatory cost",
-    );
+    expect(() => applySupplement(snapshot, { items: rows })).not.toThrow();
+    expect(snapshot.items[mandatory.key]!.amount).toBeNull();
     mandatory.amount = 300000;
     applySupplement(snapshot, { items: rows });
-    expect(snapshot.items[mandatory.key]!.source).toBe("ai_suggestion");
+    expect(snapshot.items[mandatory.key]!.source).toBe("catalog");
+    expect(snapshot.items[mandatory.key]!.amount).toBeNull();
   });
 });

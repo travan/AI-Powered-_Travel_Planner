@@ -3,6 +3,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Optional,
 } from "@nestjs/common";
 import {
   createSupplementProvider,
@@ -44,6 +45,8 @@ import {
 } from "./planning-data.js";
 import { assembleDay, completePlan } from "./planning-assembler.js";
 import { supplementBudget } from "./planning-budget.js";
+import { CurrencyService } from "../enrichment/currency.service.js";
+import { convertCatalogPrices } from "../enrichment/catalog-prices.js";
 import { storedSupplementResponse } from "./saved-generation.js";
 import type { GenerateItineraryDto } from "../dto/itinerary.dto.js";
 const {
@@ -51,6 +54,7 @@ const {
   flexibleMonthWindows,
   plannerToday,
   validTripDate,
+  hasPriceEvidence,
 } = (types as unknown as { default?: typeof types }).default ?? types;
 
 const supplementSchema = {
@@ -88,7 +92,7 @@ const supplementSchema = {
             description:
               "Specific venue or named area. Unverified stays must name a lodging district, never a generic hotel in a city.",
           },
-          amount: { type: "number", minimum: 0 },
+          amount: { type: ["number", "null"], minimum: 0 },
           duration_minutes: { type: "integer", minimum: 15, maximum: 1440 },
           alternatives: {
             type: "array",
@@ -99,7 +103,7 @@ const supplementSchema = {
               required: ["name", "amount", "duration_minutes"],
               properties: {
                 name: { type: "string" },
-                amount: { type: "number", minimum: 0 },
+                amount: { type: ["number", "null"], minimum: 0 },
                 duration_minutes: {
                   type: "integer",
                   minimum: 15,
@@ -122,6 +126,9 @@ export class CatalogFirstPlanner {
     @Inject(ITINERARY_REPOSITORY)
     private readonly repository: ItineraryRepository,
     @Inject(SQL_CLIENT) private readonly sql: SqlClient,
+    @Optional()
+    @Inject(CurrencyService)
+    private readonly currency?: CurrencyService,
   ) {}
 
   async generate(options: {
@@ -132,7 +139,7 @@ export class CatalogFirstPlanner {
     onUsage?: (entry: AiTokenUsage) => void;
   }) {
     const { job } = options;
-    const cacheKey = `v2:${generationKey(options.dto)}`;
+    const cacheKey = `v3:price-evidence:${generationKey(options.dto)}`;
     let snapshot = await this.store.checkpoint<Partial<Snapshot>>(
       job.generation_id,
     );
@@ -207,7 +214,20 @@ export class CatalogFirstPlanner {
       );
       snapshot = prepareSnapshot(
         input,
-        destinations,
+        await Promise.all(
+          destinations.map(async (destination) => ({
+            ...destination,
+            city: destination.city
+              ? (
+                  await convertCatalogPrices(
+                    [destination.city],
+                    input.currency,
+                    this.currency,
+                  )
+                )[0]
+              : undefined,
+          })),
+        ),
         preferred.rows.flatMap((r) => r.place_ids),
       );
       snapshot.legacy_destination_only = !options.dto.planning;
@@ -249,7 +269,7 @@ export class CatalogFirstPlanner {
                     properties: {
                       ...itemSchema.properties,
                       key: { type: "string", enum: positiveKeys },
-                      amount: { type: "number", exclusiveMinimum: 0 },
+                      amount: { type: ["number", "null"], minimum: 0 },
                     },
                   },
                 ]
@@ -261,7 +281,7 @@ export class CatalogFirstPlanner {
                     properties: {
                       ...itemSchema.properties,
                       key: { type: "string", enum: zeroAllowedKeys },
-                      amount: { type: "number", minimum: 0 },
+                      amount: { type: ["number", "null"], minimum: 0 },
                     },
                   },
                 ]
@@ -279,11 +299,10 @@ export class CatalogFirstPlanner {
         ];
       }
       const instruction =
-        "For each leg item provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_amount unchanged. " +
-        "For a stay without fixed_name, name a real, specific lodging neighborhood/district within the selected city; never return 'Hotel in <city>' or claim an unverified property is booked. The amount is the room/night allowance in that area, not a property quote. For meals/cafes use a specific venue or named dining area. All sightseeing visits must be distinct real venues/areas across days, not repeated names or generic sightseeing. " +
-        "Return cities only for destinations whose city is missing; otherwise cities=[]. cities[].country must be the exact two-letter ISO code from the destination context, never the country name. " +
-        `Supply ONLY the missing planning data in JSON. Do not create a daily timeline. Use official venue names. Prices are realistic planning allowances in ${state.input.currency}, NOT verified quotes. Meals/visits/cafe/legs are per person; local travel is group/day; stay is room/night. Zero is allowed ONLY for a genuinely proposed free stop or an already included charge. Each key must occur exactly once; never change fixed_name. City proposals must belong to the named country and its ISO code. independent_only is a preference: suggest independent venues, but do not claim they are verified. Allergies and explicit required restrictions remain mandatory. Do not invent coordinates, addresses, providers or opening hours. Total group budget includes ALL people, main travel, rooms x nights, meals, activities, local travel and 10% contingency. Prioritize total_group_budget when selecting options. Use budget_allocation.targets to select affordable real options BEFORE estimating prices. Multiply each amount by group_units and keep the sum within remaining_before_contingency. Category targets can be redistributed to prioritize the combined budget. If no realistic compatible option fits, still return the real estimated costs for the best available plan; the server will show a budget warning rather than fail the request. Prefer free sightseeing, inexpensive dining areas, budget lodging districts and economical travel compatible with transport preferences. If a primary option exceeds its target and has no fixed_name or fixed_amount, supply up to two cheaper real alternatives with their own names, amounts and travel durations; the server will select the cheapest compatible option. Use alternatives=[] for already affordable or fixed items. When no total_group_budget is supplied, follow traveler preferences and use alternatives=[]. Do not lower the price of the same option just to fit a target, invent free mandatory travel, change confirmed costs or violate required preferences.\n` +
-        "";
+        `Supply ONLY missing planning data in JSON, not a daily timeline. Use official venue names. All descriptive text must be in ${state.input.locale === "vi" ? "Vietnamese" : "English"}. ` +
+        "Every item must have amount=null unless fixed_amount is supplied in the server context; copy fixed_amount unchanged. Model knowledge, estimated market prices and invented URLs are not price evidence. Never invent a free stop or change a currency label to simulate conversion. The server alone accepts catalog/user prices and converts currencies. Missing prices must not prevent proposing venues or travel durations. " +
+        "For every leg provide duration_minutes (15..1440), a conservative main travel duration allowance. Keep fixed_name unchanged. For an unbooked stay propose a specific real lodging neighborhood/district, never claim a property is booked. For meals/cafes propose a specific venue or named dining area. Sightseeing stops must be distinct real venues across days. " +
+        "Return cities only for unresolved destinations, otherwise cities=[]. Use the exact two-letter ISO country code from destination context. Each missing key must occur exactly once. Do not invent coordinates, addresses, providers or opening hours. Follow allergies and required restrictions without claiming verification. Budget allocation is guidance for choosing options, never evidence of their prices; never lower a price to fit the budget. Use alternatives=[].\n";
       const context = {
         currency: state.input.currency,
         total_group_budget: state.input.budget,
@@ -605,6 +624,13 @@ export class CatalogFirstPlanner {
   }
   private reusable(plan: Itinerary, input: ItineraryInput) {
     return (
+      [
+        ...plan.days.flatMap((day) => day.activities),
+        ...plan.hotels,
+        ...plan.transport_summary,
+      ].every(
+        (item) => item.price?.amount == null || hasPriceEvidence(item.price),
+      ) &&
       plan.days.length === (input.num_days ?? 1) &&
       !plan.issues?.some(
         (i) => i.severity === "error" || i.code === "BUDGET_INCOMPLETE",

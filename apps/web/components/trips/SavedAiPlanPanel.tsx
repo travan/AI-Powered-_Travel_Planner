@@ -194,7 +194,7 @@ export function SavedAiPlanPanel({
       />
       <StayDiningRecommendations itinerary={displayPlan} />
       {!hasEditedSchedule && plan.budget_breakdown && (
-        <BudgetBreakdown breakdown={plan.budget_breakdown} />
+        <BudgetBreakdown breakdown={displayPlan.budget_breakdown} />
       )}
     </section>
   );

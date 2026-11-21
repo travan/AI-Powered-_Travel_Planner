@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDefined,
@@ -218,12 +219,25 @@ export class RevisionDto {
 export class ApplyRevisionDto {
   @IsInt() @Min(1) expected_version!: number;
 }
+export class PlanningChecklistUpdateDto {
+  @IsUUID() id!: string;
+  @IsIn(["todo", "done"]) status!: string;
+  @IsIn(["todo", "in_progress", "done", "blocked"]) expected_status!: string;
+}
 export class LockPlanDto extends ApplyRevisionDto {
   @IsArray()
   @ArrayMaxSize(500)
   @IsString({ each: true })
   @MaxLength(160, { each: true })
   locked_ids!: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ArrayUnique((item: PlanningChecklistUpdateDto | null) => item?.id)
+  @ValidateNested({ each: true })
+  @Type(() => PlanningChecklistUpdateDto)
+  checklist_updates?: PlanningChecklistUpdateDto[];
 }
 
 export class ChecklistStatusDto {

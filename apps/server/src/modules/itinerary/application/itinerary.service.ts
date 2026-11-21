@@ -10,6 +10,11 @@ import {
 } from "../enrichment/flexible-dates.js";
 import { PlannerLearningService } from "../learning/learning.service.js";
 import { WeatherService } from "../enrichment/weather.service.js";
+import { CurrencyService } from "../enrichment/currency.service.js";
+import {
+  convertCatalogPrices,
+  convertPlanPrices,
+} from "../enrichment/catalog-prices.js";
 import {
   enrichTravel,
   itineraryQuality,
@@ -24,7 +29,13 @@ import {
 } from "@travel/ai";
 import { createHash, randomBytes } from "node:crypto";
 import { publicItinerary } from "./public-itinerary.js";
-import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  HttpException,
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+} from "@nestjs/common";
 import {
   notFound,
   ok,
@@ -111,6 +122,9 @@ export class ItineraryService {
     @Inject(WeatherService) private readonly weather?: WeatherService,
     @Inject(PlannerLearningService)
     private readonly learning?: PlannerLearningService,
+    @Optional()
+    @Inject(CurrencyService)
+    private readonly currency?: CurrencyService,
   ) {}
 
   async getVisible(input: {
@@ -671,7 +685,27 @@ export class ItineraryService {
       detail.trip_style = request.trip_style;
     }
     detail.locale = request.locale === "vi" ? "vi" : "en";
-    detail = enrichTravel(detail, routeCities, request);
+    // Full-plan provider responses cannot assert server-only price provenance or user confirmation.
+    for (const item of [
+      ...detail.days.flatMap((day) => day.activities),
+      ...detail.transport_summary,
+      ...detail.hotels,
+      ...detail.restaurants,
+    ]) {
+      if (item.price) {
+        delete item.price.evidence;
+        delete item.price.original;
+        delete item.price.conversion;
+        item.price.status = "estimated";
+      }
+      if ("evidence" in item && item.evidence?.source === "user")
+        item.evidence = { source: "ai_suggestion" };
+    }
+    detail = enrichTravel(
+      detail,
+      await convertCatalogPrices(routeCities, request.currency, this.currency),
+      request,
+    );
     detail.issues = [...(detail.issues ?? []), ...qualityFor(detail)];
     detail = reconcileBudget(detail, request);
     if (
@@ -792,7 +826,10 @@ export class ItineraryService {
         },
       };
     const display = reconcileBudget(
-      enrichTravel({ ...plan, planning }, cities),
+      enrichTravel(
+        await convertPlanPrices({ ...plan, planning }, this.currency),
+        await convertCatalogPrices(cities, plan.currency, this.currency),
+      ),
       {
         planning,
         locale: plan.locale ?? "en",
@@ -863,7 +900,7 @@ function generationCacheKey(
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: 11,
+        version: 12,
         planning: request.planning ?? null,
         catalog_version: process.env["CITY_CATALOG_VERSION"] ?? "1",
         catalogFingerprint,

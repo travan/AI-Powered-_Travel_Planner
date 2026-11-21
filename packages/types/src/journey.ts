@@ -1,4 +1,5 @@
 import type { Itinerary, ItineraryInput, Activity } from "./itinerary";
+import type { CurrencyQuote } from "./api";
 
 export function placeKey(label: string): string {
   return label
@@ -80,6 +81,16 @@ export type TimelineKind =
   | "check_out"
   | "rest";
 export interface ScopedPrice {
+  /** Evidence for the price itself, independently of the venue's identity. */
+  evidence?: {
+    source: "catalog" | "user";
+    source_id?: string;
+    verified_at?: string;
+  };
+  original?: { amount: number; currency: string };
+  conversion?: CurrencyQuote;
+  /** This charge is counted elsewhere; zero is valid only if that charge is priced. */
+  included_in?: string;
   basis?: "planning_estimate" | "catalog" | "user";
   assumption?: string;
   amount: number | null;

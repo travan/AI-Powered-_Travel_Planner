@@ -20,7 +20,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("budget-first selection", () => {
   it.each([true, false])(
-    "persists a ten-day plan with affordable alternatives when available, warnings otherwise (alternatives=%s)",
+    "persists proposals but excludes ungrounded AI prices (alternatives=%s)",
     async (affordable) => {
       vi.stubEnv("AI_PROVIDER", "cloudflare");
       const { dto, cities } = catalogScenario();
@@ -104,22 +104,14 @@ describe("budget-first selection", () => {
           }),
       );
       expect(generated.result.days).toHaveLength(10);
-      expect(generated.result.budget_breakdown.complete).toBe(true);
-      if (affordable) {
-        expect(generated.result.total_cost).toBeLessThanOrEqual(dto.budget!);
-      } else {
-        expect(generated.result.total_cost).toBeGreaterThan(dto.budget!);
-        expect(generated.result.issues).toContainEqual(
-          expect.objectContaining({
-            code: "OVER_BUDGET",
-            severity: "warning",
-            params: {
-              amount: generated.result.total_cost - dto.budget!,
-              currency: dto.currency,
-            },
-          }),
-        );
-      }
+      expect(generated.result.budget_breakdown.complete).toBe(false);
+      expect(generated.result.total_cost).toBe(0);
+      expect(generated.result.issues).toContainEqual(
+        expect.objectContaining({ code: "BUDGET_INCOMPLETE" }),
+      );
+      expect(
+        generated.result.issues?.some((i) => i.code === "OVER_BUDGET"),
+      ).toBe(false);
       expect(binding.run).toHaveBeenCalledOnce();
       expect(repo.createComplete).toHaveBeenCalledOnce();
     },
@@ -148,7 +140,7 @@ describe("budget-first selection", () => {
     expect(budgetUnits(snapshot, stay)).toBe(5 * 2);
   });
 
-  it("selects cheaper travel and lodging proposals before rejecting the group budget", () => {
+  it("does not rank options or count their prices using ungrounded AI amounts", () => {
     const { input, destinations } = catalogScenario();
     const snapshot = prepareSnapshot(input, destinations);
     const leg = snapshot.legs[0]!;
@@ -182,19 +174,19 @@ describe("budget-first selection", () => {
       ],
     });
     expect(snapshot.items[leg.key]).toMatchObject({
-      name: "Economy flight",
-      amount: 500000,
-      duration_minutes: 90,
+      name: "Premium flight",
+      amount: null,
+      duration_minutes: 60,
     });
     expect(snapshot.items[stay.key]).toMatchObject({
-      name: "Chinatown budget lodging area",
-      amount: 300000,
+      name: "Luxury district",
+      amount: null,
     });
     scheduleTravel(snapshot);
     snapshot.days = snapshot.schedule.map((day) => assembleDay(snapshot, day));
     const plan = completePlan(snapshot);
     expect(plan.total_cost).toBeLessThanOrEqual(input.budget!);
-    expect(plan.budget_breakdown.complete).toBe(true);
+    expect(plan.budget_breakdown.complete).toBe(false);
   });
 
   it("keeps confirmed prices and venue selections even when alternatives are cheaper", () => {
@@ -220,7 +212,7 @@ describe("budget-first selection", () => {
       ],
     });
     expect(snapshot.items[leg.key]!.amount).toBe(500000);
-    expect(snapshot.items[leg.key]!.source).toBe("ai_suggestion");
+    expect(snapshot.items[leg.key]!.source).toBe("catalog");
   });
 
   it("never accepts a free unconfirmed fare as an alternative", () => {
@@ -246,7 +238,7 @@ describe("budget-first selection", () => {
     ).not.toThrow();
     expect(snapshot.items[leg.key]).toMatchObject({
       name: "Flight",
-      amount: 500000,
+      amount: null,
     });
   });
 

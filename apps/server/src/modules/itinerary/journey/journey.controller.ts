@@ -197,6 +197,7 @@ export class JourneyController {
       u.sub,
       dto.expected_version,
       dto.locked_ids,
+      dto.checklist_updates ?? [],
     );
   }
   @Post("trips/:tripId/itinerary-revisions")

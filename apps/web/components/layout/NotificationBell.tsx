@@ -147,7 +147,11 @@ export function NotificationBell({ className }: { className?: string }) {
 
   const groups = new Map<string, Notification[]>();
   for (const item of page?.items ?? []) {
-    const key = `${item.category}:${item.category === "checklist" ? (item.trip_id ?? item.subject_id) : item.subject_id}`;
+    const key = item.trip_id
+      ? `trip:${item.trip_id}`
+      : ["generate", "translate", "revision"].includes(item.category)
+        ? `${item.category}:${item.subject_id}`
+        : `category:${item.category}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
 
@@ -216,6 +220,9 @@ export function NotificationBell({ className }: { className?: string }) {
           )}
           {[...groups].map(([key, items]) => {
             const latest = items[0]!;
+            const jobGroup =
+              !latest.trip_id &&
+              ["generate", "translate", "revision"].includes(latest.category);
             return (
               <details
                 key={key}
@@ -228,23 +235,26 @@ export function NotificationBell({ className }: { className?: string }) {
                       : "cursor-pointer"
                   }
                 >
-                  {categories[latest.category]?.[language] ?? label} ·{" "}
-                  {(latest.category === "checklist"
-                    ? latest.trip_title
-                    : latest.subject_label) && (
-                    <>
-                      {latest.category === "checklist"
-                        ? latest.trip_title
-                        : latest.subject_label}{" "}
-                      ·{" "}
-                    </>
+                  {latest.trip_id
+                    ? categories.trip![language]
+                    : (categories[latest.category]?.[language] ?? label)}{" "}
+                  ·{" "}
+                  {latest.trip_id &&
+                    items.find((item) => item.trip_title)?.trip_title && (
+                      <>
+                        {items.find((item) => item.trip_title)?.trip_title}{" "}
+                        ·{" "}
+                      </>
+                    )}
+                  {jobGroup && latest.subject_label && (
+                    <>{latest.subject_label} · </>
                   )}
-                  {latest.category === "checklist"
-                    ? language
-                      ? `${new Set(items.map((item) => item.subject_id)).size} việc`
-                      : `${new Set(items.map((item) => item.subject_id)).size} tasks`
-                    : (events[latest.event]?.[language] ??
-                      (language ? "Đã cập nhật" : "Updated"))}
+                  {jobGroup
+                    ? (events[latest.event]?.[language] ??
+                      (language ? "Đã cập nhật" : "Updated"))
+                    : language
+                      ? `${items.length} cập nhật`
+                      : `${items.length} ${items.length === 1 ? "update" : "updates"}`}
                 </summary>
                 <ul className="mt-2 space-y-2 pl-3 text-sm">
                   {items.map((item) => (
@@ -259,12 +269,10 @@ export function NotificationBell({ className }: { className?: string }) {
                         onClick={() => void store.markRead(item.id)}
                         className="block w-full break-words text-primary hover:underline focus-visible:underline"
                       >
-                        {item.category === "checklist" &&
-                          item.subject_label && (
-                            <span className="block font-medium">
-                              {item.subject_label}
-                            </span>
-                          )}
+                        <span className="block font-medium">
+                          {categories[item.category]?.[language] ?? label}
+                          {item.subject_label && <> · {item.subject_label}</>}
+                        </span>
                         {events[item.event]?.[language] ??
                           (language ? "Đã cập nhật" : "Updated")}
                         <time

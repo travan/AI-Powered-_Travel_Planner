@@ -99,20 +99,97 @@ describe("travel enrichment", () => {
   it("reconciles the Ha Giang group estimate without duplicating main travel", () => {
     const p = plan();
     p.num_days = 7;
-    const price = (amount: number, scope: "group" | "person") => ({ amount, scope, currency: "VND", status: "estimated" as const, basis: "planning_estimate" as const, assumption: "Unverified planning estimate" });
-    p.days = Array.from({ length: 7 }, (_, index) => ({ ...p.days[0]!, day_number: index + 1, city_slug: "ha-giang", activities: [
-      { name: "Local", kind: "transfer", category: "transport", cost: 200000, currency: "VND", price: price(200000, "group") },
-      ...(index === 0 ? [
-        { name: "Meals", kind: "meal", category: "food", cost: 2040000, currency: "VND", price: price(2040000, "person") },
-        { name: "Visits", description: "Estimated sightseeing", kind: "visit", category: "attraction", cost: 210000, currency: "VND", price: price(210000, "person") },
-      ] : []),
-    ] } as Itinerary["days"][number]));
-    p.hotels = [{ name: "Stay", city: "Ha Giang", city_slug: "ha-giang", nightly_estimate: 800000, rooms: 1, nights: 6 } as Itinerary["hotels"][number]];
-    p.transport_summary = ["outbound", "return"].map(segment => ({ segment, from: "A", to: "B", recommended_mode: "other", options: [], price: price(1000000, "person") } as Itinerary["transport_summary"][number]));
+    const price = (amount: number, scope: "group" | "person") => ({
+      evidence: {
+        source: "catalog" as const,
+        verified_at: new Date().toISOString(),
+      },
+      amount,
+      scope,
+      currency: "VND",
+      status: "estimated" as const,
+      basis: "planning_estimate" as const,
+      assumption: "Unverified planning estimate",
+    });
+    p.days = Array.from(
+      { length: 7 },
+      (_, index) =>
+        ({
+          ...p.days[0]!,
+          day_number: index + 1,
+          city_slug: "ha-giang",
+          activities: [
+            {
+              name: "Local",
+              kind: "transfer",
+              category: "transport",
+              cost: 200000,
+              currency: "VND",
+              price: price(200000, "group"),
+            },
+            ...(index === 0
+              ? [
+                  {
+                    name: "Meals",
+                    kind: "meal",
+                    category: "food",
+                    cost: 2040000,
+                    currency: "VND",
+                    price: price(2040000, "person"),
+                  },
+                  {
+                    name: "Visits",
+                    description: "Estimated sightseeing",
+                    kind: "visit",
+                    category: "attraction",
+                    cost: 210000,
+                    currency: "VND",
+                    price: price(210000, "person"),
+                  },
+                ]
+              : []),
+          ],
+        }) as Itinerary["days"][number],
+    );
+    p.hotels = [
+      {
+        name: "Stay",
+        city: "Ha Giang",
+        city_slug: "ha-giang",
+        nightly_estimate: 800000,
+        price: { ...price(800000, "group"), scope: "room_night" },
+        rooms: 1,
+        nights: 6,
+      } as Itinerary["hotels"][number],
+    ];
+    p.transport_summary = ["outbound", "return"].map(
+      (segment) =>
+        ({
+          segment,
+          from: "A",
+          to: "B",
+          recommended_mode: "other",
+          options: [],
+          price: price(1000000, "person"),
+        }) as Itinerary["transport_summary"][number],
+    );
     const criteria = createPlanningCriteria();
-    const input = { planning: criteria, cities: ["ha-giang"], currency: "VND", trip_style: "mixed", num_travelers: 2 } as ItineraryInput;
+    const input = {
+      planning: criteria,
+      cities: ["ha-giang"],
+      currency: "VND",
+      trip_style: "mixed",
+      num_travelers: 2,
+    } as ItineraryInput;
     const result = reconcileBudget(p, input);
-    expect(result.budget_breakdown).toMatchObject({ accommodation: 4800000, food: 4080000, activities: 420000, transport: 5400000, contingency: 1470000, total: 16170000 });
+    expect(result.budget_breakdown).toMatchObject({
+      accommodation: 4800000,
+      food: 4080000,
+      activities: 420000,
+      transport: 5400000,
+      contingency: 1470000,
+      total: 16170000,
+    });
   });
   it("matches places within their city and ignores invented coordinates and URLs", () => {
     const p = plan();
@@ -192,7 +269,7 @@ describe("travel enrichment", () => {
     expect(p.budget_breakdown.transport).toBe(900);
     expect(p.budget_breakdown.transport_details?.flight).toBe(900);
     expect(p.budget_breakdown.complete).toBe(false);
-    expect(p.total_cost).toBe(910);
+    expect(p.total_cost).toBe(900);
     expect(p.issues?.some((i) => i.code === "OVER_BUDGET")).toBe(true);
   });
   it("multiplies per-person activity costs once and excludes duplicate timeline transport", () => {
@@ -210,6 +287,10 @@ describe("travel enrichment", () => {
         maps_link: "",
         price: {
           amount: 50,
+          evidence: {
+            source: "catalog",
+            verified_at: new Date().toISOString(),
+          },
           currency: "VND",
           scope: "person",
           status: "estimated",
@@ -446,10 +527,14 @@ describe("real model regression findings", () => {
   });
 });
 
-describe("labelled planning allowances", () => {
+describe("source-backed planning estimates", () => {
   it("retains itemized allowances and multiplies person/room/night scopes once", () => {
     const p = plan();
     const allowance = (amount: number) => ({
+      evidence: {
+        source: "catalog" as const,
+        verified_at: new Date().toISOString(),
+      },
       amount,
       currency: "VND",
       scope: "person" as const,
@@ -504,6 +589,7 @@ describe("labelled planning allowances", () => {
         rooms: 1,
         nights: 1,
         nightly_estimate: 80,
+        price: { ...allowance(80), scope: "room_night" },
         estimate_basis: "planning_estimate",
         estimate_assumption:
           "One double room for one night, approximate allowance.",
@@ -548,11 +634,15 @@ describe("labelled planning allowances", () => {
   });
 });
 
-it("budgets a return airport transfer and never charges a round-trip airfare twice", () => {
+it("keeps the return transfer unknown and never charges a source-backed round-trip airfare twice", () => {
   const p = plan();
   const planning = createPlanningCriteria();
   planning.journey.return_to_origin = true;
   const price = {
+    evidence: {
+      source: "catalog" as const,
+      verified_at: new Date().toISOString(),
+    },
     amount: 600,
     currency: "VND",
     scope: "person" as const,
@@ -588,7 +678,10 @@ it("budgets a return airport transfer and never charges a round-trip airfare twi
     enrichTravel(p, [], { planning, locale: "vi" } as ItineraryInput),
   );
   expect(result.transport_summary).toHaveLength(4);
-  expect(result.budget_breakdown.transport).toBe(1300);
+  expect(result.budget_breakdown.transport).toBe(1250);
+  expect(
+    result.transport_summary.find((leg) => leg.from === "Hotel")?.price?.amount,
+  ).toBeNull();
   expect(
     result.transport_summary.find((leg) => leg.from === "Da Nang")?.price
       ?.amount,

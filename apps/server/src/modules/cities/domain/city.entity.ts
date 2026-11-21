@@ -27,6 +27,7 @@ export type CityPlace = {
 };
 
 export type CityActivity = {
+  price?: import("@travel/types").ScopedPrice;
   id?: string;
   last_verified_at?: string;
   title: string;

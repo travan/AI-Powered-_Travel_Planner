@@ -229,6 +229,7 @@ export interface Activity extends PlaceLocation {
 // ─── Day ──────────────────────────────────────────────────────────────────────
 
 export interface ItineraryDay {
+  daily_budget_complete?: boolean;
   /** Selected country destination containing this day's proposed city. */
   destination_slug?: string;
   city_slug?: string;
@@ -246,6 +247,7 @@ export interface ItineraryDay {
 // ─── Hotels & Restaurants ─────────────────────────────────────────────────────
 
 export interface Hotel extends PlaceLocation {
+  price?: ScopedPrice;
   estimate_basis?: ScopedPrice["basis"];
   estimate_assumption?: string;
   booking_links?: BookingLink[];
@@ -267,6 +269,7 @@ export interface Hotel extends PlaceLocation {
 }
 
 export interface Restaurant extends PlaceLocation {
+  price?: ScopedPrice;
   estimate_basis?: ScopedPrice["basis"];
   estimate_assumption?: string;
   meal_slot?: "breakfast" | "lunch" | "dinner";

@@ -18,24 +18,24 @@ const partial: Budget = {
   transport_details: { flight: null },
 };
 describe("partial budget presentation", () => {
-  it("labels the subtotal without printing diagnostics or misleading daily totals", () => {
+  it("labels the subtotal, lists missing items and avoids misleading daily totals", () => {
     const markup = renderToStaticMarkup(
       <BudgetBreakdown breakdown={partial} />,
     );
     expect(markup).toContain("Subtotal");
-    expect(markup).not.toContain("missing breakfast");
+    expect(markup).toContain("missing breakfast");
     expect(markup).not.toContain("Unknown");
     expect(markup).not.toContain("Per day");
     expect(markup).not.toContain("32.142857");
   });
-  it("omits the budget card when no priced categories exist", () => {
+  it("keeps missing items visible when no priced categories exist", () => {
     expect(
       renderToStaticMarkup(
         <BudgetBreakdown
           breakdown={{ ...partial, food: 0, activities: 0, total: 0 }}
         />,
       ),
-    ).toBe("");
+    ).toContain("Items not estimated yet");
   });
 });
 

@@ -94,10 +94,13 @@ const binding = {
         status: result.status,
         codes: (body.errors ?? []).map((error) => error.code),
       };
-      throw Object.assign(new Error(body.errors?.[0]?.message ?? "Workers AI request failed"), {
-        status: result.status,
-        code: body.errors?.[0]?.code,
-      });
+      throw Object.assign(
+        new Error(body.errors?.[0]?.message ?? "Workers AI request failed"),
+        {
+          status: result.status,
+          code: body.errors?.[0]?.code,
+        },
+      );
     }
     return body.result;
   },
@@ -133,11 +136,39 @@ try {
       issues: result.result.issues,
     };
     assert.equal(result.result.days.length, dto.num_days);
-    assert.ok(Number.isFinite(result.result.total_cost) && result.result.total_cost > 0);
+    assert.ok(
+      Number.isFinite(result.result.total_cost) &&
+        result.result.total_cost >= 0,
+    );
+    const unpriced =
+      result.result.budget_breakdown.items?.filter(
+        (item) => item.amount == null,
+      ) ?? [];
+    if (unpriced.length || result.result.total_cost === 0) {
+      assert.equal(result.result.budget_breakdown.complete, false);
+      assert.ok(
+        result.result.issues?.some(
+          (issue) => issue.code === "BUDGET_INCOMPLETE",
+        ),
+      );
+    }
+    assert.equal(
+      result.result.total_cost,
+      result.result.budget_breakdown.items?.reduce(
+        (sum, item) => sum + (item.amount ?? 0),
+        0,
+      ),
+    );
     if (result.result.total_cost > dto.budget!)
-      assert.ok(result.result.issues?.some((issue) => issue.code === "OVER_BUDGET" &&
-        issue.severity === "warning" && issue.params?.currency === result.result.currency &&
-        issue.params?.amount === result.result.total_cost - dto.budget!));
+      assert.ok(
+        result.result.issues?.some(
+          (issue) =>
+            issue.code === "OVER_BUDGET" &&
+            issue.severity === "warning" &&
+            issue.params?.currency === result.result.currency &&
+            issue.params?.amount === result.result.total_cost - dto.budget!,
+        ),
+      );
   } catch (error) {
     outcome = {
       status: "failed",

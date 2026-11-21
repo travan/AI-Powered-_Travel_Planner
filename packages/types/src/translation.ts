@@ -1,4 +1,5 @@
 import type { Itinerary } from "./itinerary";
+import { isSystemActivityName } from "./planning-text";
 export type ItineraryLocale = "en" | "vi";
 export interface ItineraryTranslation {
   id: string;
@@ -10,7 +11,7 @@ export interface ItineraryTranslation {
   texts: Record<string, string>;
   created_at: string;
 }
-/** Explicit allowlist: names, user notes, bookings, timestamps and money never enter translation. */
+/** Only descriptive text and recognized system names; user/venue names and money remain protected. */
 export function itineraryTextSegments(plan: Itinerary): Record<string, string> {
   const texts: Record<string, string> = {};
   const add = (path: string, value: unknown) => {
@@ -22,18 +23,40 @@ export function itineraryTextSegments(plan: Itinerary): Record<string, string> {
     plan.seasonal_notes?.[field]?.forEach((s, i) =>
       add(`seasonal_notes.${field}.${i}`, s),
     );
-  plan.days.forEach((day, d) =>
+  plan.days.forEach((day, d) => {
+    add(`days.${d}.title`, day.title);
     day.activities.forEach((a, i) => {
+      if (isSystemActivityName(a))
+        add(`days.${d}.activities.${i}.name`, a.name);
+      add(`days.${d}.activities.${i}.price.assumption`, a.price?.assumption);
       for (const field of ["description", "reason", "alternative"] as const)
         add(`days.${d}.activities.${i}.${field}`, a[field]);
       add(`days.${d}.activities.${i}.golden_moment.tip`, a.golden_moment?.tip);
       a.ticket_activities?.forEach((t, j) =>
         add(`days.${d}.activities.${i}.ticket_activities.${j}.note`, t.note),
       );
-    }),
+    });
+  });
+  plan.transport_summary?.forEach((leg, i) =>
+    add(`transport_summary.${i}.price.assumption`, leg.price?.assumption),
   );
-  plan.hotels.forEach((h, i) => add(`hotels.${i}.note`, h.note));
-  plan.restaurants.forEach((r, i) => add(`restaurants.${i}.note`, r.note));
+  plan.budget_breakdown?.items?.forEach((item, i) => {
+    add(`budget_breakdown.items.${i}.label`, item.label);
+    add(`budget_breakdown.items.${i}.assumption`, item.assumption);
+  });
+  plan.budget_breakdown?.missing_items?.forEach((label, i) =>
+    add(`budget_breakdown.missing_items.${i}`, label),
+  );
+  plan.hotels.forEach((h, i) => {
+    add(`hotels.${i}.note`, h.note);
+    add(`hotels.${i}.estimate_assumption`, h.estimate_assumption);
+    add(`hotels.${i}.price.assumption`, h.price?.assumption);
+  });
+  plan.restaurants.forEach((r, i) => {
+    add(`restaurants.${i}.note`, r.note);
+    add(`restaurants.${i}.estimate_assumption`, r.estimate_assumption);
+    add(`restaurants.${i}.price.assumption`, r.price?.assumption);
+  });
   plan.suggestions.forEach((s, i) => {
     add(`suggestions.${i}.description`, s.description);
     add(`suggestions.${i}.note`, s.note);

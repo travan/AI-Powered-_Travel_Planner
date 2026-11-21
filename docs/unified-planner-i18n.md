@@ -54,11 +54,14 @@ available. Interface language never infers or rewrites an old itinerary's langua
 POST accepts `{target_locale: "en" | "vi", source_version: "<sha256>"}`. GET returns
 source metadata, the authorized source snapshot, and stored translations with stale
 flags. POST returns an existing cache entry or a durable job ID. Poll the existing
-`GET /api/itinerary/jobs/:jobId` route. Reloading or changing UI language only reads
-stored translations; it does not enqueue AI work.
+`GET /api/itinerary/jobs/:jobId` route. Changing UI language uses a current stored translation when available, otherwise it
+automatically enqueues translation through the existing durable queue. Failed
+translations keep an explicit original-language notice and a manual retry button.
+Repeated renders do not retry failed work or submit duplicate jobs.
 
 Translations are separate rows keyed by source, content/version hash and target
-language. Explicit descriptive-text paths are the only editable fields. Names,
+language. Explicit descriptive-text paths include day titles, system-generated activity names,
+price assumptions and budget labels. Official venue names, user-entered names,
 booking data, IDs, coordinates, prices, dates, links and locks remain in the source
 snapshot. Embedded names, links and numeric tokens are masked before provider calls;
 responses must contain exactly the requested keys and invariant tokens. The server
@@ -199,3 +202,39 @@ departure day are disabled. Choosing departure fills a missing return or advance
 a conflicting return to the following day, with an inline notice; a later valid
 return is preserved. API validation also rejects equal/reversed exact dates.
 Duration-based one-day trips remain supported.
+
+## Evidence-based prices
+
+Generation cache v3 and translation text-path fingerprints replace the previous allowance
+policy. AI supplements may return `amount: null`; model-generated amounts and
+URLs are never accepted as evidence. An item's `price.evidence` is independent
+of its venue evidence. Prices come from user confirmation or catalog records
+verified within the existing 180-day window. Missing prices do not block venue
+or timing suggestions. A budget limit is selection guidance, never a price.
+
+Catalog prices and user-supplied prices in another currency use CurrencyService.
+`price.original` retains the source amount/currency and `price.conversion` stores
+the rate and its timestamps. Failed or expired conversions are excluded. Room,
+traveler and night multipliers apply after conversion. Included transfers use
+zero only when the underlying fare is priced.
+
+Stored plans are sanitized and totals rebuilt on a copy during presentation;
+unverified legacy AI prices are excluded without rewriting the saved source.
+Partial daily/trip totals are labelled as subtotals of priced items. Unknown
+items remain visible, including when no prices are available. Contingency is
+computed from priced items only. These checks validate price provenance and
+currency arithmetic, not current booking availability or live ticket prices.
+
+## Planning selections and notification groups
+
+Checklist and keep-item checkboxes are local drafts until Save selections. Discard
+changes makes no request. PATCH planning accepts optional `checklist_updates` with
+`id`, `status` and `expected_status`, alongside the existing version and locked IDs.
+The backend checks membership and optimistic versions and commits all changes in
+one short transaction. A conflicting checklist item rolls back the entire selection,
+including notification trigger inserts. Existing clients may omit checklist updates.
+
+The notification bell groups all visible activity for a trip together, preserving
+category, subject and timestamp in the expanded list. Unassociated invitations and
+account events group by category; independent planning jobs retain their own groups.
+Grouping uses only the authorized inbox data and does not infer private trip access.

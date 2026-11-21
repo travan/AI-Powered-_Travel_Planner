@@ -1,5 +1,6 @@
 "use client";
 import { useAppLanguage } from "../i18n/LanguageProvider";
+import { PriceDetails } from "./PriceDetails";
 import { BookingLinks } from "./BookingLinks";
 import { UiText } from "../i18n/UiText";
 import React from "react";
@@ -64,18 +65,25 @@ export function StayDiningRecommendations({
                     {hotel.price_per_night || hotel.price_range}
                   </p>
                 )}
-                {hotel.nightly_estimate != null &&
-                  hotel.estimate_basis === "planning_estimate" && (
-                    <p className="rounded-lg bg-primary-fixed/30 p-3 text-sm leading-6">
-                      {locale === "vi" ? "Dự toán " : "Allowance "}
-                      {hotel.nightly_estimate.toLocaleString(locale)}{" "}
-                      {itinerary.currency}
-                      {locale === "vi" ? "/phòng/đêm" : "/room/night"} ·{" "}
-                      {hotel.rooms} {locale === "vi" ? "phòng" : "rooms"} ×{" "}
-                      {hotel.nights} {locale === "vi" ? "đêm" : "nights"}.{" "}
-                      {hotel.estimate_assumption}
-                    </p>
-                  )}
+                {hotel.nightly_estimate == null && (
+                  <p className="text-sm">
+                    {locale === "vi"
+                      ? "Chưa dự tính được"
+                      : "Not estimated yet"}
+                  </p>
+                )}
+                <PriceDetails price={hotel.price} />
+                {hotel.nightly_estimate != null && (
+                  <p className="rounded-lg bg-primary-fixed/30 p-3 text-sm leading-6">
+                    {locale === "vi" ? "Dự toán " : "Allowance "}
+                    {hotel.nightly_estimate.toLocaleString(locale)}{" "}
+                    {itinerary.currency}
+                    {locale === "vi" ? "/phòng/đêm" : "/room/night"} ·{" "}
+                    {hotel.rooms} {locale === "vi" ? "phòng" : "rooms"} ×{" "}
+                    {hotel.nights} {locale === "vi" ? "đêm" : "nights"}.{" "}
+                    {hotel.estimate_assumption}
+                  </p>
+                )}
                 {hotel.address && (
                   <p className="text-sm text-on-surface-variant">
                     {hotel.address}
@@ -146,7 +154,13 @@ export function StayDiningRecommendations({
                 </p>
                 <p className="text-sm">
                   {restaurant.cuisine} ·{" "}
-                  {restaurant.price_per_person || restaurant.price_range}
+                  {restaurant.estimated_per_person != null
+                    ? `${restaurant.estimated_per_person.toLocaleString(locale)} ${itinerary.currency}${locale === "vi" ? "/người" : "/person"}`
+                    : restaurant.price_per_person ||
+                      restaurant.price_range ||
+                      (locale === "vi"
+                        ? "Chưa dự tính được"
+                        : "Not estimated yet")}
                 </p>
                 {restaurant.address && (
                   <p className="text-sm text-on-surface-variant">

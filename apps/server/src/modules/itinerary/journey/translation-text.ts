@@ -1,4 +1,8 @@
-import type { Itinerary } from "@travel/types";
+import {
+  isSystemActivityName,
+  type Activity,
+  type Itinerary,
+} from "@travel/types";
 /** Mask names, links and numeric tokens even when embedded in descriptive prose. */
 export function protectTranslationText(
   plan: Itinerary,
@@ -10,9 +14,8 @@ export function protectTranslationText(
     for (const [key, v] of Object.entries(value)) {
       if (
         typeof v === "string" &&
-        /^(name|city|from|to|address|provider|booking_reference|label)$/.test(
-          key,
-        ) &&
+        /^(name|city|from|to|address|provider|booking_reference)$/.test(key) &&
+        !(key === "name" && isSystemActivityName(value as Activity)) &&
         v.trim()
       )
         names.add(v);
@@ -20,6 +23,12 @@ export function protectTranslationText(
     }
   };
   collect(plan);
+  // Journey labels may be user-entered names, whereas budget labels are descriptive text.
+  for (const location of [
+    plan.planning?.journey.origin,
+    plan.planning?.journey.endpoint,
+  ])
+    if (location?.label) names.add(location.label);
   const escaped = [...names]
     .sort((a, b) => b.length - a.length)
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
