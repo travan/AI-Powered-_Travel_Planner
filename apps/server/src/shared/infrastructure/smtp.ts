@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import type { AppConfigService } from "../../config/app-config.service.js";
+import { hostnameTlsSocket } from "./hostname-tls-socket.js";
 
 /** Persist only fixed diagnostic labels, never SMTP responses or credentials. */
 export function smtpFailureCode(error: unknown): string {
@@ -28,5 +29,10 @@ export function createSmtpTransport(config: AppConfigService) {
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
+    // Nodemailer's resolved-IP/custom-lookup path fails in Workers. Connecting
+    // by hostname preserves SNI and certificate checks in the Workers runtime.
+    ...(process.env.RUNTIME_TARGET === "cloudflare" && settings.smtpSecure && settings.smtpHost
+      ? { getSocket: hostnameTlsSocket(settings.smtpHost, settings.smtpPort) }
+      : {}),
   });
 }
