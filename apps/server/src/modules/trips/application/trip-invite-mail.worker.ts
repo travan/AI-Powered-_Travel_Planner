@@ -9,7 +9,7 @@ import {
   SQL_CLIENT,
   type SqlClient,
 } from "../../../database/database.tokens.js";
-import { createSmtpTransport } from "../../../shared/infrastructure/smtp.js";
+import { createSmtpTransport, smtpFailureCode } from "../../../shared/infrastructure/smtp.js";
 import { logEvent } from "../../../observability/logger.js";
 
 import type { InviteEmailStatus } from "../domain/trip.entity.js";
@@ -139,15 +139,16 @@ export class TripInviteMailWorker implements OnModuleInit, OnModuleDestroy {
           last_error_code=null where invite_id=$1 and claim_token=$2`,
           [mail.invite_id, mail.claim_token],
         );
-      } catch {
+      } catch (error) {
+        const code = smtpFailureCode(error);
         await this.sql.query(
           `update trip_invite_mail set status='failed',claim_token=null,
-          last_error_code='SMTP_DELIVERY_FAILED',next_attempt_at=now()+make_interval(mins=>least(60,1<<least(attempts-1,6)))
+          last_error_code=$3,next_attempt_at=now()+make_interval(mins=>least(60,1<<least(attempts-1,6)))
           where invite_id=$1 and claim_token=$2`,
-          [mail.invite_id, mail.claim_token],
+          [mail.invite_id, mail.claim_token, code],
         );
         logEvent("trip.invite_mail_failed", "warn", {
-          code: "SMTP_DELIVERY_FAILED",
+          code,
         });
       }
     } finally {
