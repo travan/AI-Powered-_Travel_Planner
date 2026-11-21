@@ -25,6 +25,11 @@ export class TripIdParamsDto {
   id!: string;
 }
 
+export class TripInviteParamsDto extends TripIdParamsDto {
+  @IsUUID()
+  inviteId!: string;
+}
+
 export class TripMemberParamsDto extends TripIdParamsDto {
   @IsUUID()
   userId!: string;

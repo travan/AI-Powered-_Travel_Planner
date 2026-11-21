@@ -4,6 +4,16 @@ import type { Itinerary, ItineraryInput, AiTokenUsage } from "@travel/types";
 export const ITINERARY_REPOSITORY = Symbol("ITINERARY_REPOSITORY");
 
 export type ItineraryRepository = {
+  createShareToken(input: {
+    itineraryId: string;
+    userId: string;
+    token: string;
+  }): Promise<string | null>;
+  revokeShareToken(input: {
+    itineraryId: string;
+    userId: string;
+  }): Promise<boolean>;
+  findShared(token: string): Promise<ItineraryDetail | null>;
   findVisible(input: {
     itineraryId: string;
     userId?: string | null;

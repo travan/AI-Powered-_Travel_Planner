@@ -23,6 +23,7 @@ import {
   JoinTripShareLinkDto,
   TripAuditLogQueryDto,
   TripIdParamsDto,
+  TripInviteParamsDto,
   TripMemberParamsDto,
   UpdateTripMemberDto,
   UpdateTripShareLinkDto,
@@ -53,8 +54,14 @@ export class TripsController {
 
   @Get(":id/workspace")
   @Header("Cache-Control", "private, no-store")
-  async workspace(@Param() params: TripIdParamsDto, @CurrentUser() user: CurrentUserValue) {
-    const result = await this.trips.workspace({ tripId: params.id, actorUserId: user.sub });
+  async workspace(
+    @Param() params: TripIdParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.workspace({
+      tripId: params.id,
+      actorUserId: user.sub,
+    });
     if (!result.ok) throwServiceError(result.error);
     return result.value;
   }
@@ -95,6 +102,37 @@ export class TripsController {
       tripId: params.id,
       actorUserId: user.sub,
       dto,
+    });
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Get(":id/invites/:inviteId/delivery")
+  @Header("Cache-Control", "private, no-store")
+  async inviteDelivery(
+    @Param() params: TripInviteParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.inviteDelivery({
+      tripId: params.id,
+      inviteId: params.inviteId,
+      actorUserId: user.sub,
+    });
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Post(":id/invites/:inviteId/resend")
+  @Header("Cache-Control", "private, no-store")
+  async resendInvite(
+    @Param() params: TripInviteParamsDto,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.trips.inviteDelivery({
+      tripId: params.id,
+      inviteId: params.inviteId,
+      actorUserId: user.sub,
+      resend: true,
     });
     if (!result.ok) throwServiceError(result.error);
     return result.value;

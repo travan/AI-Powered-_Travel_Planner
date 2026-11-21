@@ -23,6 +23,7 @@ import {
   createTransportBooking,
   createTripActivity,
   createTripInvite,
+  tripInviteDelivery,
   getTripWorkspace,
   listDataQualitySignals,
   listTransportBookings,
@@ -224,16 +225,25 @@ function canAccessWorkspaceTab(
   return true;
 }
 
-export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialTab?: string }) {
+export function TripWorkspace({
+  tripId,
+  initialTab,
+}: {
+  tripId: string;
+  initialTab?: string;
+}) {
   const { locale: formattingLocale } = useAppLanguage();
 
   const t = useUiText();
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => TABS.find((tab) => tab.id === initialTab)?.id ?? "overview");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(
+    () => TABS.find((tab) => tab.id === initialTab)?.id ?? "overview",
+  );
   const [state, setState] = useState<LoadState>("loading");
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
   const [tripCitySlug, setTripCitySlug] = useState<string | null>(null);
+  const [tripTitle, setTripTitle] = useState<string | null>(null);
   const [savedPlan, setSavedPlan] = useState<Itinerary | null>(null);
   const [savedPlanLoading, setSavedPlanLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState<TripAuditLog[]>([]);
@@ -344,6 +354,7 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
     async function loadWorkspace() {
       setState("loading");
       setMessage(null);
+      setTripTitle(null);
 
       try {
         setSavedPlanLoading(true);
@@ -367,13 +378,18 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
         } satisfies WorkspaceSession;
         setSession(authSession);
 
-        const { membership, members: nextMembers, primaryCitySlug } =
-          await getTripWorkspace(tripId, authSession.accessToken);
+        const {
+          membership,
+          members: nextMembers,
+          primaryCitySlug,
+          title,
+        } = await getTripWorkspace(tripId, authSession.accessToken);
         if (cancelled) return;
         if (membership.status !== "active")
           throw new Error("You are not an active member of this trip.");
         setMembers(nextMembers);
         setTripCitySlug(primaryCitySlug);
+        setTripTitle(title?.trim() && title !== tripId ? title : null);
         setExpenseForm((current) => ({
           ...current,
           paidByUserId: current.paidByUserId || authSession.userId,
@@ -426,20 +442,34 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
       loadOnce("activities", () => refreshActivities(token));
     if (activeTab === "plan" || activeTab === "schedule") {
       loadOnce("saved", async () => {
-        try { setSavedPlan(await getSavedTripItinerary(tripId, token)); }
-        finally { setSavedPlanLoading(false); }
+        try {
+          setSavedPlan(await getSavedTripItinerary(tripId, token));
+        } finally {
+          setSavedPlanLoading(false);
+        }
       });
     }
-    if (activeTab === "schedule") loadOnce("catalog", () => refreshActivityCatalog());
-    if (activeTab === "transport") loadOnce("transport", () => refreshTransportBookings(token));
+    if (activeTab === "schedule")
+      loadOnce("catalog", () => refreshActivityCatalog());
+    if (activeTab === "transport")
+      loadOnce("transport", () => refreshTransportBookings(token));
     if (activeTab === "bills" && permissions?.viewFinance)
       loadOnce("expenses", () => refreshExpenses(token));
     if (activeTab === "audit" && permissions?.viewAudit)
       loadOnce("audit", () => refreshAuditLogs(token));
     if (activeTab === "review" && permissions?.reviewSubmissions)
       loadOnce("review", () => refreshReviewQueue(token));
-    if (activeTab === "insights") loadOnce("insights", () => refreshInsights(token));
-  }, [activeTab, session, state, permissions?.viewFinance, permissions?.viewAudit, permissions?.reviewSubmissions, tripId]);
+    if (activeTab === "insights")
+      loadOnce("insights", () => refreshInsights(token));
+  }, [
+    activeTab,
+    session,
+    state,
+    permissions?.viewFinance,
+    permissions?.viewAudit,
+    permissions?.reviewSubmissions,
+    tripId,
+  ]);
 
   async function refreshAuditLogs(authToken = session?.accessToken) {
     if (!authToken) return;
@@ -512,12 +542,40 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
       setInvite(created);
       setInviteEmail("");
       setMessage(
-        t("Invite created. Send this token or link to your travel mate."),
+        created.emailStatus === "sent"
+          ? formattingLocale === "vi"
+            ? "Đã gửi email mời."
+            : "Invitation email sent."
+          : t("Invite created. Send this token or link to your travel mate."),
       );
       await refreshAuditLogs(session.accessToken);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Unable to create invite.",
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleInviteDelivery(resend = false) {
+    if (!session || !invite) return;
+    setBusyAction("invite-delivery");
+    try {
+      const delivery = await tripInviteDelivery(
+        tripId,
+        invite.id,
+        session.accessToken,
+        resend,
+      );
+      setInvite((current) =>
+        current?.id === invite.id ? { ...current, ...delivery } : current,
+      );
+    } catch {
+      setMessage(
+        formattingLocale === "vi"
+          ? "Chưa kiểm tra được email mời. Hãy thử lại."
+          : "Could not check invitation delivery. Please try again.",
       );
     } finally {
       setBusyAction(null);
@@ -1352,10 +1410,10 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
                 <UiText id="ta53069f82d0d" fallback="Current trip" />{" "}
               </p>
               <p
-                className="mt-3 break-all font-mono text-sm"
-                data-testid="web-workspace-trip-id"
+                className="mt-3 break-words text-lg font-bold"
+                data-testid="web-workspace-trip-title"
               >
-                {tripId}
+                {tripTitle || savedPlan?.title || t("Trip workspace")}
               </p>
               <span
                 className="mt-4 inline-flex rounded-full bg-primary-fixed px-3 py-1 text-xs font-black text-on-primary-fixed-variant"
@@ -1531,6 +1589,7 @@ export function TripWorkspace({ tripId, initialTab }: { tripId: string; initialT
                   busyAction={busyAction}
                   tripId={tripId}
                   onCreateInvite={handleCreateInvite}
+                  onInviteDelivery={handleInviteDelivery}
                   onEnableShareLink={handleEnableShareLink}
                   onInviteEmailChange={setInviteEmail}
                   onInviteRoleChange={setInviteRole}
@@ -3023,9 +3082,34 @@ function BillsPanel(props: {
               className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary sm:col-span-2"
               data-testid="web-expense-title"
             />
-            <label className="text-sm font-semibold">{formattingLocale === "vi" ? "Hạng mục chi tiêu" : "Expense category"}
-              <select aria-label={formattingLocale === "vi" ? "Hạng mục chi tiêu" : "Expense category"} className="mt-1 w-full rounded-2xl border border-outline-variant/40 p-3" value={props.expenseForm.expenseType ?? "other"} onChange={e=>props.onExpenseFormChange({expenseType:e.target.value})}>
-                {[["food","Ăn uống","Food"],["accommodation","Lưu trú","Accommodation"],["transport","Đi lại","Transport"],["activity","Hoạt động","Activities"],["shopping","Mua sắm","Shopping"],["other","Khác / chưa phân loại","Other / unclassified"]].map(([value,vi,en])=><option key={value} value={value}>{formattingLocale === "vi" ? vi : en}</option>)}
+            <label className="text-sm font-semibold">
+              {formattingLocale === "vi"
+                ? "Hạng mục chi tiêu"
+                : "Expense category"}
+              <select
+                aria-label={
+                  formattingLocale === "vi"
+                    ? "Hạng mục chi tiêu"
+                    : "Expense category"
+                }
+                className="mt-1 w-full rounded-2xl border border-outline-variant/40 p-3"
+                value={props.expenseForm.expenseType ?? "other"}
+                onChange={(e) =>
+                  props.onExpenseFormChange({ expenseType: e.target.value })
+                }
+              >
+                {[
+                  ["food", "Ăn uống", "Food"],
+                  ["accommodation", "Lưu trú", "Accommodation"],
+                  ["transport", "Đi lại", "Transport"],
+                  ["activity", "Hoạt động", "Activities"],
+                  ["shopping", "Mua sắm", "Shopping"],
+                  ["other", "Khác / chưa phân loại", "Other / unclassified"],
+                ].map(([value, vi, en]) => (
+                  <option key={value} value={value}>
+                    {formattingLocale === "vi" ? vi : en}
+                  </option>
+                ))}
               </select>
             </label>
             <input
@@ -4223,6 +4307,7 @@ function MembersPanel(props: {
   busyAction: string | null;
   tripId: string;
   onCreateInvite: () => void;
+  onInviteDelivery: (resend?: boolean) => void;
   onEnableShareLink: () => void;
   onInviteEmailChange: (value: string) => void;
   onInviteRoleChange: (value: TripMemberRole) => void;
@@ -4309,6 +4394,63 @@ function MembersPanel(props: {
             </button>
             {props.invite && (
               <div className="mt-4 rounded-2xl bg-surface-container-low p-4 text-sm">
+                {props.invite.email && (
+                  <div className="mb-3 space-y-2" role="status">
+                    <p>
+                      {formattingLocale === "vi"
+                        ? {
+                            sent: "Đã gửi email mời.",
+                            queued: "Email mời đang chờ gửi.",
+                            failed:
+                              "Chưa gửi được email. Bạn có thể thử lại hoặc sao chép liên kết.",
+                            not_configured:
+                              "Lời mời đã được tạo nhưng dịch vụ email chưa sẵn sàng. Bạn vẫn có thể sao chép liên kết.",
+                            cancelled:
+                              "Lời mời đã được dùng, thu hồi hoặc hết hạn.",
+                            not_requested:
+                              "Bạn có thể gửi email hoặc sao chép liên kết mời.",
+                          }[props.invite.emailStatus ?? "not_requested"]
+                        : {
+                            sent: "Invitation email sent.",
+                            queued: "Invitation email is queued.",
+                            failed:
+                              "Email could not be sent. Retry or copy the invitation link.",
+                            not_configured:
+                              "The invite was created, but email delivery is not configured. You can still copy its link.",
+                            cancelled:
+                              "This invitation was accepted, revoked or expired.",
+                            not_requested:
+                              "Send the invitation email or copy its link.",
+                          }[props.invite.emailStatus ?? "not_requested"]}
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        disabled={props.busyAction === "invite-delivery"}
+                        className="font-semibold text-primary"
+                        onClick={() => props.onInviteDelivery()}
+                      >
+                        {formattingLocale === "vi"
+                          ? "Kiểm tra trạng thái"
+                          : "Check delivery"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          !props.canManage ||
+                          props.busyAction === "invite-delivery" ||
+                          props.invite.emailStatus === "cancelled"
+                        }
+                        className="font-semibold text-primary"
+                        onClick={() => props.onInviteDelivery(true)}
+                      >
+                        {formattingLocale === "vi"
+                          ? "Gửi lại email"
+                          : "Resend email"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <p className="font-bold text-on-surface">
                   {" "}
                   <UiText id="t12fe31a0fdd6" fallback="Invite token" />{" "}

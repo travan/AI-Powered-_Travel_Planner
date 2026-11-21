@@ -5,6 +5,7 @@ import { buildApp } from "../dist/app.js";
 import { workerRequestContext } from "../dist/cloudflare/request-context.js";
 import { JourneyService } from "../dist/modules/itinerary/journey/journey.service.js";
 import { FeedbackMailWorker } from "../dist/modules/itinerary/learning/feedback-mail.worker.js";
+import { TripInviteMailWorker } from "../dist/modules/trips/application/trip-invite-mail.worker.js";
 import { CityCatalogWorker } from "../dist/modules/cities/application/city-catalog.worker.js";
 
 import { withWorkerLogs, logEvent } from "../dist/observability/logger.js";
@@ -166,6 +167,7 @@ export default {
           }
           await Promise.all([
             app.get(FeedbackMailWorker).processNext(),
+            app.get(TripInviteMailWorker).processNext(),
             app.get(CityCatalogWorker).processNextJob(),
           ]);
         }),

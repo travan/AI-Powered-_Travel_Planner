@@ -14,7 +14,10 @@ export const TRIP_REPOSITORY = Symbol("TRIP_REPOSITORY");
 export interface TripRepository {
   listForUser(userId: string): Promise<TripSummary[]>;
   findForUser(input: { tripId: string; userId: string }): Promise<Trip | null>;
-  findMember(input: { tripId: string; userId: string }): Promise<TripMember | null>;
+  findMember(input: {
+    tripId: string;
+    userId: string;
+  }): Promise<TripMember | null>;
   listMembers(tripId: string): Promise<TripMember[]>;
   createInvite(input: {
     tripId: string;
@@ -25,7 +28,14 @@ export interface TripRepository {
     expiresAt?: string;
   }): Promise<TripInvite>;
   findInviteByToken(token: string): Promise<TripInvite | null>;
-  acceptInvite(input: { inviteId: string; userId: string }): Promise<TripInvite>;
+  findInviteById(input: {
+    tripId: string;
+    id: string;
+  }): Promise<TripInvite | null>;
+  acceptInvite(input: {
+    inviteId: string;
+    userId: string;
+  }): Promise<TripInvite>;
   upsertMember(input: {
     tripId: string;
     userId: string;
@@ -54,5 +64,8 @@ export interface TripRepository {
     before?: Record<string, unknown> | null;
     after?: Record<string, unknown> | null;
   }): Promise<void>;
-  listAuditLogs(input: { tripId: string; limit: number }): Promise<TripAuditLog[]>;
+  listAuditLogs(input: {
+    tripId: string;
+    limit: number;
+  }): Promise<TripAuditLog[]>;
 }

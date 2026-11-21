@@ -38,9 +38,11 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
   }
 
   let itinerary: Itinerary;
+  let canShare = false;
 
   try {
     const data = await getItinerary(id, session?.access_token);
+    canShare = data.can_share === true;
     itinerary = data.itineraries?.[0] as Itinerary;
     if (!itinerary) notFound();
   } catch (error) {
@@ -62,7 +64,7 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
         </Link>
         <div className="flex gap-2">
           {user && <SaveTripButton itineraryId={id} />}
-          <ShareButton />
+          {canShare && <ShareButton itineraryId={id} />}
         </div>
       </div>
 

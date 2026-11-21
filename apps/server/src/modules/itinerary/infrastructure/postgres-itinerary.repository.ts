@@ -31,6 +31,36 @@ type ItineraryRow = {
 export class PostgresItineraryRepository implements ItineraryRepository {
   constructor(@Inject(SQL_CLIENT) private readonly sql: SqlClient) {}
 
+  async createShareToken(input: {
+    itineraryId: string;
+    userId: string;
+    token: string;
+  }) {
+    const result = await this.sql.query<{ share_token: string }>(
+      `update itineraries set share_token=coalesce(share_token,$3)
+       where id=$1 and user_id=$2 and status='complete' returning share_token`,
+      [input.itineraryId, input.userId, input.token],
+    );
+    return result.rows[0]?.share_token ?? null;
+  }
+
+  async revokeShareToken(input: { itineraryId: string; userId: string }) {
+    const result = await this.sql.query(
+      "update itineraries set share_token=null,is_public=false where id=$1 and user_id=$2 returning id",
+      [input.itineraryId, input.userId],
+    );
+    return result.rows.length > 0;
+  }
+
+  async findShared(token: string) {
+    const result = await this.sql.query<ItineraryRow>(
+      `select id::text,user_id::text,result->>'title' as title,status,cities,num_days,budget,currency,
+        trip_style,is_public,created_at::text,result from itineraries where share_token=$1 and status='complete' limit 1`,
+      [token],
+    );
+    return result.rows[0] ? mapItinerary(result.rows[0]) : null;
+  }
+
   async findReusable(input: {
     userId: string;
     cacheKey: string;

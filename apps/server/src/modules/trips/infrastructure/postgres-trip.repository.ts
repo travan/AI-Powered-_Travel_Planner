@@ -199,10 +199,12 @@ export class PostgresTripRepository implements TripRepository {
     expiresAt?: string;
   }): Promise<TripInvite> {
     const result = await this.sql.query<TripInviteRow>(
-      `insert into trip_invites (trip_id, invited_by_user_id, email, role, token, expires_at)
+      `with invited as (insert into trip_invites (trip_id, invited_by_user_id, email, role, token, expires_at)
        values ($1, $2, $3, $4, $5, $6)
        returning id::text, trip_id::text, invited_by_user_id::text, email, role, token, status,
-                 expires_at::text, accepted_by_user_id::text, accepted_at::text, created_at::text`,
+                 expires_at::text, accepted_by_user_id::text, accepted_at::text, created_at::text), queued as (
+         insert into trip_invite_mail(invite_id) select id::uuid from invited where email is not null returning invite_id
+       ) select * from invited`,
       [
         input.tripId,
         input.invitedByUserId,
@@ -223,6 +225,19 @@ export class PostgresTripRepository implements TripRepository {
        where token = $1
        limit 1`,
       [token],
+    );
+    return result.rows[0] ? mapInvite(result.rows[0]) : null;
+  }
+
+  async findInviteById(input: {
+    tripId: string;
+    id: string;
+  }): Promise<TripInvite | null> {
+    const result = await this.sql.query<TripInviteRow>(
+      `select id::text,trip_id::text,invited_by_user_id::text,email,role,token,status,
+        expires_at::text,accepted_by_user_id::text,accepted_at::text,created_at::text
+       from trip_invites where id=$1 and trip_id=$2`,
+      [input.id, input.tripId],
     );
     return result.rows[0] ? mapInvite(result.rows[0]) : null;
   }

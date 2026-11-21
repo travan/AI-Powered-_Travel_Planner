@@ -20,6 +20,8 @@ export type Notification = {
   attempt: number | null;
   created_at: string;
   read_at: string | null;
+  subject_label?: string | null;
+  trip_title?: string | null;
 };
 
 type Page = { items: Notification[]; next: string | null };
@@ -30,9 +32,15 @@ type Snapshot = {
   page?: Page;
   error: boolean;
   loadingMore: boolean;
+  markingAll: boolean;
 };
 
-const empty: Snapshot = { count: 0, error: false, loadingMore: false };
+const empty: Snapshot = {
+  count: 0,
+  error: false,
+  loadingMore: false,
+  markingAll: false,
+};
 const staleAfter = 60_000;
 
 function createNotificationStore() {
@@ -46,6 +54,8 @@ function createNotificationStore() {
   let refreshNeeded = false;
   let countVersion = 0;
   let listVersion = 0;
+  let allReadAt: string | undefined;
+  let allReadListVersion = 0;
   let eventTimer: ReturnType<typeof setTimeout> | undefined;
   const reads = new Map<string, string>();
   const pageOverrides = new Map<string, string>();
@@ -59,7 +69,7 @@ function createNotificationStore() {
   function refreshCount(force = false) {
     if (!session || document.hidden) return;
     if (!force && Date.now() - countAt < staleAfter) return;
-    if (countRequest || reads.size) {
+    if (countRequest || reads.size || state.markingAll) {
       if (force || reads.size) refreshNeeded = true;
       return;
     }
@@ -88,13 +98,20 @@ function createNotificationStore() {
   }
 
   function flushCount() {
-    if (!refreshNeeded || countRequest || reads.size || document.hidden) return;
+    if (
+      !refreshNeeded ||
+      countRequest ||
+      reads.size ||
+      state.markingAll ||
+      document.hidden
+    )
+      return;
     refreshNeeded = false;
     refreshCount(true);
   }
 
   function loadPage(more = false) {
-    if (!session || pageRequest) return;
+    if (!session || pageRequest || state.markingAll) return;
     const previous = state.page;
     if (more ? !previous?.next : previous && Date.now() - pageAt < staleAfter)
       return;
@@ -116,7 +133,13 @@ function createNotificationStore() {
       .then((result) => {
         if (signal.aborted) return;
         const items = result.items.map((item) => {
-          const readAt = pageOverrides.get(item.id);
+          const readAt =
+            pageOverrides.get(item.id) ??
+            (allReadAt &&
+            version < allReadListVersion &&
+            Date.parse(item.created_at) <= Date.parse(allReadAt)
+              ? allReadAt
+              : undefined);
           return readAt ? { ...item, read_at: readAt } : item;
         });
         if (!more && version === listVersion) pageAt = Date.now();
@@ -155,7 +178,8 @@ function createNotificationStore() {
 
   async function markRead(id: string) {
     const item = state.page?.items.find((row) => row.id === id);
-    if (!item || item.read_at || !session || reads.has(id)) return;
+    if (!item || item.read_at || !session || reads.has(id) || state.markingAll)
+      return;
     const signal = scope.signal;
     const readAt = new Date().toISOString();
     const decrement = state.count > 0 ? 1 : 0;
@@ -176,12 +200,53 @@ function createNotificationStore() {
       );
     } catch {
       if (signal.aborted) return;
+      if (allReadAt && Date.parse(item.created_at) <= Date.parse(allReadAt))
+        return;
       pageOverrides.delete(id);
       setReadAt(id, null, state.count + decrement);
       update({ error: true });
     } finally {
       if (!signal.aborted) {
         reads.delete(id);
+        flushCount();
+      }
+    }
+  }
+
+  async function markAllRead() {
+    if (!session || state.markingAll || state.count === 0) return;
+    const signal = scope.signal;
+    countVersion++;
+    listVersion++;
+    allReadListVersion = listVersion;
+    update({ markingAll: true, error: false });
+    try {
+      const result = await journeyRequest<{ read_at: string }>(
+        "notifications/read-all",
+        session.access_token,
+        undefined,
+        "PATCH",
+        signal,
+      );
+      if (signal.aborted) return;
+      allReadAt = result.read_at;
+      update({
+        count: 0,
+        page: state.page && {
+          ...state.page,
+          items: state.page.items.map((item) =>
+            Date.parse(item.created_at) <= Date.parse(result.read_at)
+              ? { ...item, read_at: item.read_at ?? result.read_at }
+              : item,
+          ),
+        },
+      });
+    } catch {
+      if (!signal.aborted) update({ error: true });
+    } finally {
+      if (!signal.aborted) {
+        update({ markingAll: false });
+        refreshNeeded = true;
         flushCount();
       }
     }
@@ -197,6 +262,8 @@ function createNotificationStore() {
       pageRequest = undefined;
       refreshNeeded = false;
       countAt = pageAt = 0;
+      allReadAt = undefined;
+      allReadListVersion = 0;
       reads.clear();
       pageOverrides.clear();
       session = next;
@@ -238,6 +305,7 @@ function createNotificationStore() {
     },
     loadMore: () => loadPage(true),
     markRead,
+    markAllRead,
     getSnapshot: () => state,
     subscribe(listener: () => void) {
       listeners.add(listener);
