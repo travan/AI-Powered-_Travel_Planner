@@ -145,6 +145,7 @@ async function grantApplicationRole(client, databaseName, appUser, adminUser) {
     "planner_learning_events",
     "planner_feedback",
     "planner_feedback_mail",
+    "trip_invite_mail",
     "bill_ocr_documents",
     "city_reconciliation_report",
     "catalog_versions",

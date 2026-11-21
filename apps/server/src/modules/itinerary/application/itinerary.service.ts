@@ -1,4 +1,8 @@
-import { blockingCatalogIssues, buildCatalogItinerary, type CatalogJob } from "./catalog-itinerary.js";
+import {
+  blockingCatalogIssues,
+  buildCatalogItinerary,
+  type CatalogJob,
+} from "./catalog-itinerary.js";
 import { logEvent } from "../../../observability/logger.js";
 import {
   flexibleMonthDates,
@@ -13,8 +17,13 @@ import {
   resolveCity,
   reconcileBudget,
 } from "../enrichment/travel-enrichment.js";
-import { CloudflareAIProvider, PlanningGenerationError, normalizeOllamaItinerary } from "@travel/ai";
-import { createHash } from "node:crypto";
+import {
+  CloudflareAIProvider,
+  PlanningGenerationError,
+  normalizeOllamaItinerary,
+} from "@travel/ai";
+import { createHash, randomBytes } from "node:crypto";
+import { publicItinerary } from "./public-itinerary.js";
 import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
 import {
   notFound,
@@ -68,6 +77,31 @@ import { workerRequestContext } from "../../../cloudflare/request-context.js";
 @Injectable()
 export class ItineraryService {
   private readonly logger = new Logger(ItineraryService.name);
+
+  async createShareLink(itineraryId: string, userId: string) {
+    const token = await this.itineraries.createShareToken({
+      itineraryId,
+      userId,
+      token: randomBytes(32).toString("base64url"),
+    });
+    if (!token) return notFound("Itinerary not found");
+    const origin = (
+      process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+    ).replace(/\/$/, "");
+    return ok({ share_token: token, share_url: `${origin}/shared/${token}` });
+  }
+
+  async revokeShareLink(itineraryId: string, userId: string) {
+    return (await this.itineraries.revokeShareToken({ itineraryId, userId }))
+      ? ok({ revoked: true })
+      : notFound("Itinerary not found");
+  }
+
+  async sharedItinerary(token: string) {
+    const detail = await this.itineraries.findShared(token);
+    if (!detail?.result) return notFound("Shared itinerary not found");
+    return ok(publicItinerary(await this.presentStored(detail.result)));
+  }
 
   constructor(
     @Inject(ITINERARY_REPOSITORY)
@@ -180,7 +214,10 @@ export class ItineraryService {
     await input.onStage?.("criteria");
     const validation = validatePlanning(request);
     if (!validation.valid)
-      throw new BadRequestException({ code: "PLANNING_INVALID", ...validation });
+      throw new BadRequestException({
+        code: "PLANNING_INVALID",
+        ...validation,
+      });
     if (request.planning) {
       request.num_days = tripDayCount(request);
       request.num_travelers =
@@ -201,16 +238,26 @@ export class ItineraryService {
       planningData: PreFetchedCityData;
     }[] = [];
     for (const [index, slug] of input.dto.cities.entries()) {
-      const reference = input.dto.destination_refs?.find((entry) => entry.id === slug);
-      const name = reference?.name.trim() || input.dto.city_names?.[index]?.trim() || slug;
+      const reference = input.dto.destination_refs?.find(
+        (entry) => entry.id === slug,
+      );
+      const name =
+        reference?.name.trim() || input.dto.city_names?.[index]?.trim() || slug;
       const country = countryDestinationReference(slug);
       if (country) {
         const label = country.names[request.locale === "vi" ? "vi" : "en"];
         rememberedCities.push({
           city: {
-            slug, name: country.names, country: country.country, timezone: "",
-            currency: "", lat: null, lon: null, popular: false,
-            places: [], activities: [],
+            slug,
+            name: country.names,
+            country: country.country,
+            timezone: "",
+            currency: "",
+            lat: null,
+            lon: null,
+            popular: false,
+            places: [],
+            activities: [],
           },
           catalogReference: null,
           planningData: {
@@ -227,14 +274,24 @@ export class ItineraryService {
         if (!(error instanceof HttpException)) throw error;
         const status = error.getStatus();
         const body = error.getResponse();
-        const unresolved = status === 400 && typeof body === "object" &&
-          "code" in body && body.code === "CITY_UNRESOLVED";
+        const unresolved =
+          status === 400 &&
+          typeof body === "object" &&
+          "code" in body &&
+          body.code === "CITY_UNRESOLVED";
         if (!unresolved && status !== 429 && status !== 503) throw error;
         rememberedCities.push({
           city: {
-            slug, name: { en: name }, country: "", timezone: "",
-            currency: "", lat: null, lon: null, popular: false,
-            places: [], activities: [],
+            slug,
+            name: { en: name },
+            country: "",
+            timezone: "",
+            currency: "",
+            lat: null,
+            lon: null,
+            popular: false,
+            places: [],
+            activities: [],
           },
           catalogReference: null,
           planningData: toMinimalCityData(name, request.currency),
@@ -269,11 +326,13 @@ export class ItineraryService {
       const normalize = async (location: JourneyLocation) => {
         if (location.source === "browser") return location;
         const find = async (value: string) =>
-          resolveCity(routeCities, value) ?? await this.cities.findForPlanning(value);
-        const selected = location.city_slug && await find(location.city_slug);
-        const city = selected && selected.slug === location.city_slug
-          ? selected
-          : await find(location.label);
+          resolveCity(routeCities, value) ??
+          (await this.cities.findForPlanning(value));
+        const selected = location.city_slug && (await find(location.city_slug));
+        const city =
+          selected && selected.slug === location.city_slug
+            ? selected
+            : await find(location.label);
         if (city && !routeCities.some((known) => known.slug === city.slug))
           routeCities.push(city);
         return this.normalizedLocation(location, city, request.locale);
@@ -417,22 +476,32 @@ export class ItineraryService {
       const catalogCities = await Promise.all(
         destinationCities.map(async ({ city, catalogReference }) =>
           catalogReference
-            ? (await this.cities.findForPlanning(city.slug, Math.min(300, (request.num_days ?? 1) * 12))) ?? city
+            ? ((await this.cities.findForPlanning(
+                city.slug,
+                Math.min(300, (request.num_days ?? 1) * 12),
+              )) ?? city)
             : city,
         ),
       );
       for (const city of catalogCities) {
-        const index = routeCities.findIndex((known) => known.slug === city.slug);
+        const index = routeCities.findIndex(
+          (known) => known.slug === city.slug,
+        );
         if (index >= 0) routeCities[index] = city;
       }
       let catalogProvider: CloudflareAIProvider | undefined;
       detail = await buildCatalogItinerary(
-        request, catalogCities, input.catalogJob,
+        request,
+        catalogCities,
+        input.catalogJob,
         () => {
           if (catalogProvider) return catalogProvider;
           const ai = workerRequestContext.getStore()?.ai;
           if (!ai) throw new HttpException({ code: "AI_UNAVAILABLE" }, 503);
-          catalogProvider = new CloudflareAIProvider(ai, process.env.CLOUDFLARE_AI_MODEL);
+          catalogProvider = new CloudflareAIProvider(
+            ai,
+            process.env.CLOUDFLARE_AI_MODEL,
+          );
           return catalogProvider;
         },
       );
@@ -489,25 +558,32 @@ export class ItineraryService {
             )
               detail = repaired;
           } catch (error) {
-            if (error instanceof PlanningGenerationError && error.code === "AI_QUOTA_EXHAUSTED") throw error;
+            if (
+              error instanceof PlanningGenerationError &&
+              error.code === "AI_QUOTA_EXHAUSTED"
+            )
+              throw error;
             /* Keep the usable original and explicit issues when repair fails. */
           }
         }
         const usage = provider.getUsage?.() ?? [];
         if (usage.length) {
           detail.ai_usage = usage;
-          this.logger.log(
-            `AI usage: ${JSON.stringify(usage)}`,
-          );
+          this.logger.log(`AI usage: ${JSON.stringify(usage)}`);
         }
       } catch (error) {
         const usage = provider?.getUsage?.() ?? [];
         if (input.onStage && error instanceof PlanningGenerationError) {
-          if (error.code !== "AI_QUOTA_EXHAUSTED" && usage.at(-1)?.outcome === "received")
+          if (
+            error.code !== "AI_QUOTA_EXHAUSTED" &&
+            usage.at(-1)?.outcome === "received"
+          )
             usage.at(-1)!.outcome = "invalid_output";
           throw error;
         }
-        logEvent("journey.provider_failed", "error", { code: "AI_UNAVAILABLE" });
+        logEvent("journey.provider_failed", "error", {
+          code: "AI_UNAVAILABLE",
+        });
         await this.recordFailure(
           input.userId,
           request,
@@ -518,9 +594,10 @@ export class ItineraryService {
         );
         if (input.onStage && error && typeof error === "object") {
           const upstream = error as { status?: number; statusCode?: number };
-          const status = error instanceof HttpException
-            ? error.getStatus()
-            : (upstream.status ?? upstream.statusCode);
+          const status =
+            error instanceof HttpException
+              ? error.getStatus()
+              : (upstream.status ?? upstream.statusCode);
           if (status === 429 || status === 503) throw error;
         }
         return {
@@ -533,7 +610,8 @@ export class ItineraryService {
               : "The AI service could not complete this request. Please try again shortly.",
         };
       } finally {
-        for (const usage of provider?.getUsage?.() ?? []) input.onUsage?.(usage);
+        for (const usage of provider?.getUsage?.() ?? [])
+          input.onUsage?.(usage);
       }
     }
 
@@ -596,9 +674,13 @@ export class ItineraryService {
     detail = enrichTravel(detail, routeCities, request);
     detail.issues = [...(detail.issues ?? []), ...qualityFor(detail)];
     detail = reconcileBudget(detail, request);
-    if (input.catalogJob && detail.issues?.some(
-      (issue) => issue.severity === "error" || blockingCatalogIssues.has(issue.code),
-    ))
+    if (
+      input.catalogJob &&
+      detail.issues?.some(
+        (issue) =>
+          issue.severity === "error" || blockingCatalogIssues.has(issue.code),
+      )
+    )
       throw new PlanningGenerationError("AI_DAY_INVALID");
     if (flexibleDateNote && detail.seasonal_notes)
       detail.seasonal_notes.warnings = [
@@ -623,9 +705,16 @@ export class ItineraryService {
       userId: input.userId,
       request,
       result: detail,
-      ...(input.catalogJob?.claimToken ? { jobClaim: { id: input.catalogJob.id, token: input.catalogJob.claimToken } } : {}),
-      catalogCities: destinationCities.flatMap(
-        ({ catalogReference }) => catalogReference ? [catalogReference] : [],
+      ...(input.catalogJob?.claimToken
+        ? {
+            jobClaim: {
+              id: input.catalogJob.id,
+              token: input.catalogJob.claimToken,
+            },
+          }
+        : {}),
+      catalogCities: destinationCities.flatMap(({ catalogReference }) =>
+        catalogReference ? [catalogReference] : [],
       ),
     });
     if (this.learning)
@@ -662,9 +751,16 @@ export class ItineraryService {
           const country = countryDestinationReference(value);
           if (country) {
             const destination: CityPlanningData = {
-              slug: value, name: country.names, country: country.country,
-              timezone: "", currency: "", lat: null, lon: null, popular: false,
-              places: [], activities: [],
+              slug: value,
+              name: country.names,
+              country: country.country,
+              timezone: "",
+              currency: "",
+              lat: null,
+              lon: null,
+              popular: false,
+              places: [],
+              activities: [],
             };
             return [value, destination] as const;
           }

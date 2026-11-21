@@ -30,6 +30,20 @@ secret bindings. Never put them in `NEXT_PUBLIC_*`, the public Wrangler template
 or reports. The migration tool rejects a database outside the privately selected
 project and does not rotate existing runtime credentials in CI.
 
+## Invitation email
+
+Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`
+and `SMTP_FROM` on the API Worker. Store the password as an encrypted secret;
+never commit it. The generated deployment preserves dashboard variables. The
+web origin in `NEXT_PUBLIC_APP_URL` supplies invitation and public-share links.
+Use implicit TLS for port 465 or STARTTLS for port 587; production requires TLS.
+
+New email invitations enter a durable outbox. The API attempts delivery and the
+scheduled Worker retries temporary failures up to five times. The UI distinguishes
+sent, queued, failed and missing configuration, and managers can explicitly resend
+an active invitation. Existing invitations are never mass-mailed during migration.
+SMTP acceptance confirms relay handoff, not delivery to the recipient's inbox.
+
 ## Release checks
 
 Pull requests run tests without production configuration. Production deployment

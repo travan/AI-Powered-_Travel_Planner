@@ -4,10 +4,15 @@ import {
   Controller,
   Get,
   Headers,
+  Header,
   HttpException,
   Inject,
   Param,
   Post,
+  Patch,
+  Delete,
+  ParseUUIDPipe,
+  BadRequestException,
   Req,
   Res,
   UseGuards,
@@ -37,6 +42,38 @@ export class ItineraryController {
     @Inject(JourneyService) private readonly journey: JourneyService,
     @Inject(LocalJwtService) private readonly jwt: LocalJwtService,
   ) {}
+
+  @Patch(":id/share")
+  @UseGuards(JwtAuthGuard)
+  async share(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.itineraries.createShareLink(id, user.sub);
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Delete(":id/share")
+  @UseGuards(JwtAuthGuard)
+  async revokeShare(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserValue,
+  ) {
+    const result = await this.itineraries.revokeShareLink(id, user.sub);
+    if (!result.ok) throwServiceError(result.error);
+    return result.value;
+  }
+
+  @Get("shared/:token")
+  @Header("Cache-Control", "private, no-store")
+  async shared(@Param("token") token: string) {
+    if (!/^[a-zA-Z0-9_-]{32,128}$/.test(token))
+      throw new BadRequestException("Invalid share link");
+    const result = await this.itineraries.sharedItinerary(token);
+    if (!result.ok) throwServiceError(result.error);
+    return { itineraries: [result.value] };
+  }
 
   @Post("generate")
   @UseGuards(JwtAuthGuard)
@@ -110,13 +147,15 @@ export class ItineraryController {
     @Param() params: ItineraryIdParamsDto,
     @Req() request: Request,
   ) {
+    const userId = this.resolveOptionalUserId(request);
     const result = await this.itineraries.getVisible({
       itineraryId: params.id,
-      userId: this.resolveOptionalUserId(request),
+      userId,
     });
     if (!result.ok) throwServiceError(result.error);
     const detail = result.value;
     return {
+      can_share: Boolean(userId && detail.userId === userId),
       itineraries: detail.result
         ? [
             {
@@ -131,9 +170,12 @@ export class ItineraryController {
   private resolveOptionalUserId(request: Request): string | null {
     const token = getBearerToken(request.headers.authorization);
     if (!token) return null;
-    if (token.startsWith("mock-access-"))
+    const mockAllowed =
+      process.env.NODE_ENV !== "production" &&
+      process.env.TEST_ENABLE_MOCK_TOKENS === "true";
+    if (mockAllowed && token.startsWith("mock-access-"))
       return token.slice("mock-access-".length) || null;
-    if (token.startsWith("mock-mobile-access-"))
+    if (mockAllowed && token.startsWith("mock-mobile-access-"))
       return token.slice("mock-mobile-access-".length) || null;
     return this.jwt.verify(token)?.sub ?? null;
   }

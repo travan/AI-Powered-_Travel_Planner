@@ -117,7 +117,8 @@ export function NotificationBell({ className }: { className?: string }) {
   const { locale } = useAppLanguage();
   const language = locale === "vi" ? 1 : 0;
   const label = language ? "Thông báo" : "Notifications";
-  const { store, userId, count, page, error, loadingMore } = useNotifications();
+  const { store, userId, count, page, error, loadingMore, markingAll } =
+    useNotifications();
   const [openFor, setOpenFor] = useState<string | null>(null);
   const open = openFor === (userId ?? "guest");
   const root = useRef<HTMLDivElement>(null);
@@ -146,7 +147,7 @@ export function NotificationBell({ className }: { className?: string }) {
 
   const groups = new Map<string, Notification[]>();
   for (const item of page?.items ?? []) {
-    const key = `${item.category}:${item.subject_id}`;
+    const key = `${item.category}:${item.category === "checklist" ? (item.trip_id ?? item.subject_id) : item.subject_id}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
 
@@ -180,7 +181,19 @@ export function NotificationBell({ className }: { className?: string }) {
           aria-label={label}
           className="absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-[min(22rem,calc(100vw-2rem))] overflow-auto rounded-xl border border-outline-variant bg-surface p-3 shadow-lg"
         >
-          <h2 className="mb-2 font-bold">{label}</h2>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="font-bold">{label}</h2>
+            {userId && (
+              <button
+                type="button"
+                className="text-sm font-semibold text-primary disabled:opacity-50"
+                disabled={count === 0 || markingAll}
+                onClick={() => void store.markAllRead()}
+              >
+                {language ? "Đọc hết" : "Mark all as read"}
+              </button>
+            )}
+          </div>
           {error && (
             <p role="alert">
               {language
@@ -216,24 +229,42 @@ export function NotificationBell({ className }: { className?: string }) {
                   }
                 >
                   {categories[latest.category]?.[language] ?? label} ·{" "}
-                  {events[latest.event]?.[language] ??
-                    (language ? "Đã cập nhật" : "Updated")}
+                  {(latest.category === "checklist"
+                    ? latest.trip_title
+                    : latest.subject_label) && (
+                    <>
+                      {latest.category === "checklist"
+                        ? latest.trip_title
+                        : latest.subject_label}{" "}
+                      ·{" "}
+                    </>
+                  )}
+                  {latest.category === "checklist"
+                    ? language
+                      ? `${new Set(items.map((item) => item.subject_id)).size} việc`
+                      : `${new Set(items.map((item) => item.subject_id)).size} tasks`
+                    : (events[latest.event]?.[language] ??
+                      (language ? "Đã cập nhật" : "Updated"))}
                 </summary>
                 <ul className="mt-2 space-y-2 pl-3 text-sm">
                   {items.map((item) => (
-                    <li
-                      key={item.id}
-                      className="min-w-0"
-                    >
+                    <li key={item.id} className="min-w-0">
                       <Link
                         href={destination(item)}
                         prefetch={false}
                         onPointerEnter={(event) => {
-                          if (event.pointerType === "mouse") void store.markRead(item.id);
+                          if (event.pointerType === "mouse")
+                            void store.markRead(item.id);
                         }}
                         onClick={() => void store.markRead(item.id)}
                         className="block w-full break-words text-primary hover:underline focus-visible:underline"
                       >
+                        {item.category === "checklist" &&
+                          item.subject_label && (
+                            <span className="block font-medium">
+                              {item.subject_label}
+                            </span>
+                          )}
                         {events[item.event]?.[language] ??
                           (language ? "Đã cập nhật" : "Updated")}
                         <time

@@ -24,7 +24,16 @@ export type TripMember = {
   joinedAt: string;
 };
 
+export type InviteEmailStatus =
+  | "not_requested"
+  | "not_configured"
+  | "queued"
+  | "sent"
+  | "failed"
+  | "cancelled";
 export type TripInvite = {
+  emailStatus?: InviteEmailStatus;
+  sentAt?: string | null;
   id: string;
   tripId: string;
   invitedByUserId: string;

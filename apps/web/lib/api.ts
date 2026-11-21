@@ -468,3 +468,30 @@ export async function shareItinerary(
   if (!res.ok) throw new Error(`Share failed: ${res.status}`);
   return res.json() as Promise<{ share_token: string; share_url: string }>;
 }
+
+export async function revokeItineraryShare(
+  itineraryId: string,
+  authToken: string,
+) {
+  const res = await fetchWithLocalSession(
+    getApiUrl(`/api/itinerary/${itineraryId}/share`),
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${authToken}` },
+    },
+  );
+  if (!res.ok)
+    throw new ApiRequestError("Unable to disable sharing", res.status);
+}
+
+export async function getSharedItinerary(
+  token: string,
+): Promise<ItineraryOutput> {
+  const res = await fetch(
+    getApiUrl(`/api/itinerary/shared/${encodeURIComponent(token)}`),
+    { cache: "no-store" },
+  );
+  if (!res.ok)
+    throw new ApiRequestError("Shared itinerary not found", res.status);
+  return res.json() as Promise<ItineraryOutput>;
+}

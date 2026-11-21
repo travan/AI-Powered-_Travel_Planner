@@ -235,6 +235,8 @@ test("the production web build shows notifications and keeps server data private
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${web}/trips/${trip.id}/workspace`);
     await expect(page.getByTestId("web-role-guide")).toBeVisible();
+    await expect(page.getByTestId("web-workspace-trip-title")).toHaveText("Workspace budget fixture");
+    await expect(page.getByTestId("web-workspace-trip-title")).not.toContainText(trip.id);
     expect(businessRequests).toEqual([`/api/trips/${trip.id}/workspace`]);
     await expect(bell).toBeVisible();
   } finally {

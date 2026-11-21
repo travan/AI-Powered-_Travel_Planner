@@ -18,12 +18,20 @@ const { config: template, error } = ts.parseConfigFileTextToJson(
 if (error) throw new Error("Invalid Wrangler configuration.");
 const deployment = await privateDeploymentConfig();
 const config = structuredClone(deployment?.worker ?? template);
+// Keep dashboard-only configuration (for example SMTP settings) across releases.
+config.keep_vars = true;
 if (deployment && process.env.GITHUB_ACTIONS === "true") {
   // Mask individual fields too; masking a whole JSON secret does not hide fragments.
-  for (const value of [config.account_id, config.name,
-    ...config.hyperdrive.map(item => item.id), deployment.supabaseProjectRef,
-    config.vars.NEXT_PUBLIC_APP_URL, config.vars.CORS_ORIGINS,
-    ...(config.vars.CORS_ORIGINS ?? "").split(","), config.vars.GOOGLE_REDIRECT_URI])
+  for (const value of [
+    config.account_id,
+    config.name,
+    ...config.hyperdrive.map((item) => item.id),
+    deployment.supabaseProjectRef,
+    config.vars.NEXT_PUBLIC_APP_URL,
+    config.vars.CORS_ORIGINS,
+    ...(config.vars.CORS_ORIGINS ?? "").split(","),
+    config.vars.GOOGLE_REDIRECT_URI,
+  ])
     if (typeof value === "string" && value && !/[\r\n]/.test(value))
       console.log(`::add-mask::${value}`);
 }
@@ -36,9 +44,7 @@ if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 250)
   throw new Error(
     "Set JOURNEY_QUEUE_CONCURRENCY to the measured concurrency limit.",
   );
-const percent = Number(
-  process.env.PLANNING_V2_PERCENT || 100,
-);
+const percent = Number(process.env.PLANNING_V2_PERCENT || 100);
 const aiConcurrency = Number(
   process.env.PLANNING_AI_CONCURRENCY || concurrency,
 );
@@ -72,12 +78,16 @@ if (
 )
   throw new Error("Unsupported deployment AI provider");
 config.vars.AI_PROVIDER = provider;
-const fallback = target === "production" ? (process.env.DEPLOY_AI_FALLBACK_PROVIDERS ?? "") : "";
+const fallback =
+  target === "production"
+    ? (process.env.DEPLOY_AI_FALLBACK_PROVIDERS ?? "")
+    : "";
 const maxFallbacks = Number(process.env.DEPLOY_AI_FALLBACK_MAX_SOURCES ?? 5);
 parseFallbackSources(fallback, maxFallbacks);
 config.vars.AI_FALLBACK_PROVIDERS = fallback;
 config.vars.AI_FALLBACK_MAX_SOURCES = String(maxFallbacks);
-config.vars.AI_FALLBACK_CANARY_ONLY = process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "false" ? "false" : "true";
+config.vars.AI_FALLBACK_CANARY_ONLY =
+  process.env.DEPLOY_AI_FALLBACK_CANARY_ONLY === "false" ? "false" : "true";
 for (const key of [
   "CLOUDFLARE_AI_MODEL",
   "ANTHROPIC_MODEL",

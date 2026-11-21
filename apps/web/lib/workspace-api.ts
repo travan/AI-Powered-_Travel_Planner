@@ -20,6 +20,14 @@ export type TripMember = {
 };
 
 export type TripInvite = {
+  emailStatus?:
+    | "not_requested"
+    | "not_configured"
+    | "queued"
+    | "sent"
+    | "failed"
+    | "cancelled";
+  sentAt?: string | null;
   id: string;
   tripId: string;
   invitedByUserId: string;
@@ -359,9 +367,12 @@ async function requestJson<T>(
 }
 
 export function getTripWorkspace(tripId: string, authToken: string) {
-  return requestJson<{ membership: TripMember; members: TripMember[]; primaryCitySlug: string | null }>(
-    `/api/trips/${tripId}/workspace`, { authToken },
-  );
+  return requestJson<{
+    membership: TripMember;
+    members: TripMember[];
+    title?: string;
+    primaryCitySlug: string | null;
+  }>(`/api/trips/${tripId}/workspace`, { authToken });
 }
 
 export function listTripMembers(tripId: string, authToken: string) {
@@ -386,6 +397,18 @@ export function createTripInvite(
     method: "POST",
     body,
   });
+}
+
+export function tripInviteDelivery(
+  tripId: string,
+  inviteId: string,
+  authToken: string,
+  resend = false,
+) {
+  return requestJson<Pick<TripInvite, "emailStatus" | "sentAt">>(
+    `/api/trips/${tripId}/invites/${inviteId}/${resend ? "resend" : "delivery"}`,
+    { authToken, method: resend ? "POST" : "GET" },
+  );
 }
 
 export function updateTripShareLink(

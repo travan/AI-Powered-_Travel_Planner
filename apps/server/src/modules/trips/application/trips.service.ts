@@ -1,4 +1,5 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import { TripInviteMailWorker } from "./trip-invite-mail.worker.js";
 import { randomBytes } from "node:crypto";
 import {
   conflict,
@@ -32,6 +33,9 @@ import type {
 export class TripsService {
   constructor(
     @Inject(TRIP_REPOSITORY) private readonly trips: TripRepository,
+    @Optional()
+    @Inject(TripInviteMailWorker)
+    private readonly inviteMail?: TripInviteMailWorker,
   ) {}
 
   listForUser(userId: string): Promise<TripSummary[]> {
@@ -62,13 +66,22 @@ export class TripsService {
   async workspace(input: { tripId: string; actorUserId: string }) {
     const membership = await this.getMembership(input);
     if (!membership.ok) return membership;
-    const trip = await this.trips.findForUser({ tripId: input.tripId, userId: input.actorUserId });
+    const trip = await this.trips.findForUser({
+      tripId: input.tripId,
+      userId: input.actorUserId,
+    });
     if (!trip) return notFound("Trip not found");
     const permissions = getTripRolePermissions(membership.value.role);
     const members = permissions.viewMembers
       ? await this.trips.listMembers(input.tripId)
       : [membership.value];
-    return ok({ membership: membership.value, permissions, members, primaryCitySlug: trip.primaryCitySlug ?? null });
+    return ok({
+      membership: membership.value,
+      permissions,
+      members,
+      title: trip.title,
+      primaryCitySlug: trip.primaryCitySlug ?? null,
+    });
   }
 
   async listMembers(input: {
@@ -117,7 +130,50 @@ export class TripsService {
       action: "created",
       after: invite,
     });
-    return ok(invite);
+    if (invite.email && this.inviteMail) {
+      try {
+        await this.inviteMail.processNext(invite.id);
+        return ok({ ...invite, ...(await this.inviteMail.status(invite.id)) });
+      } catch {
+        return ok({ ...invite, emailStatus: "failed" as const });
+      }
+    }
+    return ok({
+      ...invite,
+      emailStatus: invite.email
+        ? ("not_configured" as const)
+        : ("not_requested" as const),
+    });
+  }
+
+  async inviteDelivery(input: {
+    tripId: string;
+    actorUserId: string;
+    inviteId: string;
+    resend?: boolean;
+  }) {
+    const permission = await this.canManageTrip(
+      input.tripId,
+      input.actorUserId,
+    );
+    if (!permission.ok) return permission;
+    const invite = await this.trips.findInviteById({
+      tripId: input.tripId,
+      id: input.inviteId,
+    });
+    if (!invite) return notFound("Invite not found");
+    if (!invite.email) return ok({ emailStatus: "not_requested" as const });
+    if (
+      invite.status !== "pending" ||
+      (invite.expiresAt && Date.parse(invite.expiresAt) <= Date.now())
+    )
+      return ok({ emailStatus: "cancelled" as const });
+    if (!this.inviteMail) return ok({ emailStatus: "not_configured" as const });
+    return ok(
+      input.resend
+        ? await this.inviteMail.resend(invite.id)
+        : await this.inviteMail.status(invite.id),
+    );
   }
 
   async joinInvite(input: {

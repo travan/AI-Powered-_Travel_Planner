@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { getItineraryById } from "./itineraries.mjs";
 
 const sharedByToken = new Map();
@@ -10,7 +11,8 @@ export function saveTripForUser(userId, itineraryId) {
 }
 
 export function createShareToken(itineraryId) {
-  const token = `${itineraryId.slice(0, 8)}-mockshare`;
+  const existing = [...sharedByToken].find(([, id]) => id === itineraryId)?.[0];
+  const token = existing ?? randomBytes(32).toString("base64url");
   sharedByToken.set(token, itineraryId);
   return token;
 }

@@ -96,19 +96,43 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, createLocalAuthResponse(account.user, req, res));
   }
 
-  if (req.method === "POST" && ["/api/auth/restore", "/api/auth/refresh"].includes(pathname)) {
+  if (
+    req.method === "POST" &&
+    ["/api/auth/restore", "/api/auth/refresh"].includes(pathname)
+  ) {
     const body = await readJsonBody(req);
     const isRefresh = pathname.endsWith("refresh");
-    const token = isRefresh ? (body.refresh_token ?? cookieValue(req, "horizon_local_refresh")) : cookieValue(req, "horizon_local_auth");
-    const email = (isRefresh ? localRefreshSessions : localAuthSessions).get(token);
+    const token = isRefresh
+      ? (body.refresh_token ?? cookieValue(req, "horizon_local_refresh"))
+      : cookieValue(req, "horizon_local_auth");
+    const email = (isRefresh ? localRefreshSessions : localAuthSessions).get(
+      token,
+    );
     const account = email ? localAuthAccounts.get(email) : null;
-    if (!account) return sendJson(res, 401, { message: "Invalid or expired session" });
+    if (!account)
+      return sendJson(res, 401, { message: "Invalid or expired session" });
     if (isRefresh) {
       localRefreshSessions.delete(token);
-      return sendJson(res, 200, createLocalAuthResponse(account.user, req, res));
+      return sendJson(
+        res,
+        200,
+        createLocalAuthResponse(account.user, req, res),
+      );
     }
-    const exp = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).exp;
-    return sendJson(res, 200, { user: account.user, session: { access_token: token, refresh_token: "", token_type: "bearer", expires_in: 900, expires_at: exp, user: account.user } });
+    const exp = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64url").toString(),
+    ).exp;
+    return sendJson(res, 200, {
+      user: account.user,
+      session: {
+        access_token: token,
+        refresh_token: "",
+        token_type: "bearer",
+        expires_in: 900,
+        expires_at: exp,
+        user: account.user,
+      },
+    });
   }
 
   if (req.method === "GET" && pathname === "/api/auth/me") {
@@ -128,7 +152,10 @@ const server = createServer(async (req, res) => {
     if (token) localAuthSessions.delete(token);
     const refreshToken = cookieValue(req, "horizon_local_refresh");
     if (refreshToken) localRefreshSessions.delete(refreshToken);
-    res.setHeader("Set-Cookie", ["horizon_local_auth=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax", "horizon_local_refresh=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"]);
+    res.setHeader("Set-Cookie", [
+      "horizon_local_auth=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+      "horizon_local_refresh=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    ]);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -278,12 +305,29 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 404, { message: "Itinerary for job not found" });
     return sendJson(res, 200, itinerary);
   }
-  if(req.method==="GET" && /^\/api\/itinerary\/jobs\/[^/]+$/.test(pathname)){
-    if(!getUserIdFromAuth(req.headers.authorization))return sendJson(res,401,{message:"Sign in to read this planning request"});
-    const id=pathname.split("/").at(-1);
-    const itinerary=getItineraryByJobId(id)?.itineraries?.[0];
-    if(!itinerary)return sendJson(res,404,{message:"Planning job not found"});
-    return sendJson(res,200,{id,kind:"generate",status:"complete",stage:"complete",attempts:1,itinerary_id:itinerary.id,revision_id:null,translation_id:null,error_code:null});
+  if (
+    req.method === "GET" &&
+    /^\/api\/itinerary\/jobs\/[^/]+$/.test(pathname)
+  ) {
+    if (!getUserIdFromAuth(req.headers.authorization))
+      return sendJson(res, 401, {
+        message: "Sign in to read this planning request",
+      });
+    const id = pathname.split("/").at(-1);
+    const itinerary = getItineraryByJobId(id)?.itineraries?.[0];
+    if (!itinerary)
+      return sendJson(res, 404, { message: "Planning job not found" });
+    return sendJson(res, 200, {
+      id,
+      kind: "generate",
+      status: "complete",
+      stage: "complete",
+      attempts: 1,
+      itinerary_id: itinerary.id,
+      revision_id: null,
+      translation_id: null,
+      error_code: null,
+    });
   }
 
   if (
@@ -316,7 +360,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (
-    req.method === "PATCH" &&
+    ["PATCH", "DELETE"].includes(req.method) &&
     pathname.match(/^\/api\/itinerary\/[^/]+\/share$/)
   ) {
     const userId = getUserIdFromAuth(req.headers.authorization);
@@ -334,7 +378,7 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 404, { message: "Itinerary not found" });
 
     const body = await readJsonBody(req);
-    const isPublic = body?.is_public !== false;
+    const isPublic = req.method !== "DELETE" && body?.is_public !== false;
 
     if (!isPublic) {
       removeShareToken(itineraryId);
@@ -345,7 +389,7 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, {
       is_public: true,
       share_token: shareToken,
-      share_url: `http://127.0.0.1:${port}/shared/${shareToken}`,
+      share_url: `http://127.0.0.1:${process.env.E2E_WEB_PORT ?? "3200"}/shared/${shareToken}`,
     });
   }
 
@@ -362,7 +406,7 @@ const server = createServer(async (req, res) => {
     const itinerary = getItineraryById(itineraryId);
     if (!itinerary)
       return sendJson(res, 404, { message: "Itinerary not found" });
-    return sendJson(res, 200, itinerary);
+    return sendJson(res, 200, { ...itinerary, can_share: true });
   }
 
   return sendJson(res, 404, { message: "Not found" });
@@ -376,10 +420,16 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
 process.on("SIGINT", () => server.close(() => process.exit(0)));
 
 function setCors(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "http://127.0.0.1:3202");
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    req.headers.origin ?? "http://127.0.0.1:3202",
+  );
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client, Idempotency-Key");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Auth-Client, Idempotency-Key",
+  );
 }
 
 function sendJson(res, statusCode, body) {
@@ -391,11 +441,23 @@ function sendJson(res, statusCode, body) {
 
 function createLocalAuthResponse(user, req, res) {
   const expiresIn = 900;
-  const payload = Buffer.from(JSON.stringify({ sub: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + expiresIn, jti: randomUUID() })).toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: user.id,
+      email: user.email,
+      exp: Math.floor(Date.now() / 1000) + expiresIn,
+      jti: randomUUID(),
+    }),
+  ).toString("base64url");
   const accessToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.e2e-signature`;
-  const refreshToken = randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
+  const refreshToken =
+    randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
   localRefreshSessions.set(refreshToken, user.email);
-  if (req.headers["x-auth-client"] === "web") res.setHeader("Set-Cookie", [`horizon_local_auth=${accessToken}; Path=/; Max-Age=900; HttpOnly; SameSite=Lax`, `horizon_local_refresh=${refreshToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`]);
+  if (req.headers["x-auth-client"] === "web")
+    res.setHeader("Set-Cookie", [
+      `horizon_local_auth=${accessToken}; Path=/; Max-Age=900; HttpOnly; SameSite=Lax`,
+      `horizon_local_refresh=${refreshToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
+    ]);
   localAuthSessions.set(accessToken, user.email);
   const session = {
     access_token: accessToken,
@@ -409,7 +471,11 @@ function createLocalAuthResponse(user, req, res) {
 }
 
 function cookieValue(req, name) {
-  return req.headers.cookie?.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
+  return req.headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
 }
 
 function getLocalAuthToken(authorization) {
@@ -491,14 +557,27 @@ async function routeTripBusiness(req, pathname) {
   const tripId = parts[2];
 
   if (req.method === "GET" && parts.length === 4 && parts[3] === "workspace") {
-    const membership = tripBusiness.getMembership({ tripId, actorUserId: userId });
+    const membership = tripBusiness.getMembership({
+      tripId,
+      actorUserId: userId,
+    });
     if (membership.status !== 200) return membership;
     return {
       status: 200,
       body: {
         membership: membership.body,
-        members: membership.body.role === "viewer" ? [membership.body] : tripBusiness.listMembers(tripId),
-        primaryCitySlug: tripBusiness.listTripsForUser(userId).find((trip) => trip.id === tripId)?.primary_city_slug ?? null,
+        title:
+          tripBusiness
+            .listTripsForUser(userId)
+            .find((trip) => trip.id === tripId)?.title ?? "Trip workspace",
+        members:
+          membership.body.role === "viewer"
+            ? [membership.body]
+            : tripBusiness.listMembers(tripId),
+        primaryCitySlug:
+          tripBusiness
+            .listTripsForUser(userId)
+            .find((trip) => trip.id === tripId)?.primary_city_slug ?? null,
       },
     };
   }
